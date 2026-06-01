@@ -53,3 +53,6 @@ fastapi>=0.110.0
 uvicorn>=0.29.0
 gradio>=4.25.0
 python-multipart>=0.0.9
+
+# Monitoring & Auth
+pyjwt>=2.8.0
