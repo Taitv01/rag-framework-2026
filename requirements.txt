@@ -47,3 +47,9 @@ pydantic>=2.7.0
 tenacity>=8.3.0
 tiktoken>=0.7.0
 rich>=13.7.0
+
+# API & Web UI
+fastapi>=0.110.0
+uvicorn>=0.29.0
+gradio>=4.25.0
+python-multipart>=0.0.9

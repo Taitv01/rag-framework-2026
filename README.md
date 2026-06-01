@@ -9,6 +9,8 @@
 [![Tests](https://img.shields.io/badge/Tests-34%20Passed-brightgreen?style=for-the-badge)](#testing)
 [![LangChain](https://img.shields.io/badge/LangChain-0.3%2B-orange?style=for-the-badge)](https://langchain.com)
 [![LangGraph](https://img.shields.io/badge/LangGraph-0.2%2B-red?style=for-the-badge)](https://langchain-ai.github.io/langgraph/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Gradio](https://img.shields.io/badge/Gradio-4.25%2B-FF6B6B?style=for-the-badge)](https://gradio.app)
 
 <br />
 
@@ -63,7 +65,9 @@ In 2026, RAG has evolved far beyond simple "vector search + LLM" patterns. Moder
 | **Advanced RAG** | Hybrid search + re-ranking | Technical docs, research |
 | **Agentic RAG** | Agent-based with LangGraph | Complex reasoning, multi-step |
 | **Graph RAG** | Knowledge graph integration | Enterprise knowledge bases |
-| **Multimodal RAG** | Images, video, audio support | Medical imaging, video search |
+| **Self-RAG** | Self-reflective RAG | Quality-critical applications |
+| **Corrective RAG** | Dynamic correction | Research, fact-checking |
+| **HyDE** | Hypothetical Document Embedding | Better semantic matching |
 
 ### 🔧 Core Components
 
@@ -76,6 +80,8 @@ In 2026, RAG has evolved far beyond simple "vector search + LLM" patterns. Moder
 
 ### 🚀 Production Features
 
+- ✅ **RESTful API** — FastAPI endpoints for production serving
+- ✅ **Web UI** — Gradio interface for easy interaction
 - ✅ Configuration management (env vars + programmatic)
 - ✅ Caching (in-memory + Redis)
 - ✅ Error handling with retry (tenacity)
@@ -245,7 +251,44 @@ answer = rag.query(
 )
 ```
 
-### 5️⃣ Production RAG
+### 5️⃣ RESTful API
+
+```bash
+# Start API server
+python examples/06_api_server.py
+
+# Visit API docs
+open http://localhost:8000/docs
+```
+
+```python
+import requests
+
+# Query via API
+response = requests.post("http://localhost:8000/query", json={
+    "question": "What is Python?",
+    "k": 5
+})
+print(response.json()["answer"])
+```
+
+### 6️⃣ Web UI
+
+```bash
+# Start Web UI
+python examples/07_web_ui.py
+
+# Visit UI
+open http://localhost:7860
+```
+
+Features:
+- 💬 Chat interface
+- 📄 Document upload
+- 🔍 Search interface
+- 📊 Statistics dashboard
+
+### 7️⃣ Production RAG
 
 ```python
 from src.rag import AdvancedRAG
@@ -322,6 +365,48 @@ from src.rag import AgenticRAG
 rag = AgenticRAG()
 rag.add_documents(["docs/"])
 answer = rag.query("What is Python?")
+```
+
+### Graph RAG
+
+Knowledge graph-based RAG for structured reasoning. Extracts entities and relationships from documents.
+
+**Best for:** Enterprise knowledge bases, multi-hop questions, relationship queries
+
+```python
+from src.rag import GraphRAG
+rag = GraphRAG()
+rag.add_documents(["docs/"])
+
+# Query with graph reasoning
+answer = rag.query("What is the relationship between X and Y?")
+
+# Get knowledge graph
+kg = rag.get_knowledge_graph()
+neighbors = kg.get_neighbors("Python")
+```
+
+### Advanced Techniques
+
+Collection of advanced RAG techniques:
+
+- **Self-RAG** — Self-reflective RAG with quality assessment
+- **Corrective RAG** — Dynamic correction with web search
+- **HyDE** — Hypothetical Document Embedding
+- **HyPE** — Hypothetical Prompt Embeddings
+- **Contextual Compression** — Compress while preserving relevance
+- **Document Augmentation** — Generate questions for better retrieval
+
+```python
+from src.rag.advanced_techniques import SelfRAG, CorrectiveRAG, HyDE
+
+# Self-RAG
+rag = SelfRAG(llm=llm, retriever=retriever)
+answer = rag.query("What is Python?")
+
+# HyDE
+hyde = HyDE(llm=llm, embeddings=embeddings)
+results = hyde.search("What is Python?", documents)
 ```
 
 ---
@@ -422,7 +507,15 @@ ultimate-rag/
 │   ├── 📂 rag/                         # RAG implementations
 │   │   ├── naive_rag.py                # Basic RAG
 │   │   ├── advanced_rag.py             # Advanced with re-ranking
-│   │   └── agentic_rag.py              # Agent-based RAG (LangGraph)
+│   │   ├── agentic_rag.py              # Agent-based RAG (LangGraph)
+│   │   ├── graph_rag.py                # Knowledge Graph RAG
+│   │   └── advanced_techniques.py      # Self-RAG, CRAG, HyDE, etc.
+│   │
+│   ├── 📂 api/                         # RESTful API
+│   │   └── app.py                      # FastAPI application
+│   │
+│   ├── 📂 ui/                          # Web UI
+│   │   └── __init__.py                 # Gradio interface
 │   │
 │   ├── 📂 agents/                      # Specialized agents
 │   │   ├── retrieval_agent.py          # Smart retrieval decisions
@@ -443,7 +536,10 @@ ultimate-rag/
 │   ├── 01_naive_rag.py                 # Basic RAG example
 │   ├── 02_advanced_rag.py              # Advanced RAG example
 │   ├── 03_agentic_rag.py               # Agentic RAG example
-│   └── 04_production_rag.py            # Production RAG example
+│   ├── 04_production_rag.py            # Production RAG example
+│   ├── 05_graph_rag.py                 # Knowledge Graph RAG example
+│   ├── 06_api_server.py                # REST API server
+│   └── 07_web_ui.py                    # Gradio Web UI
 │
 ├── 📂 notebooks/                       # Jupyter notebooks
 │   └── quickstart.ipynb                # Quick start guide

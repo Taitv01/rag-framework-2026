@@ -15,9 +15,11 @@ Supported patterns:
 from src.rag.naive_rag import NaiveRAG
 from src.rag.advanced_rag import AdvancedRAG
 from src.rag.agentic_rag import AgenticRAG
+from src.rag.graph_rag import GraphRAG
 
 __all__ = [
     "NaiveRAG",
     "AdvancedRAG",
     "AgenticRAG",
+    "GraphRAG",
 ]
