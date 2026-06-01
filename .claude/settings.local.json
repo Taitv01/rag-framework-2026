@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__ccs-websearch__WebSearch",
+      "WebFetch(domain:dasroot.net)",
+      "WebFetch(domain:www.exploredatabase.com)",
+      "WebFetch(domain:radarai.top)",
+      "WebFetch(domain:docs.langchain.com)",
+      "WebFetch(domain:www.askpython.com)",
+      "WebFetch(domain:developers.llamaindex.ai)",
+      "WebFetch(domain:microsoft.github.io)",
+      "PowerShell($tree = Get-ChildItem -Path \"D:/E & D Cá nhân/MMO_Project_2026/RAG\" -Recurse -Directory | ForEach-Object { $_.FullName.Replace\\(\"D:/E & D Cá nhân/MMO_Project_2026/RAG\\\\\", \"\"\\) }; $files = Get-ChildItem -Path \"D:/E & D Cá nhân/MMO_Project_2026/RAG\" -Recurse -File | ForEach-Object { $_.FullName.Replace\\(\"D:/E & D Cá nhân/MMO_Project_2026/RAG\\\\\", \"\"\\) }; Write-Output \"=== Directories ===\"; $tree; Write-Output \"`n=== Files ===\"; $files)",
+      "PowerShell(py *)"
+    ]
+  }
+}

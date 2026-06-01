@@ -1,0 +1,49 @@
+# Ultimate RAG Framework - Dependencies
+# Install: pip install -r requirements.txt
+
+# Core LangChain
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-community>=0.3.0
+langchain-openai>=0.2.0
+langchain-anthropic>=0.2.0
+langchain-text-splitters>=0.3.0
+
+# Vector Stores
+faiss-cpu>=1.8.0
+chromadb>=0.5.0
+qdrant-client>=1.9.0
+
+# Embeddings
+sentence-transformers>=3.0.0
+
+# Document Loaders
+pypdf>=4.0.0
+python-docx>=1.1.0
+beautifulsoup4>=4.12.0
+markdown>=3.6
+
+# Re-ranking & Hybrid Search
+rank-bm25>=0.2.2
+
+# Agentic RAG
+langgraph>=0.2.0
+
+# Graph RAG
+neo4j>=5.20.0
+networkx>=3.3
+
+# Multimodal
+torch>=2.3.0
+transformers>=4.40.0
+Pillow>=10.3.0
+
+# Evaluation
+ragas>=0.1.0
+
+# Utilities
+python-dotenv>=1.0.0
+pydantic>=2.7.0
+tenacity>=8.3.0
+tiktoken>=0.7.0
+rich>=13.7.0

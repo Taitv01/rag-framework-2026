@@ -1,0 +1,111 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ultimate-rag"
+version = "1.0.0"
+description = "Ultimate RAG Framework - Comprehensive Retrieval-Augmented Generation for AI Models (2026)"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [
+    { name = "RAG Framework Contributors" },
+]
+keywords = ["rag", "retrieval-augmented-generation", "ai", "llm", "vector-search", "knowledge-graph", "agentic-ai"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    # Core LangChain
+    "langchain>=0.3.0",
+    "langchain-core>=0.3.0",
+    "langchain-community>=0.3.0",
+    "langchain-openai>=0.2.0",
+    "langchain-anthropic>=0.2.0",
+    "langchain-text-splitters>=0.3.0",
+
+    # Vector Stores
+    "faiss-cpu>=1.8.0",
+    "chromadb>=0.5.0",
+    "qdrant-client>=1.9.0",
+
+    # Embeddings
+    "sentence-transformers>=3.0.0",
+
+    # Document Loaders
+    "pypdf>=4.0.0",
+    "python-docx>=1.1.0",
+    "beautifulsoup4>=4.12.0",
+    "markdown>=3.6",
+
+    # Re-ranking & Hybrid Search
+    "rank-bm25>=0.2.2",
+
+    # Agentic RAG
+    "langgraph>=0.2.0",
+
+    # Graph RAG
+    "neo4j>=5.20.0",
+    "networkx>=3.3",
+
+    # Multimodal
+    "torch>=2.3.0",
+    "transformers>=4.40.0",
+    "Pillow>=10.3.0",
+
+    # Evaluation
+    "ragas>=0.1.0",
+
+    # Utilities
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.7.0",
+    "tenacity>=8.3.0",
+    "tiktoken>=0.7.0",
+    "rich>=13.7.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "black>=24.0.0",
+    "isort>=5.13.0",
+    "mypy>=1.10.0",
+    "ruff>=0.4.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/ultimate-rag"
+Documentation = "https://github.com/yourusername/ultimate-rag#readme"
+Repository = "https://github.com/yourusername/ultimate-rag"
+Issues = "https://github.com/yourusername/ultimate-rag/issues"
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.isort]
+profile = "black"
+known_first_party = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
