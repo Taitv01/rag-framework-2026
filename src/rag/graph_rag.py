@@ -250,7 +250,7 @@ class GraphRAG:
         embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
         vector_store_provider: str = "faiss",
         chunk_size: int = 1000,
-        chunk_overlap: int: 100,
+        chunk_overlap: int = 100,
         retrieval_k: int = 5,
     ):
         """

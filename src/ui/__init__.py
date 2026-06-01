@@ -15,15 +15,8 @@ Usage:
     python -m src.ui.app
 """
 
-import io
-import sys
 from typing import List, Optional, Tuple
 from pathlib import Path
-
-# Fix encoding for Windows
-if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 import gradio as gr
 

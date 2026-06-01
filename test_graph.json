@@ -1,0 +1,50 @@
+{
+  "entities": [
+    {
+      "name": "Python",
+      "type": "Technology",
+      "description": "Programming language"
+    },
+    {
+      "name": "AI",
+      "type": "Field",
+      "description": "Artificial Intelligence"
+    },
+    {
+      "name": "TensorFlow",
+      "type": "Framework",
+      "description": "ML framework"
+    },
+    {
+      "name": "NumPy",
+      "type": "Library",
+      "description": "Numerical computing"
+    }
+  ],
+  "relationships": [
+    {
+      "source": "Python",
+      "target": "AI",
+      "type": "used_in",
+      "description": "Python is used in AI"
+    },
+    {
+      "source": "Python",
+      "target": "TensorFlow",
+      "type": "has_framework",
+      "description": "Python has TensorFlow"
+    },
+    {
+      "source": "TensorFlow",
+      "target": "AI",
+      "type": "used_for",
+      "description": "TensorFlow is used for AI"
+    },
+    {
+      "source": "Python",
+      "target": "NumPy",
+      "type": "has_library",
+      "description": "Python has NumPy"
+    }
+  ]
+}
