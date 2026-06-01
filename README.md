@@ -6,9 +6,7 @@
 
 [![Python Version](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-34%20Passed-brightgreen?style=for-the-badge)](#testing)
-[![LangChain](https://img.shields.io/badge/LangChain-0.3%2B-orange?style=for-the-badge)](https://langchain.com)
-[![LangGraph](https://img.shields.io/badge/LangGraph-0.2%2B-red?style=for-the-badge)](https://langchain-ai.github.io/langgraph/)
+[![Tests](https://img.shields.io/badge/Tests-58%20Passed-brightgreen?style=for-the-badge)](#testing)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Gradio](https://img.shields.io/badge/Gradio-4.25%2B-FF6B6B?style=for-the-badge)](https://gradio.app)
 
@@ -16,7 +14,9 @@
 
 A production-ready RAG framework supporting **multiple RAG paradigms** — from basic vector search to advanced agentic systems with intelligent retrieval decisions.
 
-[Quick Start](#-quick-start) • [Features](#-features) • [Architecture](#-architecture) • [Examples](#-examples) • [Documentation](#-documentation)
+**🎯 Perfect for:** Chatbots • Knowledge Bases • Story Writing • Document Q&A • Research Assistants
+
+[Quick Start](#-quick-start) • [Features](#-features) • [Story Writing](#-story-writing) • [API](#-api) • [Documentation](#-documentation)
 
 </div>
 
@@ -26,14 +26,15 @@ A production-ready RAG framework supporting **multiple RAG paradigms** — from 
 
 - [Why Ultimate RAG?](#-why-ultimate-rag)
 - [Features](#-features)
-- [Architecture](#-architecture)
 - [Installation](#-installation)
 - [Quick Start](#-quick-start)
+- [Story Writing Guide](#-story-writing-guide)
 - [RAG Patterns](#-rag-patterns)
+- [API Reference](#-api-reference)
+- [Web UI](#-web-ui)
 - [Configuration](#-configuration)
 - [Testing](#-testing)
 - [Project Structure](#-project-structure)
-- [Documentation](#-documentation)
 - [Contributing](#-contributing)
 - [License](#-license)
 
@@ -41,38 +42,49 @@ A production-ready RAG framework supporting **multiple RAG paradigms** — from 
 
 ## 🎯 Why Ultimate RAG?
 
-In 2026, RAG has evolved far beyond simple "vector search + LLM" patterns. Modern AI systems need:
-
-| Challenge | Solution |
-|-----------|----------|
+| Problem | Solution |
+|---------|----------|
 | 🔍 **Shallow retrieval** | Hybrid search (vector + BM25) for better recall |
 | 📊 **Irrelevant context** | Cross-encoder re-ranking for precision |
 | 🧠 **Complex reasoning** | Agentic RAG with LangGraph for multi-step decisions |
-| 💬 **Conversational AI** | Query rewriting and conversation memory |
-| ⚡ **Production scale** | Caching, error handling, and monitoring |
-
-**Ultimate RAG Framework** provides all of these in a single, modular package.
+| 📚 **Long documents** | Advanced chunking (semantic, proposition, contextual) |
+| 💬 **Multi-turn chat** | Conversation memory with buffer/window/summary modes |
+| 🔐 **Production security** | API key management, rate limiting |
+| 📈 **Monitoring** | Usage tracking, analytics, error monitoring |
+| 📖 **Story Writing** | Character, plot, world management with consistency checking |
 
 ---
 
 ## ✨ Features
 
-### 🎨 Multiple RAG Patterns
+### 🎨 RAG Patterns
 
 | Pattern | Description | Use Case |
 |---------|-------------|----------|
 | **Naive RAG** | Basic vector search + LLM | Simple Q&A, chatbots |
 | **Advanced RAG** | Hybrid search + re-ranking | Technical docs, research |
-| **Agentic RAG** | Agent-based with LangGraph | Complex reasoning, multi-step |
-| **Graph RAG** | Knowledge graph integration | Enterprise knowledge bases |
-| **Self-RAG** | Self-reflective RAG | Quality-critical applications |
-| **Corrective RAG** | Dynamic correction | Research, fact-checking |
+| **Agentic RAG** | Agent-based with LangGraph | Complex reasoning |
+| **Graph RAG** | Knowledge graph integration | Relationship queries |
+| **Self-RAG** | Self-reflective RAG | Quality-critical apps |
+| **Corrective RAG** | Dynamic correction | Fact-checking |
 | **HyDE** | Hypothetical Document Embedding | Better semantic matching |
+
+### 📖 Story Writing System
+
+| Feature | Description |
+|---------|-------------|
+| **CharacterManager** | Character profiles, relationships, development arcs |
+| **PlotManager** | Plot points, arcs, foreshadowing, subplots |
+| **WorldBuilder** | Locations, lore, world rules, cultural elements |
+| **ConsistencyChecker** | Character, plot, timeline, fact checking |
+| **ChapterManager** | Chapter organization, word count |
+| **TimelineManager** | Event timeline tracking |
+| **WritingAssistant** | AI-powered content generation |
 
 ### 🔧 Core Components
 
 - **📄 Document Loader** — PDF, DOCX, HTML, Markdown, CSV, JSON
-- **✂️ Text Splitter** — Recursive, sentence-aware, semantic chunking
+- **✂️ Text Splitter** — Recursive, semantic, proposition, contextual headers
 - **🔢 Embeddings** — HuggingFace, OpenAI, Cohere
 - **💾 Vector Store** — FAISS, ChromaDB, Qdrant
 - **🔍 Retriever** — Similarity, hybrid, MMR, re-ranking
@@ -80,51 +92,13 @@ In 2026, RAG has evolved far beyond simple "vector search + LLM" patterns. Moder
 
 ### 🚀 Production Features
 
-- ✅ **RESTful API** — FastAPI endpoints for production serving
-- ✅ **Web UI** — Gradio interface for easy interaction
-- ✅ Configuration management (env vars + programmatic)
-- ✅ Caching (in-memory + Redis)
-- ✅ Error handling with retry (tenacity)
-- ✅ Logging and monitoring
-- ✅ Evaluation framework (faithfulness, relevance, precision, recall)
-
----
-
-## 🏗️ Architecture
-
-### Naive RAG Pipeline
-
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Document   │────▶│   Vector    │────▶│     LLM     │
-│    Loader    │     │    Store    │     │  Generator  │
-└─────────────┘     └─────────────┘     └─────────────┘
-```
-
-### Advanced RAG Pipeline
-
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│    Query     │────▶│   Hybrid    │────▶│  Re-ranker  │
-│  Transform   │     │   Search    │     │             │
-└─────────────┘     └─────────────┘     └─────────────┘
-                          │                    │
-                          ▼                    ▼
-                    ┌─────────────┐     ┌─────────────┐
-                    │   Vector    │     │   Document  │
-                    │   Search    │     │   Grader    │
-                    └─────────────┘     └─────────────┘
-```
-
-### Agentic RAG Pipeline (LangGraph)
-
-```
-START → generate_query_or_respond → [tool_calls?] → retrieve → grade_documents
-            ↑                                        ↓              ↓
-            ←── rewrite_question ←── [irrelevant]    [relevant]
-                                                                ↓
-                                                          generate_answer → END
-```
+- ✅ **RESTful API** — FastAPI endpoints
+- ✅ **Web UI** — Gradio interface
+- ✅ **Streaming** — Token-by-token response
+- ✅ **Memory** — Conversation history management
+- ✅ **Auth** — API key management, rate limiting
+- ✅ **Monitoring** — Usage tracking, analytics
+- ✅ **Document Management** — CRUD operations, versioning
 
 ---
 
@@ -135,17 +109,17 @@ START → generate_query_or_respond → [tool_calls?] → retrieve → grade_doc
 - Python 3.10+
 - pip
 
-### Install from Source
+### Quick Install
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/ultimate-rag.git
-cd ultimate-rag
+# Clone repository
+git clone https://github.com/Taitv01/rag-framework-2026.git
+cd rag-framework-2026
 
 # Create virtual environment
-python -m venv venv
+python -m vvenv venv
 
-# Activate virtual environment
+# Activate
 # Windows
 venv\Scripts\activate
 # Linux/Mac
@@ -158,7 +132,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-### Docker Installation
+### Docker Install
 
 ```bash
 docker build -t ultimate-rag .
@@ -169,7 +143,7 @@ docker run -it --env-file .env ultimate-rag
 
 ## 🚀 Quick Start
 
-### 1️⃣ Demo (No API Key Required)
+### 1️⃣ Demo (No API Key Needed)
 
 ```bash
 python examples/00_demo_no_api.py
@@ -224,34 +198,26 @@ print(result["transformed_query"])
 print(result["relevant_docs"])
 ```
 
-### 4️⃣ Agentic RAG (LangGraph)
+### 4️⃣ Graph RAG (Knowledge Graph)
 
 ```python
-from src.rag import AgenticRAG
+from src.rag import GraphRAG
 
-# Initialize agent-based RAG
-rag = AgenticRAG(
-    llm_provider="openai",
-    llm_model="gpt-4o",
-)
+# Initialize
+rag = GraphRAG(llm_provider="openai")
 
 # Add documents
-rag.add_documents(["knowledge_base/"])
+rag.add_documents(["docs/"])
 
-# Query (agent decides whether to retrieve)
-answer = rag.query("What is Python?")
+# Query with graph reasoning
+answer = rag.query("What is the relationship between X and Y?")
 
-# Multi-turn conversation
-answer = rag.query(
-    "Tell me more about that",
-    conversation_history=[
-        {"role": "user", "content": "What is Python?"},
-        {"role": "assistant", "content": "Python is a programming language..."}
-    ]
-)
+# Get knowledge graph
+kg = rag.get_knowledge_graph()
+neighbors = kg.get_neighbors("Python")
 ```
 
-### 5️⃣ RESTful API
+### 5️⃣ REST API Server
 
 ```bash
 # Start API server
@@ -288,40 +254,314 @@ Features:
 - 🔍 Search interface
 - 📊 Statistics dashboard
 
-### 7️⃣ Production RAG
+---
+
+## 📖 Story Writing Guide
+
+### Complete Workflow
 
 ```python
+from src.story import (
+    CharacterManager, Character,
+    PlotManager, PlotPoint, PlotArc,
+    WorldBuilder, Location, Lore,
+    ConsistencyChecker,
+    WritingAssistant
+)
 from src.rag import AdvancedRAG
-from src.utils.config import Config
-from src.utils.cache import QueryCache
-from src.utils.logger import setup_logger
 
-# Load configuration
-config = Config()
+# =========================================================================
+# Step 1: Setup Knowledge Base
+# =========================================================================
 
-# Setup logging
-logger = setup_logger("production_rag")
+# Character Manager
+char_manager = CharacterManager()
 
-# Initialize with config
-rag = AdvancedRAG(
-    llm_provider=config.get("DEFAULT_LLM_PROVIDER"),
-    llm_model=config.get("DEFAULT_LLM_MODEL"),
-    use_hybrid=config.get_bool("ENABLE_HYBRID_SEARCH"),
-    use_reranking=config.get_bool("ENABLE_RERANKING"),
+char_manager.add_character(Character(
+    name="Nguyễn Văn A",
+    age=25,
+    gender="Nam",
+    personality="Thông minh, quyết đoán, đôi khi nóng nảy",
+    backstory="Mồ côi từ nhỏ, lớn lên ở trại trẻ mồ côi",
+    appearance="Cao 1m75, tóc đen, mắt nâu",
+    motivations=["Tìm lại gia đình"],
+    fears=["Bị bỏ rơi"],
+    strengths=["Trí nhớ tốt", "Can đảm"],
+    weaknesses=["Nóng nảy"],
+))
+
+char_manager.add_character(Character(
+    name="Trần Thị B",
+    age=23,
+    gender="Nữ",
+    personality="Hiền lành, thông minh",
+    backstory="Con gái gia đình giàu có",
+))
+
+# Add relationship
+char_manager.add_relationship(
+    "Nguyễn Văn A", "Trần Thị B",
+    "friend", "Bạn thân từ nhỏ"
 )
 
-# Add caching
-cache = QueryCache(ttl=config.get_int("CACHE_TTL"))
+# Plot Manager
+plot_manager = PlotManager()
 
-# Query with caching
-def cached_query(question):
-    cached = cache.get(question)
-    if cached:
-        return cached
+plot_manager.add_plot_point(PlotPoint(
+    chapter=1,
+    event="A tìm thấy bức thư cũ",
+    importance="high",
+    characters_involved=["Nguyễn Văn A"],
+))
 
-    result = rag.query_detailed(question)
-    cache.set(question, result)
-    return result
+plot_manager.create_plot_arc(PlotArc(
+    name="Hành trình tìm lại gia đình",
+    description="A khám phá bí mật về gia đình",
+    start_chapter=1,
+    characters_involved=["Nguyễn Văn A", "Trần Thị B"],
+))
+
+plot_manager.add_foreshadowing(
+    chapter=1,
+    hint="Bức thư có mùi lạ",
+    resolution_chapter=10,
+)
+
+# World Builder
+world_builder = WorldBuilder()
+
+world_builder.add_location(Location(
+    name="Hà Nội",
+    description="Thủ đô ngàn năm văn hiến",
+    climate="Nhiệt đới gió mùa",
+    landmarks=["Hồ Gươm", "Phố Cổ"],
+    first_appearance=1,
+))
+
+world_builder.add_location(Location(
+    name="Đà Lạt",
+    description="Thành phố mù sương",
+    climate="Mát mẻ quanh năm",
+    first_appearance=5,
+))
+
+# =========================================================================
+# Step 2: Setup RAG with Story Context
+# =========================================================================
+
+rag = AdvancedRAG(
+    llm_provider="openai",
+    llm_model="gpt-4o",
+    embedding_provider="huggingface",
+    use_hybrid=True,
+    use_reranking=True,
+)
+
+# Add story documents
+rag.add_documents([
+    "truyen/chuong_1.txt",
+    "truyen/chuong_2.txt",
+    # ... more chapters
+])
+
+# =========================================================================
+# Step 3: Write New Chapter
+# =========================================================================
+
+def write_chapter(chapter_number, main_characters, location, plot_points):
+    """Write new chapter with consistency checking."""
+
+    # Get character context
+    char_context = ""
+    for name in main_characters:
+        char_context += char_manager.get_character_context(name) + "\n\n"
+
+    # Get plot context
+    plot_context = plot_manager.get_plot_context()
+
+    # Get world context
+    world_context = world_builder.get_location_context(location)
+
+    # Generate chapter
+    prompt = f"""Viết chương {chapter_number} với thông tin sau:
+
+Nhân vật:
+{char_context}
+
+Cốt truyện:
+{plot_context}
+
+Địa điểm:
+{world_context}
+
+Plot points cần đề cập:
+{chr(10).join([f"- {p}" for p in plot_points])}
+
+Yêu cầu:
+1. Nhất quán với tính cách nhân vật
+2. Mô tả địa điểm sinh động
+3. Phát triển plot points
+4. Hội thoại tự nhiên
+
+Viết chương hoàn chỉnh:"""
+
+    chapter_content = rag.llm.generate(prompt)
+
+    # Update character development
+    for name in main_characters:
+        char_manager.add_development(
+            name,
+            chapter=chapter_number,
+            event=f"Xuất hiện trong chương {chapter_number}",
+        )
+
+    # Update timeline
+    timeline.add_event(TimelineEvent(
+        chapter=chapter_number,
+        time="Buổi sáng",
+        event=plot_points[0] if plot_points else "Chương mới",
+        location=location,
+        characters_involved=main_characters,
+    ))
+
+    return chapter_content
+
+# =========================================================================
+# Step 4: Check Consistency
+# =========================================================================
+
+def check_consistency(chapter_content, chapter_number):
+    """Check chapter for consistency issues."""
+
+    issues = []
+
+    # Check character consistency
+    for name in char_manager.list_characters():
+        char = char_manager.get_character(name)
+        prompt = f"""Kiểm tra văn bản có nhất quán với nhân vật {name} không:
+
+Thông tin nhân vật:
+{char.get_profile_text()}
+
+Văn bản:
+{chapter_content[:1000]}
+
+Trả về 'OK' nếu nhất quán, hoặc mô tả vấn đề."""
+
+        response = rag.llm.generate(prompt)
+        if "ok" not in response.lower():
+            issues.append(f"Nhân vật {name}: {response}")
+
+    # Check unresolved foreshadowing
+    unresolved = plot_manager.get_unresolved_foreshadowing()
+    for fs in unresolved:
+        issues.append(f"Foreshadowing chưa giải quyết: {fs.hint}")
+
+    return issues
+
+# =========================================================================
+# Step 5: Get Writing Suggestions
+# =========================================================================
+
+def get_suggestions(current_chapter):
+    """Get suggestions for next chapter."""
+
+    # Get unresolved foreshadowing
+    unresolved = plot_manager.get_unresolved_foreshadowing()
+
+    # Get active arcs
+    active_arcs = plot_manager.get_active_arcs()
+
+    prompt = f"""Dựa vào tình hình hiện tại:
+
+Foreshadowing chưa giải quyết:
+{chr(10).join([f"- {fs.hint}" for fs in unresolved])}
+
+Plot arcs đang diễn ra:
+{chr(10).join([f"- {arc.name}: {arc.description}" for arc in active_arcs])}
+
+Gợi ý cho chương tiếp theo:
+1. Nên giải quyết foreshadowing nào?
+2. Plot arc nên phát triển thế nào?
+3. Nhân vật nào nên xuất hiện?
+4. Sự kiện gì nên xảy ra?"""
+
+    return rag.llm.generate(prompt)
+```
+
+### Character Management
+
+```python
+# Get character context
+context = char_manager.get_character_context("Nguyễn Văn A")
+print(context)
+
+# Get relationships
+relationships = char_manager.get_relationships_context("Nguyễn Văn A")
+print(relationships)
+
+# Get development arc
+arc = char_manager.get_development_arc("Nguyễn Văn A")
+print(arc)
+
+# Find related characters
+related = char_manager.find_related_characters("Nguyễn Văn A")
+print(related)
+```
+
+### Plot Management
+
+```python
+# Get plot context
+context = plot_manager.get_plot_context()
+print(context)
+
+# Get unresolved foreshadowing
+unresolved = plot_manager.get_unresolved_foreshadowing()
+for fs in unresolved:
+    print(f"Chương {fs.chapter_planted}: {fs.hint}")
+
+# Resolve foreshadowing
+plot_manager.resolve_foreshadowing(
+    "fs_1",
+    resolution="Bức thư bị ngấm thuốc độc",
+    resolution_chapter=10
+)
+```
+
+### World Building
+
+```python
+# Get world context
+context = world_builder.get_world_context()
+print(context)
+
+# Get location details
+location = world_builder.get_location_context("Đà Lạt")
+print(location)
+
+# Get secret lore
+secrets = world_builder.get_secret_lore()
+for lore in secrets:
+    print(f"{lore.name}: {lore.content}")
+```
+
+### Consistency Checking
+
+```python
+# Check chapter
+issues = consistency_checker.check_chapter(chapter_text, chapter_number)
+for issue in issues:
+    print(f"[{issue.severity}] {issue.description}")
+
+# Check character
+issues = consistency_checker.check_character_consistency("A")
+for issue in issues:
+    print(f"[{issue.severity}] {issue.description}")
+
+# Get full report
+report = consistency_checker.get_consistency_report()
+print(report)
 ```
 
 ---
@@ -329,10 +569,6 @@ def cached_query(question):
 ## 🎨 RAG Patterns
 
 ### Naive RAG
-
-The simplest RAG pattern. Documents are chunked, embedded, and stored in a vector database. At query time, relevant chunks are retrieved and passed to the LLM.
-
-**Best for:** Basic Q&A, document search, simple chatbots
 
 ```python
 from src.rag import NaiveRAG
@@ -343,10 +579,6 @@ answer = rag.query("What is Python?")
 
 ### Advanced RAG
 
-Enhanced with hybrid search (vector + BM25) and cross-encoder re-ranking for better precision.
-
-**Best for:** Technical documentation, research papers, complex Q&A
-
 ```python
 from src.rag import AdvancedRAG
 rag = AdvancedRAG(use_hybrid=True, use_reranking=True)
@@ -355,10 +587,6 @@ answer = rag.query("What is Python?")
 ```
 
 ### Agentic RAG
-
-Uses LangGraph to create an intelligent agent that decides whether to retrieve, grades document relevance, and rewrites queries when needed.
-
-**Best for:** Conversational AI, complex reasoning, multi-step tasks
 
 ```python
 from src.rag import AgenticRAG
@@ -369,33 +597,14 @@ answer = rag.query("What is Python?")
 
 ### Graph RAG
 
-Knowledge graph-based RAG for structured reasoning. Extracts entities and relationships from documents.
-
-**Best for:** Enterprise knowledge bases, multi-hop questions, relationship queries
-
 ```python
 from src.rag import GraphRAG
 rag = GraphRAG()
 rag.add_documents(["docs/"])
-
-# Query with graph reasoning
 answer = rag.query("What is the relationship between X and Y?")
-
-# Get knowledge graph
-kg = rag.get_knowledge_graph()
-neighbors = kg.get_neighbors("Python")
 ```
 
 ### Advanced Techniques
-
-Collection of advanced RAG techniques:
-
-- **Self-RAG** — Self-reflective RAG with quality assessment
-- **Corrective RAG** — Dynamic correction with web search
-- **HyDE** — Hypothetical Document Embedding
-- **HyPE** — Hypothetical Prompt Embeddings
-- **Contextual Compression** — Compress while preserving relevance
-- **Document Augmentation** — Generate questions for better retrieval
 
 ```python
 from src.rag.advanced_techniques import SelfRAG, CorrectiveRAG, HyDE
@@ -408,6 +617,61 @@ answer = rag.query("What is Python?")
 hyde = HyDE(llm=llm, embeddings=embeddings)
 results = hyde.search("What is Python?", documents)
 ```
+
+---
+
+## 🌐 API Reference
+
+### Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/health` | Health check |
+| `POST` | `/query` | Query RAG system |
+| `POST` | `/documents` | Add documents |
+| `GET` | `/documents` | List documents |
+| `POST` | `/ingest` | Upload files |
+| `POST` | `/search` | Search documents |
+
+### Query Example
+
+```python
+import requests
+
+response = requests.post("http://localhost:8000/query", json={
+    "question": "What is Python?",
+    "k": 5,
+    "transform_query": True,
+    "grade_documents": True
+})
+
+result = response.json()
+print(result["answer"])
+print(result["sources"])
+```
+
+### API Documentation
+
+Visit `http://localhost:8000/docs` for interactive Swagger UI.
+
+---
+
+## 🖥️ Web UI
+
+### Features
+
+- 💬 **Chat Interface** — Chat with your knowledge base
+- 📄 **Document Upload** — Upload and index documents
+- 🔍 **Search** — Search documents
+- 📊 **Statistics** — View usage statistics
+
+### Launch
+
+```bash
+python examples/07_web_ui.py
+```
+
+Visit `http://localhost:7860`
 
 ---
 
@@ -440,13 +704,8 @@ from src.utils.config import Config
 
 config = Config()
 
-# Get configuration
 llm_config = config.get_llm_config()
 rag_config = config.get_rag_config()
-
-# Get specific values
-chunk_size = config.get_int("CHUNK_SIZE", default=500)
-enable_hybrid = config.get_bool("ENABLE_HYBRID_SEARCH", default=True)
 ```
 
 ---
@@ -455,30 +714,19 @@ enable_hybrid = config.get_bool("ENABLE_HYBRID_SEARCH", default=True)
 
 ```bash
 # Run all tests
-pytest
-
-# Run with verbose output
 pytest -v
 
 # Run with coverage
 pytest --cov=src
 
-# Run specific test file
-pytest tests/test_rag_pipeline.py
+# Run specific test
+pytest tests/test_new_features.py
 ```
 
 ### Test Results
 
 ```
-============================= test session starts ==============================
-platform win32 -- Python 3.14.2
-collected 35 items
-
-tests/test_document_loader.py ........                    [ 22%]
-tests/test_rag_pipeline.py ......................          [ 85%]
-tests/test_retriever.py .........                         [100%]
-
-============================== 34 passed, 1 skipped ==============================
+============================= 58 passed, 1 skipped ==============================
 ```
 
 ---
@@ -487,146 +735,96 @@ tests/test_retriever.py .........                         [100%]
 
 ```
 ultimate-rag/
-├── 📄 README.md                        # This file
-├── 📄 pyproject.toml                   # Project configuration
-├── 📄 requirements.txt                 # Dependencies
-├── 📄 .env.example                     # Environment template
-├── 📄 .gitignore                       # Git ignore rules
-├── 📄 LICENSE                          # MIT License
-├── 📄 CONTRIBUTING.md                  # Contribution guide
+├── src/
+│   ├── core/                    # Core components
+│   │   ├── document_loader.py
+│   │   ├── text_splitter.py
+│   │   ├── embeddings.py
+│   │   ├── vector_store.py
+│   │   ├── retriever.py
+│   │   ├── llm.py
+│   │   ├── streaming.py         # Token streaming
+│   │   ├── memory.py            # Conversation memory
+│   │   └── advanced_chunking.py # Semantic, proposition chunking
+│   │
+│   ├── rag/                     # RAG implementations
+│   │   ├── naive_rag.py
+│   │   ├── advanced_rag.py
+│   │   ├── agentic_rag.py
+│   │   ├── graph_rag.py
+│   │   └── advanced_techniques.py
+│   │
+│   ├── story/                   # Story writing system
+│   │   ├── character_manager.py
+│   │   ├── plot_manager.py
+│   │   ├── world_builder.py
+│   │   ├── consistency_checker.py
+│   │   ├── chapter_manager.py
+│   │   ├── timeline_manager.py
+│   │   └── writing_assistant.py
+│   │
+│   ├── api/                     # REST API
+│   │   └── app.py
+│   │
+│   ├── ui/                      # Web UI
+│   │   └── __init__.py
+│   │
+│   ├── auth/                    # Authentication
+│   │   ├── auth_manager.py
+│   │   ├── api_key_manager.py
+│   │   └── rate_limiter.py
+│   │
+│   ├── monitoring/              # Monitoring
+│   │   └── metrics_collector.py
+│   │
+│   ├── documents/               # Document management
+│   │   └── manager.py
+│   │
+│   ├── agents/                  # Specialized agents
+│   │   ├── retrieval_agent.py
+│   │   ├── grading_agent.py
+│   │   └── query_rewriter.py
+│   │
+│   ├── evaluation/              # Evaluation
+│   │   ├── metrics.py
+│   │   └── evaluator.py
+│   │
+│   └── utils/                   # Utilities
+│       ├── config.py
+│       ├── cache.py
+│       └── logger.py
 │
-├── 📂 src/
-│   ├── 📂 core/                        # Core components
-│   │   ├── document_loader.py          # Multi-format document loading
-│   │   ├── text_splitter.py            # Text chunking strategies
-│   │   ├── embeddings.py               # Embedding model abstraction
-│   │   ├── vector_store.py             # Vector database abstraction
-│   │   ├── retriever.py                # Retrieval strategies
-│   │   └── llm.py                      # LLM abstraction layer
-│   │
-│   ├── 📂 rag/                         # RAG implementations
-│   │   ├── naive_rag.py                # Basic RAG
-│   │   ├── advanced_rag.py             # Advanced with re-ranking
-│   │   ├── agentic_rag.py              # Agent-based RAG (LangGraph)
-│   │   ├── graph_rag.py                # Knowledge Graph RAG
-│   │   └── advanced_techniques.py      # Self-RAG, CRAG, HyDE, etc.
-│   │
-│   ├── 📂 api/                         # RESTful API
-│   │   └── app.py                      # FastAPI application
-│   │
-│   ├── 📂 ui/                          # Web UI
-│   │   └── __init__.py                 # Gradio interface
-│   │
-│   ├── 📂 agents/                      # Specialized agents
-│   │   ├── retrieval_agent.py          # Smart retrieval decisions
-│   │   ├── grading_agent.py            # Document relevance grading
-│   │   └── query_rewriter.py           # Query optimization
-│   │
-│   ├── 📂 evaluation/                  # Evaluation framework
-│   │   ├── metrics.py                  # RAG metrics
-│   │   └── evaluator.py                # End-to-end evaluation
-│   │
-│   └── 📂 utils/                       # Utilities
-│       ├── config.py                   # Configuration management
-│       ├── cache.py                    # Caching layer
-│       └── logger.py                   # Logging utilities
+├── examples/                    # Example scripts
+│   ├── 00_demo_no_api.py
+│   ├── 01_naive_rag.py
+│   ├── 02_advanced_rag.py
+│   ├── 03_agentic_rag.py
+│   ├── 04_production_rag.py
+│   ├── 05_graph_rag.py
+│   ├── 06_api_server.py
+│   ├── 07_web_ui.py
+│   └── 08_story_writing.py
 │
-├── 📂 examples/                        # Example scripts
-│   ├── 00_demo_no_api.py               # Demo (no API key needed)
-│   ├── 01_naive_rag.py                 # Basic RAG example
-│   ├── 02_advanced_rag.py              # Advanced RAG example
-│   ├── 03_agentic_rag.py               # Agentic RAG example
-│   ├── 04_production_rag.py            # Production RAG example
-│   ├── 05_graph_rag.py                 # Knowledge Graph RAG example
-│   ├── 06_api_server.py                # REST API server
-│   └── 07_web_ui.py                    # Gradio Web UI
-│
-├── 📂 notebooks/                       # Jupyter notebooks
-│   └── quickstart.ipynb                # Quick start guide
-│
-├── 📂 tests/                           # Unit tests
-│   ├── test_document_loader.py         # Document loader tests
-│   ├── test_retriever.py               # Retriever tests
-│   └── test_rag_pipeline.py            # RAG pipeline tests
-│
-└── 📂 docs/                            # Documentation
-    ├── architecture.md                 # Architecture overview
-    ├── configuration.md                # Configuration guide
-    └── deployment.md                   # Deployment guide
-```
-
----
-
-## 📚 Documentation
-
-| Document | Description |
-|----------|-------------|
-| [Architecture](docs/architecture.md) | System architecture and design patterns |
-| [Configuration](docs/configuration.md) | Configuration options and best practices |
-| [Deployment](docs/deployment.md) | Deployment guide for various platforms |
-| [Contributing](CONTRIBUTING.md) | How to contribute to the project |
-
----
-
-## 🛠️ Supported Providers
-
-### LLM Providers
-
-| Provider | Models | Status |
-|----------|--------|--------|
-| **OpenAI** | GPT-4o, GPT-4o-mini, GPT-4-turbo, GPT-3.5-turbo | ✅ |
-| **Anthropic** | Claude Sonnet 4, Claude 3.5 Sonnet, Claude 3 Haiku | ✅ |
-| **Ollama** | Llama 3, Mistral, Phi-3 (local) | ✅ |
-
-### Embedding Providers
-
-| Provider | Models | Status |
-|----------|--------|--------|
-| **HuggingFace** | all-MiniLM-L6-v2, all-mpnet-base-v2, BGE | ✅ |
-| **OpenAI** | text-embedding-3-small, text-embedding-3-large | ✅ |
-| **Cohere** | embed-english-v3.0 | ✅ |
-
-### Vector Store Providers
-
-| Provider | Type | Status |
-|----------|------|--------|
-| **FAISS** | In-memory (prototyping) | ✅ |
-| **ChromaDB** | Local persistent | ✅ |
-| **Qdrant** | Production scalable | ✅ |
-
----
-
-## 📊 Evaluation Metrics
-
-The framework includes built-in evaluation metrics:
-
-| Metric | Description | Range |
-|--------|-------------|-------|
-| **Faithfulness** | Is the answer grounded in context? | 0.0 - 1.0 |
-| **Answer Relevance** | Does the answer address the question? | 0.0 - 1.0 |
-| **Context Precision** | Are retrieved documents relevant? | 0.0 - 1.0 |
-| **Context Recall** | Are all relevant documents retrieved? | 0.0 - 1.0 |
-
-```python
-from src.evaluation import RAGEvaluator
-
-evaluator = RAGEvaluator(llm)
-report = evaluator.evaluate(query_func, test_data)
-evaluator.print_report(report)
+├── tests/                       # Unit tests
+├── notebooks/                   # Jupyter notebooks
+├── docs/                        # Documentation
+├── pyproject.toml
+├── requirements.txt
+└── README.md
 ```
 
 ---
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md).
 
-### Quick Contribution Steps
+### Quick Steps
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
 5. Open a Pull Request
 
 ---
@@ -639,32 +837,25 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
-- [LangChain](https://langchain.com) — LLM application framework
+- [LangChain](https://langchain.com) — LLM framework
 - [LangGraph](https://langchain-ai.github.io/langgraph/) — Agent orchestration
 - [HuggingFace](https://huggingface.co) — Transformers and embeddings
 - [FAISS](https://faiss.ai) — Vector similarity search
-- [ChromaDB](https://www.trychroma.com) — Vector database
-- [Qdrant](https://qdrant.tech) — Vector search engine
+- [FastAPI](https://fastapi.tiangolo.com/) — REST API framework
+- [Gradio](https://gradio.app) — Web UI framework
 
 ---
 
 ## 📞 Support
 
-- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/yourusername/ultimate-rag/issues)
-- 💡 **Feature Requests**: [GitHub Discussions](https://github.com/yourusername/ultimate-rag/discussions)
-- 📧 **Email**: your.email@example.com
-
----
-
-## ⭐ Star History
-
-If you find this project useful, please consider giving it a star on GitHub!
+- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/Taitv01/rag-framework-2026/issues)
+- 💡 **Feature Requests**: [GitHub Discussions](https://github.com/Taitv01/rag-framework-2026/discussions)
 
 ---
 
 <div align="center">
 
-**Made with ❤️ by the RAG Framework Team**
+**Made with ❤️ for Story Writers and AI Enthusiasts**
 
 [⬆ Back to Top](#-ultimate-rag-framework)
 
