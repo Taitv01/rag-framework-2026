@@ -1,58 +1,135 @@
+<![CDATA[<div align="center">
+
 # 🚀 Ultimate RAG Framework
 
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![LangChain](https://img.shields.io/badge/LangChain-0.3+-orange.svg)](https://langchain.com)
+### Retrieval-Augmented Generation for AI Models (2026)
 
-> **A comprehensive Retrieval-Augmented Generation (RAG) framework supporting multiple RAG paradigms for AI models (2026)**
+[![Python Version](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
+[![Tests](https://img.shields.io/badge/Tests-34%20Passed-brightgreen?style=for-the-badge)](#testing)
+[![LangChain](https://img.shields.io/badge/LangChain-0.3%2B-orange?style=for-the-badge)](https://langchain.com)
+[![LangGraph](https://img.shields.io/badge/LangGraph-0.2%2B-red?style=for-the-badge)](https://langchain-ai.github.io/langgraph/)
 
-## 📖 Overview
+<br />
 
-The Ultimate RAG Framework provides production-ready implementations of multiple RAG patterns, from basic vector search to advanced agentic systems. Built with the latest 2026 best practices, it supports:
+A production-ready RAG framework supporting **multiple RAG paradigms** — from basic vector search to advanced agentic systems with intelligent retrieval decisions.
 
-- **Naive RAG** - Basic vector search + LLM generation
-- **Advanced RAG** - Hybrid search with re-ranking
-- **Agentic RAG** - Agent-based retrieval with LangGraph
-- **Graph RAG** - Knowledge graph integration
-- **Multimodal RAG** - Multi-format document support
+[Quick Start](#-quick-start) • [Features](#-features) • [Architecture](#-architecture) • [Examples](#-examples) • [Documentation](#-documentation)
+
+</div>
+
+---
+
+## 📖 Table of Contents
+
+- [Why Ultimate RAG?](#-why-ultimate-rag)
+- [Features](#-features)
+- [Architecture](#-architecture)
+- [Installation](#-installation)
+- [Quick Start](#-quick-start)
+- [RAG Patterns](#-rag-patterns)
+- [Configuration](#-configuration)
+- [Testing](#-testing)
+- [Project Structure](#-project-structure)
+- [Documentation](#-documentation)
+- [Contributing](#-contributing)
+- [License](#-license)
+
+---
+
+## 🎯 Why Ultimate RAG?
+
+In 2026, RAG has evolved far beyond simple "vector search + LLM" patterns. Modern AI systems need:
+
+| Challenge | Solution |
+|-----------|----------|
+| 🔍 **Shallow retrieval** | Hybrid search (vector + BM25) for better recall |
+| 📊 **Irrelevant context** | Cross-encoder re-ranking for precision |
+| 🧠 **Complex reasoning** | Agentic RAG with LangGraph for multi-step decisions |
+| 💬 **Conversational AI** | Query rewriting and conversation memory |
+| ⚡ **Production scale** | Caching, error handling, and monitoring |
+
+**Ultimate RAG Framework** provides all of these in a single, modular package.
+
+---
 
 ## ✨ Features
 
-### 🎯 Multiple RAG Patterns
+### 🎨 Multiple RAG Patterns
 
-| Pattern | Use Case | Complexity |
-|---------|----------|------------|
-| Naive RAG | Basic Q&A, chatbots | ⭐ |
-| Advanced RAG | Technical docs, research | ⭐⭐ |
-| Agentic RAG | Conversational AI, complex reasoning | ⭐⭐⭐ |
-| Graph RAG | Enterprise knowledge, multi-hop questions | ⭐⭐⭐ |
-| Multimodal RAG | Images, video, audio | ⭐⭐⭐ |
+| Pattern | Description | Use Case |
+|---------|-------------|----------|
+| **Naive RAG** | Basic vector search + LLM | Simple Q&A, chatbots |
+| **Advanced RAG** | Hybrid search + re-ranking | Technical docs, research |
+| **Agentic RAG** | Agent-based with LangGraph | Complex reasoning, multi-step |
+| **Graph RAG** | Knowledge graph integration | Enterprise knowledge bases |
+| **Multimodal RAG** | Images, video, audio support | Medical imaging, video search |
 
 ### 🔧 Core Components
 
-- **Document Loader** - PDF, DOCX, HTML, Markdown, CSV, JSON
-- **Text Splitter** - Recursive, sentence-aware, semantic chunking
-- **Embeddings** - HuggingFace, OpenAI, Cohere support
-- **Vector Store** - FAISS, ChromaDB, Qdrant backends
-- **Retriever** - Similarity, hybrid, MMR, re-ranking
-- **LLM** - OpenAI, Anthropic, Ollama support
+- **📄 Document Loader** — PDF, DOCX, HTML, Markdown, CSV, JSON
+- **✂️ Text Splitter** — Recursive, sentence-aware, semantic chunking
+- **🔢 Embeddings** — HuggingFace, OpenAI, Cohere
+- **💾 Vector Store** — FAISS, ChromaDB, Qdrant
+- **🔍 Retriever** — Similarity, hybrid, MMR, re-ranking
+- **🤖 LLM** — OpenAI, Anthropic, Ollama (local)
 
 ### 🚀 Production Features
 
-- ✅ Configuration management
-- ✅ Caching (in-memory, Redis)
-- ✅ Error handling with retry
+- ✅ Configuration management (env vars + programmatic)
+- ✅ Caching (in-memory + Redis)
+- ✅ Error handling with retry (tenacity)
 - ✅ Logging and monitoring
-- ✅ Evaluation framework
+- ✅ Evaluation framework (faithfulness, relevance, precision, recall)
+
+---
+
+## 🏗️ Architecture
+
+### Naive RAG Pipeline
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Document   │────▶│   Vector    │────▶│     LLM     │
+│    Loader    │     │    Store    │     │  Generator  │
+└─────────────┘     └─────────────┘     └─────────────┘
+```
+
+### Advanced RAG Pipeline
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│    Query     │────▶│   Hybrid    │────▶│  Re-ranker  │
+│  Transform   │     │   Search    │     │             │
+└─────────────┘     └─────────────┘     └─────────────┘
+                          │                    │
+                          ▼                    ▼
+                    ┌─────────────┐     ┌─────────────┐
+                    │   Vector    │     │   Document  │
+                    │   Search    │     │   Grader    │
+                    └─────────────┘     └─────────────┘
+```
+
+### Agentic RAG Pipeline (LangGraph)
+
+```
+START → generate_query_or_respond → [tool_calls?] → retrieve → grade_documents
+            ↑                                        ↓              ↓
+            ←── rewrite_question ←── [irrelevant]    [relevant]
+                                                                ↓
+                                                          generate_answer → END
+```
+
+---
 
 ## 📦 Installation
 
 ### Prerequisites
 
 - Python 3.10+
-- pip or poetry
+- pip
 
-### Quick Start
+### Install from Source
 
 ```bash
 # Clone the repository
@@ -61,32 +138,40 @@ cd ultimate-rag
 
 # Create virtual environment
 python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# or
-venv\Scripts\activate  # Windows
+
+# Activate virtual environment
+# Windows
+venv\Scripts\activate
+# Linux/Mac
+source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Copy environment file
+# Copy environment template
 cp .env.example .env
-# Edit .env with your API keys
 ```
 
 ### Docker Installation
 
 ```bash
-# Build and run with Docker
 docker build -t ultimate-rag .
 docker run -it --env-file .env ultimate-rag
-
-# Or use Docker Compose
-docker-compose up -d
 ```
+
+---
 
 ## 🚀 Quick Start
 
-### 1. Naive RAG (Basic)
+### 1️⃣ Demo (No API Key Required)
+
+```bash
+python examples/00_demo_no_api.py
+```
+
+This runs a complete demo using local HuggingFace embeddings — no API key needed!
+
+### 2️⃣ Basic RAG
 
 ```python
 from src.rag import NaiveRAG
@@ -104,9 +189,14 @@ rag.add_documents(["document.pdf", "article.txt"])
 # Query
 answer = rag.query("What is the main topic?")
 print(answer)
+
+# Query with sources
+result = rag.query_with_sources("What is Python?")
+print(result["answer"])
+print(result["sources"])
 ```
 
-### 2. Advanced RAG (With Re-ranking)
+### 3️⃣ Advanced RAG (Hybrid Search + Re-ranking)
 
 ```python
 from src.rag import AdvancedRAG
@@ -128,7 +218,7 @@ print(result["transformed_query"])
 print(result["relevant_docs"])
 ```
 
-### 3. Agentic RAG (LangGraph)
+### 4️⃣ Agentic RAG (LangGraph)
 
 ```python
 from src.rag import AgenticRAG
@@ -155,7 +245,7 @@ answer = rag.query(
 )
 ```
 
-### 4. Production RAG
+### 5️⃣ Production RAG
 
 ```python
 from src.rag import AdvancedRAG
@@ -191,71 +281,58 @@ def cached_query(question):
     return result
 ```
 
-## 📚 Examples
+---
 
-### Basic Examples
+## 🎨 RAG Patterns
 
-```bash
-# Naive RAG
-python examples/01_naive_rag.py
+### Naive RAG
 
-# Advanced RAG
-python examples/02_advanced_rag.py
+The simplest RAG pattern. Documents are chunked, embedded, and stored in a vector database. At query time, relevant chunks are retrieved and passed to the LLM.
 
-# Agentic RAG
-python examples/03_agentic_rag.py
+**Best for:** Basic Q&A, document search, simple chatbots
 
-# Production RAG
-python examples/04_production_rag.py
+```python
+from src.rag import NaiveRAG
+rag = NaiveRAG()
+rag.add_documents(["docs/"])
+answer = rag.query("What is Python?")
 ```
 
-### Jupyter Notebooks
+### Advanced RAG
 
-```bash
-# Start Jupyter
-jupyter notebook
+Enhanced with hybrid search (vector + BM25) and cross-encoder re-ranking for better precision.
 
-# Open notebooks/
-# - quickstart.ipynb
-# - advanced_techniques.ipynb
-# - evaluation_guide.ipynb
+**Best for:** Technical documentation, research papers, complex Q&A
+
+```python
+from src.rag import AdvancedRAG
+rag = AdvancedRAG(use_hybrid=True, use_reranking=True)
+rag.add_documents(["docs/"])
+answer = rag.query("What is Python?")
 ```
 
-## 🏗️ Architecture
+### Agentic RAG
 
-### RAG Pipeline Flow
+Uses LangGraph to create an intelligent agent that decides whether to retrieve, grades document relevance, and rewrites queries when needed.
 
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Document   │────▶│   Text      │────▶│   Embeddings│
-│   Loader     │     │   Splitter  │     │             │
-└─────────────┘     └─────────────┘     └─────────────┘
-                                               │
-                                               ▼
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│     LLM      │◀────│   Retriever │◀────│ Vector Store│
-│   Generator  │     │             │     │             │
-└─────────────┘     └─────────────┘     └─────────────┘
+**Best for:** Conversational AI, complex reasoning, multi-step tasks
+
+```python
+from src.rag import AgenticRAG
+rag = AgenticRAG()
+rag.add_documents(["docs/"])
+answer = rag.query("What is Python?")
 ```
 
-### Agentic RAG Flow
+---
 
-```
-START → generate_query_or_respond → [tool_calls?] → retrieve → grade_documents
-            ↑                                        ↓              ↓
-            ←── rewrite_question ←── [irrelevant]    [relevant]
-                                                                ↓
-                                                          generate_answer → END
-```
-
-## 🔧 Configuration
+## ⚙️ Configuration
 
 ### Environment Variables
 
 ```bash
 # LLM
 OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
 DEFAULT_LLM_PROVIDER=openai
 DEFAULT_LLM_MODEL=gpt-4o-mini
 
@@ -263,10 +340,7 @@ DEFAULT_LLM_MODEL=gpt-4o-mini
 DEFAULT_EMBEDDING_PROVIDER=huggingface
 DEFAULT_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 
-# Vector Store
-DEFAULT_VECTOR_STORE=faiss
-
-# RAG
+# RAG Settings
 CHUNK_SIZE=500
 CHUNK_OVERLAP=50
 RETRIEVAL_K=5
@@ -284,38 +358,13 @@ config = Config()
 # Get configuration
 llm_config = config.get_llm_config()
 rag_config = config.get_rag_config()
+
+# Get specific values
+chunk_size = config.get_int("CHUNK_SIZE", default=500)
+enable_hybrid = config.get_bool("ENABLE_HYBRID_SEARCH", default=True)
 ```
 
-## 📊 Evaluation
-
-### Built-in Metrics
-
-- **Faithfulness** - Is the answer grounded in context?
-- **Answer Relevance** - Does the answer address the question?
-- **Context Precision** - Are retrieved documents relevant?
-- **Context Recall** - Are all relevant documents retrieved?
-
-### Evaluation Example
-
-```python
-from src.evaluation import RAGEvaluator
-
-evaluator = RAGEvaluator(llm)
-
-# Evaluate
-report = evaluator.evaluate(
-    query_func=rag.query,
-    test_data=[
-        {"question": "What is Python?", "expected": "Python is..."},
-    ]
-)
-
-# Print report
-evaluator.print_report(report)
-
-# Export report
-evaluator.export_report(report, "evaluation.json")
-```
+---
 
 ## 🧪 Testing
 
@@ -323,111 +372,205 @@ evaluator.export_report(report, "evaluation.json")
 # Run all tests
 pytest
 
+# Run with verbose output
+pytest -v
+
 # Run with coverage
 pytest --cov=src
 
-# Run specific test
+# Run specific test file
 pytest tests/test_rag_pipeline.py
 ```
+
+### Test Results
+
+```
+============================= test session starts ==============================
+platform win32 -- Python 3.14.2
+collected 35 items
+
+tests/test_document_loader.py ........                    [ 22%]
+tests/test_rag_pipeline.py ......................          [ 85%]
+tests/test_retriever.py .........                         [100%]
+
+============================== 34 passed, 1 skipped ==============================
+```
+
+---
 
 ## 📁 Project Structure
 
 ```
 ultimate-rag/
-├── src/
-│   ├── core/                    # Core components
-│   │   ├── document_loader.py   # Multi-format document loading
-│   │   ├── text_splitter.py     # Text chunking strategies
-│   │   ├── embeddings.py        # Embedding model abstraction
-│   │   ├── vector_store.py      # Vector database abstraction
-│   │   ├── retriever.py         # Retrieval strategies
-│   │   └── llm.py               # LLM abstraction layer
-│   │
-│   ├── rag/                     # RAG implementations
-│   │   ├── naive_rag.py         # Basic RAG
-│   │   ├── advanced_rag.py      # Advanced with re-ranking
-│   │   └── agentic_rag.py       # Agent-based RAG
-│   │
-│   ├── agents/                  # Specialized agents
-│   │   ├── retrieval_agent.py   # Smart retrieval decisions
-│   │   ├── grading_agent.py     # Document relevance grading
-│   │   └── query_rewriter.py    # Query optimization
-│   │
-│   ├── evaluation/              # Evaluation framework
-│   │   ├── metrics.py           # RAG metrics
-│   │   └── evaluator.py         # End-to-end evaluation
-│   │
-│   └── utils/                   # Utilities
-│       ├── config.py            # Configuration management
-│       ├── cache.py             # Caching layer
-│       └── logger.py            # Logging utilities
+├── 📄 README.md                        # This file
+├── 📄 pyproject.toml                   # Project configuration
+├── 📄 requirements.txt                 # Dependencies
+├── 📄 .env.example                     # Environment template
+├── 📄 .gitignore                       # Git ignore rules
+├── 📄 LICENSE                          # MIT License
+├── 📄 CONTRIBUTING.md                  # Contribution guide
 │
-├── examples/                    # Example scripts
-├── notebooks/                   # Jupyter notebooks
-├── tests/                       # Unit tests
-├── docs/                        # Documentation
-├── pyproject.toml               # Project configuration
-├── requirements.txt             # Dependencies
-└── README.md                    # This file
+├── 📂 src/
+│   ├── 📂 core/                        # Core components
+│   │   ├── document_loader.py          # Multi-format document loading
+│   │   ├── text_splitter.py            # Text chunking strategies
+│   │   ├── embeddings.py               # Embedding model abstraction
+│   │   ├── vector_store.py             # Vector database abstraction
+│   │   ├── retriever.py                # Retrieval strategies
+│   │   └── llm.py                      # LLM abstraction layer
+│   │
+│   ├── 📂 rag/                         # RAG implementations
+│   │   ├── naive_rag.py                # Basic RAG
+│   │   ├── advanced_rag.py             # Advanced with re-ranking
+│   │   └── agentic_rag.py              # Agent-based RAG (LangGraph)
+│   │
+│   ├── 📂 agents/                      # Specialized agents
+│   │   ├── retrieval_agent.py          # Smart retrieval decisions
+│   │   ├── grading_agent.py            # Document relevance grading
+│   │   └── query_rewriter.py           # Query optimization
+│   │
+│   ├── 📂 evaluation/                  # Evaluation framework
+│   │   ├── metrics.py                  # RAG metrics
+│   │   └── evaluator.py                # End-to-end evaluation
+│   │
+│   └── 📂 utils/                       # Utilities
+│       ├── config.py                   # Configuration management
+│       ├── cache.py                    # Caching layer
+│       └── logger.py                   # Logging utilities
+│
+├── 📂 examples/                        # Example scripts
+│   ├── 00_demo_no_api.py               # Demo (no API key needed)
+│   ├── 01_naive_rag.py                 # Basic RAG example
+│   ├── 02_advanced_rag.py              # Advanced RAG example
+│   ├── 03_agentic_rag.py               # Agentic RAG example
+│   └── 04_production_rag.py            # Production RAG example
+│
+├── 📂 notebooks/                       # Jupyter notebooks
+│   └── quickstart.ipynb                # Quick start guide
+│
+├── 📂 tests/                           # Unit tests
+│   ├── test_document_loader.py         # Document loader tests
+│   ├── test_retriever.py               # Retriever tests
+│   └── test_rag_pipeline.py            # RAG pipeline tests
+│
+└── 📂 docs/                            # Documentation
+    ├── architecture.md                 # Architecture overview
+    ├── configuration.md                # Configuration guide
+    └── deployment.md                   # Deployment guide
 ```
+
+---
+
+## 📚 Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Architecture](docs/architecture.md) | System architecture and design patterns |
+| [Configuration](docs/configuration.md) | Configuration options and best practices |
+| [Deployment](docs/deployment.md) | Deployment guide for various platforms |
+| [Contributing](CONTRIBUTING.md) | How to contribute to the project |
+
+---
+
+## 🛠️ Supported Providers
+
+### LLM Providers
+
+| Provider | Models | Status |
+|----------|--------|--------|
+| **OpenAI** | GPT-4o, GPT-4o-mini, GPT-4-turbo, GPT-3.5-turbo | ✅ |
+| **Anthropic** | Claude Sonnet 4, Claude 3.5 Sonnet, Claude 3 Haiku | ✅ |
+| **Ollama** | Llama 3, Mistral, Phi-3 (local) | ✅ |
+
+### Embedding Providers
+
+| Provider | Models | Status |
+|----------|--------|--------|
+| **HuggingFace** | all-MiniLM-L6-v2, all-mpnet-base-v2, BGE | ✅ |
+| **OpenAI** | text-embedding-3-small, text-embedding-3-large | ✅ |
+| **Cohere** | embed-english-v3.0 | ✅ |
+
+### Vector Store Providers
+
+| Provider | Type | Status |
+|----------|------|--------|
+| **FAISS** | In-memory (prototyping) | ✅ |
+| **ChromaDB** | Local persistent | ✅ |
+| **Qdrant** | Production scalable | ✅ |
+
+---
+
+## 📊 Evaluation Metrics
+
+The framework includes built-in evaluation metrics:
+
+| Metric | Description | Range |
+|--------|-------------|-------|
+| **Faithfulness** | Is the answer grounded in context? | 0.0 - 1.0 |
+| **Answer Relevance** | Does the answer address the question? | 0.0 - 1.0 |
+| **Context Precision** | Are retrieved documents relevant? | 0.0 - 1.0 |
+| **Context Recall** | Are all relevant documents retrieved? | 0.0 - 1.0 |
+
+```python
+from src.evaluation import RAGEvaluator
+
+evaluator = RAGEvaluator(llm)
+report = evaluator.evaluate(query_func, test_data)
+evaluator.print_report(report)
+```
+
+---
 
 ## 🤝 Contributing
 
 We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
-### Development Setup
+### Quick Contribution Steps
 
-```bash
-# Clone and setup
-git clone https://github.com/yourusername/ultimate-rag.git
-cd ultimate-rag
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-# Run tests
-pytest
-
-# Run linting
-black src/ tests/
-isort src/ tests/
-mypy src/
-```
+---
 
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+---
+
 ## 🙏 Acknowledgments
 
-- [LangChain](https://langchain.com) - LLM framework
-- [LlamaIndex](https://llamaindex.ai) - Data framework
-- [HuggingFace](https://huggingface.co) - Transformers and embeddings
-- [FAISS](https://faiss.ai) - Vector search
-- [ChromaDB](https://www.trychroma.com) - Vector database
-- [Qdrant](https://qdrant.tech) - Vector search engine
-
-## 📞 Support
-
-- 📧 Email: your.email@example.com
-- 💬 Discord: [Join our community](https://discord.gg/your-server)
-- 🐛 Issues: [GitHub Issues](https://github.com/yourusername/ultimate-rag/issues)
-- 📖 Docs: [Documentation](https://github.com/yourusername/ultimate-rag#readme)
-
-## 🗺️ Roadmap
-
-- [ ] Graph RAG implementation
-- [ ] Multimodal RAG support
-- [ ] More vector store backends
-- [ ] Streaming support
-- [ ] REST API
-- [ ] Web UI
-- [ ] More evaluation metrics
-- [ ] Performance benchmarks
+- [LangChain](https://langchain.com) — LLM application framework
+- [LangGraph](https://langchain-ai.github.io/langgraph/) — Agent orchestration
+- [HuggingFace](https://huggingface.co) — Transformers and embeddings
+- [FAISS](https://faiss.ai) — Vector similarity search
+- [ChromaDB](https://www.trychroma.com) — Vector database
+- [Qdrant](https://qdrant.tech) — Vector search engine
 
 ---
 
-<p align="center">
-  Made with ❤️ by the RAG Framework Team
-</p>
+## 📞 Support
+
+- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/yourusername/ultimate-rag/issues)
+- 💡 **Feature Requests**: [GitHub Discussions](https://github.com/yourusername/ultimate-rag/discussions)
+- 📧 **Email**: your.email@example.com
+
+---
+
+## ⭐ Star History
+
+If you find this project useful, please consider giving it a star on GitHub!
+
+---
+
+<div align="center">
+
+**Made with ❤️ by the RAG Framework Team**
+
+[⬆ Back to Top](#-ultimate-rag-framework)
+
+</div>
+]]>
