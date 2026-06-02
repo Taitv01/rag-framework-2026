@@ -18,7 +18,7 @@ class TestRetrieverManager:
         self.mock_vector_store = Mock()
         self.mock_embeddings = Mock()
 
-        # Sample documents
+        # Sample documents (English)
         self.sample_docs = [
             Document(
                 page_content="Python is a programming language.",
@@ -31,6 +31,22 @@ class TestRetrieverManager:
             Document(
                 page_content="Machine learning is a subset of AI.",
                 metadata={"source": "doc3.txt"}
+            ),
+        ]
+
+        # Sample documents (Vietnamese)
+        self.vietnamese_docs = [
+            Document(
+                page_content="Thạch Sanh là một nhân vật trong truyện cổ tích Việt Nam.",
+                metadata={"source": "truyen_co_tich.txt"}
+            ),
+            Document(
+                page_content="Lý Thông là người lừa đảo, đã cướp công của Thạch Sanh.",
+                metadata={"source": "truyen_co_tich.txt"}
+            ),
+            Document(
+                page_content="Đại bàng là con quái vật hung dữ bị Thạch Sanh giết chết.",
+                metadata={"source": "truyen_co_tich.txt"}
             ),
         ]
 
@@ -167,3 +183,130 @@ class TestRetrieverManager:
         normalized = retriever._normalize_scores(scores)
 
         assert all(s == 1.0 for s in normalized)
+
+
+class TestVietnameseRetriever:
+    """Test Vietnamese-specific retriever functionality."""
+
+    def setup_method(self):
+        """Setup test fixtures."""
+        self.mock_vector_store = Mock()
+        self.mock_embeddings = Mock()
+
+    def test_tokenize_for_bm25_vietnamese(self):
+        """Test Vietnamese tokenization for BM25."""
+        retriever = RetrieverManager(
+            vector_store=self.mock_vector_store,
+            embeddings=self.mock_embeddings,
+        )
+
+        # Test Vietnamese text tokenization
+        tokens = retriever._tokenize_for_bm25("Thạch Sanh đánh đại bàng")
+        assert len(tokens) > 0
+        # Should handle Vietnamese diacritics
+        assert all(isinstance(t, str) for t in tokens)
+
+    def test_tokenize_for_bm25_english(self):
+        """Test English tokenization still works."""
+        retriever = RetrieverManager(
+            vector_store=self.mock_vector_store,
+            embeddings=self.mock_embeddings,
+        )
+
+        tokens = retriever._tokenize_for_bm25("Python is a programming language")
+        assert len(tokens) == 5
+        assert "python" in tokens
+
+    def test_generate_query_variations_vietnamese(self):
+        """Test Vietnamese query variations."""
+        retriever = RetrieverManager(
+            vector_store=self.mock_vector_store,
+            embeddings=self.mock_embeddings,
+        )
+
+        variations = retriever._generate_query_variations(
+            "Thạch Sanh là ai?", num_variations=3
+        )
+
+        assert len(variations) > 1
+        # Should contain the original query
+        assert "Thạch Sanh là ai?" in variations
+
+    def test_generate_query_variations_english(self):
+        """Test English query variations still work."""
+        retriever = RetrieverManager(
+            vector_store=self.mock_vector_store,
+            embeddings=self.mock_embeddings,
+        )
+
+        variations = retriever._generate_query_variations(
+            "What is Python?", num_variations=3
+        )
+
+        assert len(variations) > 1
+        assert "What is Python?" in variations
+
+    def test_default_reranker_model(self):
+        """Test that default reranker model is Vietnamese-aware."""
+        from src.core.retriever import RetrieverConfig
+
+        config = RetrieverConfig()
+        assert "Vietnamese" in config.reranker_model or "vietnamese" in config.reranker_model.lower()
+
+
+class TestVietnameseProcessor:
+    """Test Vietnamese text processor."""
+
+    def test_processor_creation(self):
+        """Test VietnameseProcessor can be created."""
+        from src.core.vietnamese_processor import VietnameseProcessor
+
+        processor = VietnameseProcessor()
+        assert processor is not None
+
+    def test_detect_language_vietnamese(self):
+        """Test Vietnamese language detection."""
+        from src.core.vietnamese_processor import VietnameseProcessor
+
+        processor = VietnameseProcessor()
+        lang = processor.detect_language("Thạch Sanh là ai?")
+        assert lang == "vi"
+
+    def test_detect_language_english(self):
+        """Test English language detection."""
+        from src.core.vietnamese_processor import VietnameseProcessor
+
+        processor = VietnameseProcessor()
+        lang = processor.detect_language("What is Python?")
+        assert lang == "en"
+
+    def test_split_sentences_vietnamese(self):
+        """Test Vietnamese sentence splitting."""
+        from src.core.vietnamese_processor import VietnameseProcessor
+
+        processor = VietnameseProcessor()
+        sentences = processor.split_sentences(
+            "Thạch Sanh đánh đại bàng. Lý Thông lừa đảo. Công chúa được cứu."
+        )
+        assert len(sentences) == 3
+
+    def test_split_sentences_abbreviation(self):
+        """Test Vietnamese abbreviation handling in sentence splitting."""
+        from src.core.vietnamese_processor import VietnameseProcessor
+
+        processor = VietnameseProcessor()
+        sentences = processor.split_sentences(
+            "Hà Nội là thủ đô. TP. Hồ Chí Minh là thành phố lớn."
+        )
+        # "TP." should not be treated as sentence boundary
+        assert len(sentences) == 2
+
+    def test_tokenize_vietnamese(self):
+        """Test Vietnamese word segmentation."""
+        from src.core.vietnamese_processor import VietnameseProcessor
+
+        processor = VietnameseProcessor()
+        tokens = processor.tokenize("Thạch Sanh đánh đại bàng")
+        assert len(tokens) > 0
+        # Should handle Vietnamese compound words
+        assert all(isinstance(t, str) for t in tokens)

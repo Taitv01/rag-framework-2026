@@ -11,6 +11,7 @@ from src.core.embeddings import EmbeddingsManager
 from src.core.vector_store import VectorStoreManager
 from src.core.retriever import RetrieverManager
 from src.core.llm import LLMManager
+from src.core.vietnamese_processor import VietnameseProcessor, get_vietnamese_processor
 
 __all__ = [
     "DocumentLoader",
@@ -19,4 +20,6 @@ __all__ = [
     "VectorStoreManager",
     "RetrieverManager",
     "LLMManager",
+    "VietnameseProcessor",
+    "get_vietnamese_processor",
 ]

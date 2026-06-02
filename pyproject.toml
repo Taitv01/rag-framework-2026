@@ -50,6 +50,10 @@ dependencies = [
     # Re-ranking & Hybrid Search
     "rank-bm25>=0.2.2",
 
+    # Vietnamese NLP
+    "underthesea>=6.8.0",
+    "pyvi>=0.1.1",
+
     # Agentic RAG
     "langgraph>=0.2.0",
 

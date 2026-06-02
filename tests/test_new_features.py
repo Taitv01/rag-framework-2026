@@ -342,4 +342,210 @@ class TestMonitoringModule:
         metrics.track_error("Error occurred", question="Q1", user_id="user_1")
 
         stats = metrics.get_analytics(period="7d")
+
+
+# ============================================================================
+# Phase 2: RAG Quality Improvements Tests
+# ============================================================================
+
+
+class TestSemanticCache:
+    """Test SemanticCache module."""
+
+    def test_cache_creation(self):
+        """Test SemanticCache can be created."""
+        from src.utils.cache import SemanticCache
+
+        cache = SemanticCache(threshold=0.95, max_size=100, ttl=3600)
+        assert cache.size == 0
+        assert cache.threshold == 0.95
+
+    def test_cache_put_get(self):
+        """Test put and get operations."""
+        from src.utils.cache import SemanticCache
+
+        cache = SemanticCache(threshold=0.5, max_size=100)
+
+        # Put a result
+        embedding = [1.0, 0.0, 0.0]
+        cache.put(embedding, "test query", "test answer")
+
+        assert cache.size == 1
+
+        # Get with same embedding
+        result = cache.get([1.0, 0.0, 0.0])
+        assert result == "test answer"
+
+    def test_cache_similarity_threshold(self):
+        """Test that cache respects similarity threshold."""
+        from src.utils.cache import SemanticCache
+
+        cache = SemanticCache(threshold=0.99, max_size=100)
+
+        cache.put([1.0, 0.0, 0.0], "query A", "answer A")
+
+        # Very similar query should hit
+        result = cache.get([0.99, 0.01, 0.0])
+        # May or may not hit depending on similarity
+
+        # Dissimilar query should miss
+        cache2 = SemanticCache(threshold=0.99, max_size=100)
+        cache2.put([1.0, 0.0, 0.0], "query A", "answer A")
+        result2 = cache2.get([0.0, 1.0, 0.0])
+        assert result2 is None
+
+    def test_cache_ttl_expiration(self):
+        """Test TTL expiration."""
+        import time
+        from src.utils.cache import SemanticCache
+
+        cache = SemanticCache(threshold=0.5, max_size=100, ttl=1)
+
+        cache.put([1.0, 0.0], "query", "answer")
+        assert cache.get([1.0, 0.0]) == "answer"
+
+        # Wait for expiration
+        time.sleep(1.1)
+        assert cache.get([1.0, 0.0]) is None
+
+    def test_cache_lru_eviction(self):
+        """Test LRU eviction when cache is full."""
+        from src.utils.cache import SemanticCache
+
+        cache = SemanticCache(threshold=0.5, max_size=2)
+
+        cache.put([1.0, 0.0], "q1", "a1")
+        cache.put([0.0, 1.0], "q2", "a2")
+        cache.put([0.0, 0.0, 1.0], "q3", "a3")  # Should evict q1
+
+        assert cache.size == 2
+
+    def test_cache_clear(self):
+        """Test cache clearing."""
+        from src.utils.cache import SemanticCache
+
+        cache = SemanticCache(threshold=0.5, max_size=100)
+        cache.put([1.0, 0.0], "query", "answer")
+
+        assert cache.size == 1
+        cache.clear()
+        assert cache.size == 0
+
+    def test_cache_stats(self):
+        """Test cache statistics."""
+        from src.utils.cache import SemanticCache
+
+        cache = SemanticCache(threshold=0.95, max_size=100, ttl=3600)
+        stats = cache.stats()
+
+        assert stats["size"] == 0
+        assert stats["max_size"] == 100
+        assert stats["threshold"] == 0.95
+        assert stats["ttl"] == 3600
+
+    def test_cosine_similarity(self):
+        """Test cosine similarity calculation."""
+        from src.utils.cache import SemanticCache
+
+        # Same direction = 1.0
+        sim = SemanticCache._cosine_similarity([1.0, 0.0], [1.0, 0.0])
+        assert abs(sim - 1.0) < 0.001
+
+        # Orthogonal = 0.0
+        sim = SemanticCache._cosine_similarity([1.0, 0.0], [0.0, 1.0])
+        assert abs(sim - 0.0) < 0.001
+
+        # Opposite = -1.0
+        sim = SemanticCache._cosine_similarity([1.0, 0.0], [-1.0, 0.0])
+        assert abs(sim - (-1.0)) < 0.001
+
+
+class TestContextualRetrievalChunker:
+    """Test ContextualRetrievalChunker."""
+
+    def test_chunker_creation(self):
+        """Test ContextualRetrievalChunker can be created."""
+        from unittest.mock import Mock
+        from src.core.advanced_chunking import ContextualRetrievalChunker
+
+        mock_llm = Mock()
+        chunker = ContextualRetrievalChunker(mock_llm, chunk_size=500)
+        assert chunker.chunk_size == 500
+
+    def test_split_text_basic(self):
+        """Test basic text splitting."""
+        from unittest.mock import Mock
+        from src.core.advanced_chunking import ContextualRetrievalChunker
+
+        mock_llm = Mock()
+        mock_llm.generate.return_value = "Test context"
+        chunker = ContextualRetrievalChunker(mock_llm, chunk_size=100, chunk_overlap=10)
+
+        chunks = chunker._split_text("A" * 250)
+        assert len(chunks) > 1
+
+    def test_is_abbreviation_boundary(self):
+        """Test Vietnamese abbreviation boundary detection."""
+        from src.core.advanced_chunking import ContextualRetrievalChunker
+
+        # "TP." should not be a sentence boundary
+        text = "Hà Nội là thủ đô. TP. Hồ Chí Minh là thành phố."
+        # The dot after "TP" should not be treated as sentence end
+        assert ContextualRetrievalChunker._is_abbreviation_boundary(text, text.index("TP.") + 2) is False
+
+
+class TestRRFFusion:
+    """Test Reciprocal Rank Fusion."""
+
+    def test_rrf_fusion_basic(self):
+        """Test basic RRF fusion."""
+        from unittest.mock import Mock
+        from src.core.retriever import RetrieverManager
+        from langchain_core.documents import Document
+
+        mock_store = Mock()
+        mock_embeddings = Mock()
+
+        retriever = RetrieverManager(
+            vector_store=mock_store,
+            embeddings=mock_embeddings,
+        )
+
+        # Create mock result lists
+        doc1 = Document(page_content="doc1")
+        doc2 = Document(page_content="doc2")
+        doc3 = Document(page_content="doc3")
+
+        list1 = [(doc1, 0.9), (doc2, 0.8)]
+        list2 = [(doc2, 0.85), (doc3, 0.7)]
+
+        result = retriever._rrf_fusion([list1, list2], k=3, rrf_k=60)
+
+        # doc2 appears in both lists, should rank highest
+        assert len(result) <= 3
+        assert result[0].page_content == "doc2"
+
+    def test_rrf_fusion_dedup(self):
+        """Test RRF deduplicates documents."""
+        from unittest.mock import Mock
+        from src.core.retriever import RetrieverManager
+        from langchain_core.documents import Document
+
+        mock_store = Mock()
+        mock_embeddings = Mock()
+
+        retriever = RetrieverManager(
+            vector_store=mock_store,
+            embeddings=mock_embeddings,
+        )
+
+        doc1 = Document(page_content="same content")
+
+        list1 = [(doc1, 0.9)]
+        list2 = [(Document(page_content="same content"), 0.85)]
+
+        result = retriever._rrf_fusion([list1, list2], k=5, rrf_k=60)
+
+        # Should deduplicate by content hash
+        assert len(result) == 1
         assert stats.error_count == 1

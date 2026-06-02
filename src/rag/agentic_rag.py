@@ -6,8 +6,8 @@ Agent-based RAG using LangGraph for intelligent retrieval decisions.
 
 Features:
 - LLM decides whether to retrieve
-- Document relevance grading
-- Query rewriting loop
+- Document relevance grading (bilingual)
+- Query rewriting loop (Vietnamese-aware)
 - Multi-step reasoning
 
 Architecture:
@@ -20,9 +20,10 @@ START → generate_query_or_respond → [tool_calls?] → retrieve → grade_doc
 Usage:
     rag = AgenticRAG()
     rag.add_documents(["docs/"])
-    answer = rag.query("What is Python?")
+    answer = rag.query("Thạch Sanh là ai?")
 """
 
+import logging
 from typing import List, Optional, Dict, Any, Union, Literal
 from pathlib import Path
 from dataclasses import dataclass
@@ -31,6 +32,8 @@ from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 
 class GradeDocuments(BaseModel):
@@ -77,7 +80,7 @@ class AgenticRAG:
         llm_model: str = "gpt-4o",
         llm_api_key: Optional[str] = None,
         embedding_provider: str = "huggingface",
-        embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
+        embedding_model: str = "keepitreal/vietnamese-sbert",
         vector_store_provider: str = "faiss",
         chunk_size: int = 500,
         chunk_overlap: int = 50,
@@ -262,39 +265,55 @@ class AgenticRAG:
 
         return END
 
+    def _get_question_from_state(self, state: Dict) -> str:
+        """Extract the original question from state messages.
+
+        Handles conversation history by finding the last HumanMessage
+        before the tool calls.
+        """
+        messages = state["messages"]
+        # Find the last human message (the question)
+        for msg in reversed(messages):
+            if isinstance(msg, HumanMessage):
+                return msg.content
+        # Fallback to first message
+        return messages[0].content
+
     def _grade_documents(self, state: Dict) -> Literal["generate_answer", "rewrite_question"]:
         """Grade document relevance."""
-        from langgraph.graph import MessagesState
-
-        question = state["messages"][0].content
+        question = self._get_question_from_state(state)
         context = state["messages"][-1].content
 
-        prompt = f"""You are a document relevance grader. Determine if the retrieved documents are relevant to the question.
+        prompt = f"""You are a document relevance grader / Bạn là người đánh giá tài liệu.
+Determine if the retrieved documents are relevant to the question.
+Xác định tài liệu có liên quan đến câu hỏi không.
 
-Question: {question}
+Question / Câu hỏi: {question}
 
-Retrieved documents:
+Retrieved documents / Tài liệu:
 {context}
 
-Are these documents relevant to the question? Answer only 'yes' or 'no'."""
+Are these documents relevant? Answer only 'yes' or 'no'.
+Tài liệu có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
 
         response = self.llm.with_structured_output(GradeDocuments).invoke(
             [{"role": "user", "content": prompt}]
         )
 
-        if response.binary_score == "yes":
+        if response.binary_score in ("yes", "có"):
             return "generate_answer"
         else:
             return "rewrite_question"
 
     def _rewrite_question(self, state: Dict) -> Dict:
         """Rewrite question for better retrieval."""
-        messages = state["messages"]
-        question = messages[0].content
+        question = self._get_question_from_state(state)
 
-        prompt = f"""You are a search query optimizer. Transform this question into a better search query.
+        prompt = f"""You are a search query optimizer / Bạn là người tối ưu hóa truy vấn.
+Transform this question into a better search query.
+Chuyển đổi câu hỏi thành truy vấn tốt hơn.
 
-Original question: {question}
+Original question / Câu hỏi gốc: {question}
 
 Return ONLY the optimized search query, nothing else."""
 
@@ -304,20 +323,23 @@ Return ONLY the optimized search query, nothing else."""
 
     def _generate_answer(self, state: Dict) -> Dict:
         """Generate answer from context."""
-        question = state["messages"][0].content
+        question = self._get_question_from_state(state)
         context = state["messages"][-1].content
 
-        prompt = f"""You are a helpful AI assistant. Use the provided context to answer the question.
+        prompt = f"""You are a helpful AI assistant / Bạn là trợ lý AI hữu ích.
+Use the provided context to answer the question.
+Sử dụng ngữ cảnh để trả lời câu hỏi.
 
-Rules:
-1. Answer based ONLY on the provided context
-2. If the context doesn't contain the answer, say so
-3. Be concise and accurate
+Rules / Quy tắc:
+1. Answer based ONLY on the provided context / Chỉ trả lời dựa trên ngữ cảnh
+2. If the context doesn't contain the answer, say so / Nếu không đủ thông tin, nói rõ
+3. Be concise and accurate / Ngắn gọn và chính xác
+4. Answer in the same language as the question / Trả lời bằng ngôn ngữ của câu hỏi
 
-Context:
+Context / Ngữ cảnh:
 {context}
 
-Question: {question}"""
+Question / Câu hỏi: {question}"""
 
         response = self.llm.generate(prompt)
 

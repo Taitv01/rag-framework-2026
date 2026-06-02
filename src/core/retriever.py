@@ -6,27 +6,30 @@ Advanced retrieval strategies for RAG pipelines.
 
 Supported strategies:
 - Similarity search (basic)
-- Hybrid search (vector + BM25)
-- Re-ranking with cross-encoders
+- Hybrid search (vector + BM25) with Vietnamese tokenization
+- Re-ranking with cross-encoders (Vietnamese-aware)
 - Metadata filtering
 
 Usage:
     retriever = RetrieverManager(vector_store, embeddings)
 
     # Basic search
-    results = retriever.search("query", k=5)
+    results = retriever.search("Thạch Sanh là ai?", k=5)
 
     # Hybrid search
-    results = retriever.hybrid_search("query", k=5)
+    results = retriever.hybrid_search("Thạch Sanh đánh đại bàng", k=5)
 
     # With re-ranking
-    results = retriever.search_with_reranking("query", k=5)
+    results = retriever.search_with_reranking("câu chuyện Thạch Sanh", k=5)
 """
 
+import logging
 from typing import List, Optional, Dict, Any, Tuple
 from dataclasses import dataclass, field
 
 from langchain_core.documents import Document
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -37,7 +40,7 @@ class RetrieverConfig:
     score_threshold: Optional[float] = None
     use_hybrid: bool = False
     use_reranking: bool = False
-    reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    reranker_model: str = "AITeamVN/Vietnamese_Reranker"
     bm25_weight: float = 0.3
     vector_weight: float = 0.7
     extra: Dict[str, Any] = field(default_factory=dict)
@@ -56,19 +59,19 @@ class RetrieverManager:
     Example:
         from src.core import VectorStoreManager, EmbeddingsManager, RetrieverManager
 
-        # Setup
+        # Setup (Vietnamese embeddings by default)
         embeddings = EmbeddingsManager(provider="huggingface")
         store = VectorStoreManager(provider="chroma", embeddings=embeddings)
         retriever = RetrieverManager(vector_store=store, embeddings=embeddings)
 
         # Basic search
-        results = retriever.search("What is Python?")
+        results = retriever.search("Thạch Sanh là ai?")
 
         # Hybrid search
-        results = retriever.hybrid_search("What is Python?")
+        results = retriever.hybrid_search("Thạch Sanh đánh đại bàng")
 
         # With re-ranking
-        results = retriever.search_with_reranking("What is Python?")
+        results = retriever.search_with_reranking("câu chuyện Thạch Sanh")
     """
 
     def __init__(
@@ -111,31 +114,69 @@ class RetrieverManager:
         if use_reranking:
             self._init_reranker()
 
+    def _tokenize_for_bm25(self, text: str) -> List[str]:
+        """
+        Tokenize text for BM25 with Vietnamese word segmentation support.
+
+        Vietnamese is monosyllabic but compound words span multiple syllables.
+        Word segmentation significantly improves BM25 quality for Vietnamese.
+        """
+        import re
+
+        text = text.lower().strip()
+
+        # Try Vietnamese word segmentation first
+        try:
+            from underthesea import word_tokenize
+            tokens = word_tokenize(text, format="text")
+            return [t.strip() for t in tokens.split() if t.strip()]
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.debug(f"underthesea tokenization failed, falling back: {e}")
+
+        # Fallback: basic regex
+        return re.findall(r'\w+', text)
+
     def _init_bm25(self, documents: List[Document]):
-        """Initialize BM25 retriever."""
+        """Initialize BM25 retriever with Vietnamese-aware tokenization."""
         try:
             from rank_bm25 import BM25Okapi
-            import re
 
-            # Tokenize documents
+            # Tokenize documents with Vietnamese support
             tokenized_docs = [
-                re.findall(r'\w+', doc.page_content.lower())
+                self._tokenize_for_bm25(doc.page_content)
                 for doc in documents
             ]
 
             self._bm25 = BM25Okapi(tokenized_docs)
             self._bm25_docs = documents
+            logger.info(f"BM25 initialized with {len(documents)} documents")
         except ImportError:
-            print("Warning: rank-bm25 not installed. Hybrid search disabled.")
+            logger.warning("rank-bm25 not installed. Hybrid search disabled.")
 
     def _init_reranker(self):
-        """Initialize cross-encoder re-ranker."""
+        """Initialize cross-encoder re-ranker with Vietnamese model support."""
         try:
             from sentence_transformers import CrossEncoder
 
-            self._reranker = CrossEncoder(self.config.reranker_model)
+            model_name = self.config.reranker_model
+            try:
+                self._reranker = CrossEncoder(model_name)
+                logger.info(f"Reranker initialized: {model_name}")
+            except Exception as e:
+                # Fallback to a multilingual model if Vietnamese reranker unavailable
+                fallback = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+                logger.warning(
+                    f"Failed to load reranker '{model_name}': {e}. "
+                    f"Falling back to '{fallback}'"
+                )
+                try:
+                    self._reranker = CrossEncoder(fallback)
+                except Exception:
+                    logger.error("Failed to load fallback reranker")
         except ImportError:
-            print("Warning: sentence-transformers not installed. Re-ranking disabled.")
+            logger.warning("sentence-transformers not installed. Re-ranking disabled.")
 
     def search(
         self,
@@ -218,11 +259,10 @@ class RetrieverManager:
             print("Warning: BM25 not initialized. Falling back to vector search.")
             return self.vector_store.similarity_search(query, k=k, filter=filter)
 
-        import re
         import numpy as np
 
-        # BM25 search
-        tokenized_query = re.findall(r'\w+', query.lower())
+        # BM25 search with Vietnamese-aware tokenization
+        tokenized_query = self._tokenize_for_bm25(query)
         bm25_scores = self._bm25.get_scores(tokenized_query)
 
         # Get top BM25 results
@@ -245,24 +285,25 @@ class RetrieverManager:
             [score for _, score in vector_results]
         )
 
-        # Combine results
+        # Combine results using content hash for deduplication
+        # (not id() which is memory-address-based and fragile)
         combined_scores = {}
 
         for i, (doc, _) in enumerate(bm25_results):
-            doc_id = id(doc)
-            combined_scores[doc_id] = {
+            doc_key = hash(doc.page_content[:200])
+            combined_scores[doc_key] = {
                 "doc": doc,
                 "score": bm25_weight * bm25_scores_normalized[i],
             }
 
         for i, (doc, _) in enumerate(vector_results):
-            doc_id = id(doc)
-            if doc_id in combined_scores:
-                combined_scores[doc_id]["score"] += (
+            doc_key = hash(doc.page_content[:200])
+            if doc_key in combined_scores:
+                combined_scores[doc_key]["score"] += (
                     vector_weight * vector_scores_normalized[i]
                 )
             else:
-                combined_scores[doc_id] = {
+                combined_scores[doc_key] = {
                     "doc": doc,
                     "score": vector_weight * vector_scores_normalized[i],
                 }
@@ -396,22 +437,263 @@ class RetrieverManager:
         query: str,
         num_variations: int
     ) -> List[str]:
-        """Generate query variations for multi-query search."""
-        # Simple variations (could use LLM for better variations)
+        """Generate query variations for multi-query search.
+
+        Supports both Vietnamese and English queries.
+        """
         variations = [query]
 
-        # Add question variations
-        if not query.endswith("?"):
-            variations.append(f"{query}?")
+        # Detect if query is Vietnamese
+        is_vietnamese = any(
+            c in "àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđ"
+            for c in query.lower()
+        )
 
-        # Add "What is" prefix
-        if not query.lower().startswith(("what", "how", "why", "when", "where")):
-            variations.append(f"What is {query}?")
-
-        # Add "Explain" prefix
-        variations.append(f"Explain {query}")
+        if is_vietnamese:
+            # Vietnamese variations
+            if not query.endswith("?"):
+                variations.append(f"{query}?")
+            if not query.lower().startswith(("là gì", "thế nào", "tại sao", "ở đâu", "khi nào")):
+                variations.append(f"{query} là gì?")
+            variations.append(f"Giải thích về {query}")
+        else:
+            # English variations
+            if not query.endswith("?"):
+                variations.append(f"{query}?")
+            if not query.lower().startswith(("what", "how", "why", "when", "where")):
+                variations.append(f"What is {query}?")
+            variations.append(f"Explain {query}")
 
         return variations[:num_variations + 1]
+
+    def generate_query_variations_llm(
+        self,
+        query: str,
+        num_variations: int = 3,
+        llm=None,
+    ) -> List[str]:
+        """
+        Use LLM to generate query variations for better recall.
+
+        Unlike the template-based _generate_query_variations, this uses
+        an LLM to create semantically diverse phrasings.
+
+        Args:
+            query: Original query
+            num_variations: Number of variations to generate
+            llm: LLMManager instance
+
+        Returns:
+            List of query variations including the original
+        """
+        if llm is None:
+            # Fallback to template-based variations
+            return self._generate_query_variations(query, num_variations)
+
+        try:
+            prompt = f"""Generate {num_variations} alternative search queries for the following question.
+Each query should express the same intent but use different words or phrasing.
+Tạo {num_variations} truy vấn tìm kiếm thay thế cho câu hỏi sau.
+Mỗi truy vấn phải thể hiện cùng ý nghĩa nhưng dùng từ khác nhau.
+
+Original / Gốc: {query}
+
+Return one query per line, nothing else.
+Mỗi dòng một truy vấn, không thêm gì khác."""
+
+            response = llm.generate(prompt)
+            variations = [
+                line.strip() for line in response.strip().split("\n")
+                if line.strip() and line.strip() != query
+            ]
+
+            # Include original query
+            return [query] + variations[:num_variations]
+        except Exception as e:
+            logger.warning(f"LLM query generation failed, using templates: {e}")
+            return self._generate_query_variations(query, num_variations)
+
+    def multi_query_rrf_search(
+        self,
+        query: str,
+        num_queries: int = 3,
+        k: Optional[int] = None,
+        llm=None,
+        rrf_k: int = 60,
+    ) -> List[Document]:
+        """
+        Multi-query search with Reciprocal Rank Fusion (RRF).
+
+        Generates multiple query variations (LLM or template-based),
+        retrieves for each, and fuses results using RRF for superior
+        recall compared to simple deduplication.
+
+        RRF score = sum(1 / (rrf_k + rank_i)) for each result list.
+
+        Args:
+            query: Original query
+            num_queries: Number of query variations
+            k: Number of results per query
+            llm: LLMManager for generating variations (optional)
+            rrf_k: RRF constant (default 60, standard value)
+
+        Returns:
+            List of Document objects ranked by RRF score
+        """
+        k = k or self.config.k
+
+        # Generate query variations
+        if llm:
+            queries = self.generate_query_variations_llm(query, num_queries, llm)
+        else:
+            queries = self._generate_query_variations(query, num_queries)
+
+        # Retrieve for each query
+        result_lists = []
+        for q in queries:
+            results = self.vector_store.similarity_search_with_score(q, k=k)
+            result_lists.append(results)
+
+        # RRF fusion
+        return self._rrf_fusion(result_lists, k=k, rrf_k=rrf_k)
+
+    def _rrf_fusion(
+        self,
+        result_lists: List[List[Tuple[Document, float]]],
+        k: int = 5,
+        rrf_k: int = 60,
+    ) -> List[Document]:
+        """
+        Reciprocal Rank Fusion across multiple result lists.
+
+        Combines results from multiple retrieval runs using RRF scoring:
+        score(d) = sum(1 / (k + rank_i)) for each list where d appears.
+
+        Args:
+            result_lists: List of (Document, score) lists from different queries
+            k: Number of final results
+            rrf_k: RRF constant (higher = less weight on rank position)
+
+        Returns:
+            List of Document objects ranked by RRF score
+        """
+        # Track RRF scores per document (by content hash)
+        rrf_scores: Dict[int, float] = {}
+        doc_map: Dict[int, Document] = {}
+
+        for result_list in result_lists:
+            for rank, (doc, _score) in enumerate(result_list):
+                doc_key = hash(doc.page_content[:200])
+                rrf_score = 1.0 / (rrf_k + rank + 1)
+
+                if doc_key in rrf_scores:
+                    rrf_scores[doc_key] += rrf_score
+                else:
+                    rrf_scores[doc_key] = rrf_score
+                    doc_map[doc_key] = doc
+
+        # Sort by RRF score
+        sorted_keys = sorted(rrf_scores.keys(), key=lambda x: rrf_scores[x], reverse=True)
+
+        return [doc_map[key] for key in sorted_keys[:k]]
+
+    def hyde_search(
+        self,
+        query: str,
+        k: Optional[int] = None,
+        llm=None,
+    ) -> List[Document]:
+        """
+        HyDE (Hypothetical Document Embeddings) search.
+
+        Instead of embedding the query directly, generates a hypothetical
+        answer using the LLM, then embeds that answer for retrieval.
+        This bridges the embedding gap between short queries and
+        longer document passages.
+
+        Args:
+            query: Search query
+            k: Number of results
+            llm: LLMManager for generating hypothetical answer
+
+        Returns:
+            List of relevant Document objects
+        """
+        k = k or self.config.k
+
+        if llm is None:
+            logger.warning("HyDE requires an LLM. Falling back to standard search.")
+            return self.search(query, k=k)
+
+        try:
+            # Generate hypothetical answer
+            prompt = f"""Write a short, factual passage that answers the following question.
+Viết một đoạn văn ngắn, chính xác trả lời câu hỏi sau.
+
+Question / Câu hỏi: {query}
+
+Passage / Đoạn văn:"""
+            hypothetical = llm.generate(prompt).strip()
+
+            # Search using the hypothetical answer as the query
+            return self.vector_store.similarity_search(hypothetical, k=k)
+        except Exception as e:
+            logger.warning(f"HyDE generation failed, falling back to standard search: {e}")
+            return self.search(query, k=k)
+
+    def parent_child_search(
+        self,
+        query: str,
+        k: Optional[int] = None,
+        parent_chunks: Optional[List[Document]] = None,
+    ) -> List[Document]:
+        """
+        Parent-Child retrieval pattern.
+
+        Searches using small child chunks (precise matching) but returns
+        the corresponding parent chunks (rich context for generation).
+
+        Requires that child chunks have "parent_id" in their metadata
+        and that parent_chunks are provided or stored.
+
+        Args:
+            query: Search query
+            k: Number of parent chunks to return
+            parent_chunks: List of parent Document objects to retrieve from
+
+        Returns:
+            List of parent Document objects
+        """
+        k = k or self.config.k
+
+        # Search with child chunks (retrieve more to ensure parent coverage)
+        child_results = self.vector_store.similarity_search(query, k=k * 3)
+
+        if not child_results:
+            return []
+
+        # If parent_chunks provided, look up parents
+        if parent_chunks:
+            parent_map = {
+                p.metadata.get("parent_id", ""): p for p in parent_chunks
+            }
+
+            seen_parents = set()
+            parent_results = []
+
+            for child in child_results:
+                parent_id = child.metadata.get("parent_id", "")
+                if parent_id and parent_id not in seen_parents:
+                    parent = parent_map.get(parent_id)
+                    if parent:
+                        parent_results.append(parent)
+                        seen_parents.add(parent_id)
+
+            return parent_results[:k]
+
+        # If no parent_chunks provided, return child results as-is
+        # (caller can look up parents by parent_id in metadata)
+        return child_results[:k]
 
     def _normalize_scores(self, scores: List[float]) -> List[float]:
         """Normalize scores to 0-1 range."""

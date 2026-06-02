@@ -247,10 +247,10 @@ class GraphRAG:
         llm_model: str = "gpt-4o-mini",
         llm_api_key: Optional[str] = None,
         embedding_provider: str = "huggingface",
-        embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
+        embedding_model: str = "keepitreal/vietnamese-sbert",
         vector_store_provider: str = "faiss",
-        chunk_size: int = 1000,
-        chunk_overlap: int = 100,
+        chunk_size: int = 500,
+        chunk_overlap: int = 50,
         retrieval_k: int = 5,
     ):
         """
@@ -375,15 +375,19 @@ class GraphRAG:
 
     def _extract_knowledge(self, chunks: List[Document]) -> None:
         """Extract entities and relationships from chunks."""
-        for chunk in chunks:
-            try:
-                # Extract entities and relationships using LLM
-                prompt = f"""Extract entities and relationships from the following text.
+        import logging
+        logger = logging.getLogger(__name__)
 
-Text:
+        for i, chunk in enumerate(chunks):
+            try:
+                # Extract entities and relationships using LLM (bilingual prompt)
+                prompt = f"""Extract entities and relationships from the following text.
+Trích xuất các thực thể và mối quan hệ từ văn bản sau.
+
+Text / Văn bản:
 {chunk.page_content[:2000]}
 
-Return a JSON object with:
+Return a JSON object with / Trả về đối tượng JSON với:
 - "entities": list of {{"name": "...", "type": "...", "description": "..."}}
 - "relationships": list of {{"source": "...", "target": "...", "type": "...", "description": "..."}}
 
@@ -419,13 +423,13 @@ Return ONLY valid JSON, nothing else."""
                             description=r.get("description", ""),
                         ))
 
-                except (json.JSONDecodeError, KeyError):
-                    # Skip if parsing fails
-                    pass
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Failed to parse entity extraction JSON for chunk {i}: {e}")
+                except KeyError as e:
+                    logger.warning(f"Missing expected key in entity extraction for chunk {i}: {e}")
 
-            except Exception:
-                # Skip if extraction fails
-                pass
+            except Exception as e:
+                logger.error(f"Entity extraction failed for chunk {i}: {e}")
 
     def query(
         self,
@@ -466,34 +470,47 @@ Return ONLY valid JSON, nothing else."""
 
         context = "\n\n".join(context_parts)
 
-        # Generate answer
-        prompt = f"""You are a helpful AI assistant. Use the provided context to answer the question.
+        # Generate answer (bilingual)
+        prompt = f"""You are a helpful AI assistant / Bạn là trợ lý AI hữu ích.
+Use the provided context to answer the question.
+Sử dụng ngữ cảnh để trả lời câu hỏi.
 
-The context includes both knowledge graph information and document excerpts.
+The context includes knowledge graph and document excerpts.
+Ngữ cảnh bao gồm đồ thị tri thức và trích đoạn tài liệu.
 
-Rules:
-1. Answer based on the provided context
-2. Use knowledge graph information for relationships and connections
-3. Be concise and accurate
+Rules / Quy tắc:
+1. Answer based on the provided context / Trả lời dựa trên ngữ cảnh
+2. Use knowledge graph for relationships / Sử dụng đồ thị tri thức cho mối quan hệ
+3. Be concise and accurate / Ngắn gọn và chính xác
+4. Answer in the same language as the question / Trả lời bằng ngôn ngữ của câu hỏi
 
-Context:
+Context / Ngữ cảnh:
 {context}
 
-Question: {question}"""
+Question / Câu hỏi: {question}"""
 
         return self.llm.generate(prompt, **kwargs)
 
     def _graph_retrieval(self, question: str) -> str:
         """Retrieve relevant information from knowledge graph."""
-        # Extract entity names from question
+        # Extract entity names from question (bilingual)
         prompt = f"""Extract the main entity names mentioned in this question.
+Trích xuất tên các thực thể chính trong câu hỏi này.
 
-Question: {question}
+Question / Câu hỏi: {question}
 
-Return entity names as a comma-separated list. Return ONLY the list, nothing else."""
+Return entity names as a comma-separated list. Return ONLY the list, nothing else.
+Trả về tên thực thể dưới dạng danh sách cách nhau bằng dấu phẩy."""
 
         response = self.llm.generate(prompt)
-        entity_names = [name.strip() for name in response.split(",")]
+
+        # Clean response: remove common prefixes like "The main entities are:"
+        response = response.strip()
+        for prefix in ["The main entities are:", "Entities:", "Entities are:", "Main entities:"]:
+            if response.lower().startswith(prefix.lower()):
+                response = response[len(prefix):].strip()
+
+        entity_names = [name.strip() for name in response.split(",") if name.strip()]
 
         # Get graph information
         graph_info = []

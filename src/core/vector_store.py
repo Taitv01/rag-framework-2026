@@ -202,9 +202,10 @@ class VectorStoreManager:
         else:
             self._store.add_documents(documents)
 
-        # Generate IDs if not provided
+        # Generate unique IDs if not provided
         if ids is None:
-            ids = [str(i) for i in range(len(documents))]
+            import uuid
+            ids = [str(uuid.uuid4()) for _ in range(len(documents))]
 
         return ids
 
@@ -272,7 +273,11 @@ class VectorStoreManager:
             filter: Metadata filter for deletion
         """
         if self.config.provider == "faiss":
-            raise NotImplementedError("FAISS does not support deletion")
+            raise NotImplementedError(
+                "FAISS does not support deletion. "
+                "Workaround: rebuild the index without the documents you want to remove. "
+                "Or use ChromaDB/Qdrant for full CRUD support."
+            )
 
         if ids:
             self.store.delete(ids)

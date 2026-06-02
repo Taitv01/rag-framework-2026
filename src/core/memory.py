@@ -169,11 +169,13 @@ class ConversationMemory:
 
         prompt = f"""Summarize the following conversation in a concise manner.
 Preserve key information, decisions, and context.
+Tóm tắt cuộc trò chuyện sau một cách ngắn gọn.
+Giữ lại thông tin quan trọng, quyết định và ngữ cảnh.
 
-Conversation:
+Conversation / Cuộc trò chuyện:
 {history}
 
-Summary:"""
+Summary / Tóm tắt:"""
 
         self.summary = self.llm.generate(prompt)
         return self.summary
@@ -202,11 +204,12 @@ Summary:"""
         """Summarize old messages."""
         history = "\n".join([f"{m.role}: {m.content}" for m in old_messages])
 
-        prompt = f"""Summarize this conversation history briefly:
+        prompt = f"""Summarize this conversation history briefly.
+Tóm tắt lịch sử cuộc trò chuyện này.
 
 {history}
 
-Summary:"""
+Summary / Tóm tắt:"""
 
         new_summary = self.llm.generate(prompt)
 

@@ -10,7 +10,7 @@ Supported providers:
 - Cohere
 
 Usage:
-    # Local embeddings (no API key needed)
+    # Vietnamese embeddings (default, no API key needed)
     embeddings = EmbeddingsManager(provider="huggingface")
 
     # OpenAI embeddings
@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 class EmbeddingConfig:
     """Configuration for embedding models."""
     provider: str = "huggingface"
-    model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
+    model_name: str = "keepitreal/vietnamese-sbert"
     api_key: Optional[str] = None
     batch_size: int = 32
     device: Optional[str] = None
@@ -46,10 +46,10 @@ class EmbeddingsManager:
     Provides a unified interface for different embedding models.
 
     Example:
-        # Local HuggingFace embeddings (free, no API key)
+        # Vietnamese embeddings (default, free, no API key)
         embeddings = EmbeddingsManager(
             provider="huggingface",
-            model_name="sentence-transformers/all-MiniLM-L6-v2"
+            model_name="keepitreal/vietnamese-sbert"
         )
 
         # OpenAI embeddings
@@ -68,31 +68,64 @@ class EmbeddingsManager:
     # Popular embedding models
     POPULAR_MODELS = {
         "huggingface": {
+            # Vietnamese-specific models (recommended for Vietnamese content)
+            "keepitreal/vietnamese-sbert": {
+                "dimensions": 768,
+                "description": "Vietnamese SBERT - best for Vietnamese text (default)",
+            },
+            "bkai-foundation-models/vietnamese-bi-encoder": {
+                "dimensions": 768,
+                "description": "PhoBERT-based Vietnamese encoder, high quality",
+            },
+            "AITeamVN/Vietnamese_Embedding": {
+                "dimensions": 1024,
+                "description": "bge-m3-based, best Vietnamese retrieval benchmarks",
+            },
+            # Multilingual models
+            "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2": {
+                "dimensions": 384,
+                "description": "Multilingual, supports 50+ languages including Vietnamese",
+            },
+            "BAAI/bge-m3": {
+                "dimensions": 1024,
+                "description": "Best multilingual, dense+sparse+ColBERT hybrid",
+            },
+            "intfloat/multilingual-e5-large": {
+                "dimensions": 1024,
+                "description": "Strong multilingual, MIT license",
+            },
+            # English models (for English-only content)
             "all-MiniLM-L6-v2": {
                 "dimensions": 384,
-                "description": "Fast, good quality, 384 dimensions",
+                "description": "Fast English model, 384 dimensions",
             },
             "all-mpnet-base-v2": {
                 "dimensions": 768,
-                "description": "Higher quality, 768 dimensions",
-            },
-            "BAAI/bge-small-en-v1.5": {
-                "dimensions": 384,
-                "description": "Best small model, 384 dimensions",
+                "description": "Higher quality English, 768 dimensions",
             },
             "BAAI/bge-base-en-v1.5": {
                 "dimensions": 768,
-                "description": "Best base model, 768 dimensions",
+                "description": "Best English base model, 768 dimensions",
             },
         },
         "openai": {
             "text-embedding-3-small": {
                 "dimensions": 1536,
-                "description": "Fast, cost-effective",
+                "description": "Fast, cost-effective, supports Vietnamese",
             },
             "text-embedding-3-large": {
                 "dimensions": 3072,
-                "description": "Highest quality",
+                "description": "Highest quality, supports Vietnamese",
+            },
+        },
+        "cohere": {
+            "embed-multilingual-v3.0": {
+                "dimensions": 1024,
+                "description": "Multilingual, 100+ languages including Vietnamese",
+            },
+            "embed-english-v3.0": {
+                "dimensions": 1024,
+                "description": "English-only",
             },
         },
     }
@@ -131,11 +164,11 @@ class EmbeddingsManager:
     def _get_default_model(self, provider: str) -> str:
         """Get default model for provider."""
         defaults = {
-            "huggingface": "sentence-transformers/all-MiniLM-L6-v2",
+            "huggingface": "keepitreal/vietnamese-sbert",
             "openai": "text-embedding-3-small",
-            "cohere": "embed-english-v3.0",
+            "cohere": "embed-multilingual-v3.0",
         }
-        return defaults.get(provider, "sentence-transformers/all-MiniLM-L6-v2")
+        return defaults.get(provider, "keepitreal/vietnamese-sbert")
 
     @property
     def embeddings(self):
@@ -284,11 +317,14 @@ class EmbeddingsManager:
 
 # Convenience functions for quick embedding creation
 def get_local_embeddings(
-    model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
+    model_name: str = "keepitreal/vietnamese-sbert",
     device: Optional[str] = None
 ) -> EmbeddingsManager:
     """
     Get local HuggingFace embeddings (no API key needed).
+
+    Default model is Vietnamese-optimized. For English-only content,
+    use model_name="all-MiniLM-L6-v2" for faster performance.
 
     Args:
         model_name: HuggingFace model name

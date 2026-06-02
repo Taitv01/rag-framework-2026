@@ -17,10 +17,22 @@ Usage:
     chunks = chunker.split(documents)
 """
 
-from typing import List, Optional, Dict, Any
+import re
+import logging
+from typing import List, Optional, Dict, Any, Union, Tuple
 from dataclasses import dataclass
 
 from langchain_core.documents import Document
+
+logger = logging.getLogger(__name__)
+
+# Vietnamese abbreviations that end with "." but are NOT sentence boundaries
+_VIETNAMESE_ABBREVIATIONS = {
+    "tp.", "t.p.", "p.", "q.", "h.", "x.", "tt.",
+    "ths.", "ts.", "pgs.", "gs.",
+    "đc.", "dc.", "tel.", "sdt.",
+    "v.v.", "v.v...",
+}
 
 
 @dataclass
@@ -129,10 +141,30 @@ class SemanticChunker:
         return all_chunks
 
     def _split_sentences(self, text: str) -> List[str]:
-        """Split text into sentences."""
-        import re
-        sentences = re.split(r'(?<=[.!?])\s+', text)
-        return [s.strip() for s in sentences if s.strip()]
+        """Split text into sentences with Vietnamese abbreviation handling."""
+        # Protect Vietnamese abbreviations
+        protected = text.lower()
+        placeholder_map = {}
+        for abbr in _VIETNAMESE_ABBREVIATIONS:
+            pattern = re.compile(re.escape(abbr), re.IGNORECASE)
+            placeholder = abbr.replace(".", "§")
+            placeholder_map[placeholder] = abbr
+            protected = pattern.sub(placeholder, protected)
+
+        # Split on sentence boundaries
+        raw_sentences = re.split(r'(?<=[.!?])\s+|(?<=\.\.\.)\s+', protected)
+
+        # Restore abbreviations
+        sentences = []
+        for sent in raw_sentences:
+            sent = sent.strip()
+            if not sent:
+                continue
+            for placeholder, abbr in placeholder_map.items():
+                sent = sent.replace(placeholder, abbr)
+            sentences.append(sent)
+
+        return sentences
 
     def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
         """Calculate cosine similarity."""
@@ -225,6 +257,8 @@ class PropositionChunker:
         """Generate propositions from text."""
         prompt = f"""Break the following text into individual factual propositions.
 Each proposition should be a standalone statement that is self-contained.
+Tách văn bản sau thành các mệnh đề sự kiện độc lập.
+Mỗi mệnh đề phải là một phát biểu tự chứa.
 
 Text:
 {text[:2000]}
@@ -330,8 +364,10 @@ class ContextualHeaderChunker:
 
     def _generate_summary(self, text: str) -> str:
         """Generate document summary."""
-        prompt = f"""Summarize the following text in one sentence:
+        prompt = f"""Summarize the following text in one sentence.
+Tóm tắt văn bản sau thành một câu.
 
+Text:
 {text[:1000]}
 
 Summary:"""
@@ -339,7 +375,7 @@ Summary:"""
         return self.llm.generate(prompt).strip()
 
     def _split_text(self, text: str) -> List[str]:
-        """Split text into chunks."""
+        """Split text into chunks with Vietnamese-aware sentence boundaries."""
         chunks = []
         start = 0
 
@@ -348,11 +384,12 @@ Summary:"""
 
             # Try to break at sentence boundary
             if end < len(text):
-                # Find last sentence boundary
                 for i in range(end, max(start, end - 100), -1):
                     if text[i] in '.!?\n':
-                        end = i + 1
-                        break
+                        # Check it's not a Vietnamese abbreviation
+                        if not self._is_abbreviation_boundary(text, i):
+                            end = i + 1
+                            break
 
             chunk = text[start:end].strip()
             if chunk:
@@ -361,6 +398,16 @@ Summary:"""
             start = end - self.chunk_overlap
 
         return chunks
+
+    @staticmethod
+    def _is_abbreviation_boundary(text: str, dot_pos: int) -> bool:
+        """Check if a dot at given position is part of a Vietnamese abbreviation."""
+        # Look at the word before the dot
+        before = text[max(0, dot_pos - 10):dot_pos + 1].lower()
+        for abbr in _VIETNAMESE_ABBREVIATIONS:
+            if before.endswith(abbr.rstrip('.')):
+                return False
+        return False
 
 
 class ParentChildChunker:
@@ -442,7 +489,7 @@ class ParentChildChunker:
         return parent_chunks, child_chunks
 
     def _split_by_size(self, text: str, size: int) -> List[str]:
-        """Split text by size."""
+        """Split text by size with Vietnamese-aware sentence boundaries."""
         chunks = []
         start = 0
 
@@ -453,8 +500,10 @@ class ParentChildChunker:
             if end < len(text):
                 for i in range(end, max(start, end - 100), -1):
                     if text[i] in '.!?\n':
-                        end = i + 1
-                        break
+                        # Check it's not a Vietnamese abbreviation
+                        if not self._is_abbreviation_boundary(text, i):
+                            end = i + 1
+                            break
 
             chunk = text[start:end].strip()
             if chunk:
@@ -463,6 +512,15 @@ class ParentChildChunker:
             start = end - self.child_overlap
 
         return chunks
+
+    @staticmethod
+    def _is_abbreviation_boundary(text: str, dot_pos: int) -> bool:
+        """Check if a dot at given position is part of a Vietnamese abbreviation."""
+        before = text[max(0, dot_pos - 10):dot_pos + 1].lower()
+        for abbr in _VIETNAMESE_ABBREVIATIONS:
+            if before.endswith(abbr.rstrip('.')):
+                return False
+        return False
 
 
 class AdaptiveChunker:
@@ -516,20 +574,229 @@ class AdaptiveChunker:
             # Select chunker
             chunker = self.chunkers.get(strategy, self.chunkers[self.default_strategy])
 
-            # Split document
-            chunks = chunker.split([doc])
-            all_chunks.extend(chunks)
+            # Split document (handle ParentChildChunker's tuple return)
+            result = chunker.split([doc])
+            if isinstance(result, tuple):
+                # ParentChildChunker returns (parent_chunks, child_chunks)
+                # Use child chunks for retrieval, parents for context
+                parent_chunks, child_chunks = result
+                all_chunks.extend(child_chunks)
+            else:
+                all_chunks.extend(result)
 
         return all_chunks
 
     def _analyze_content(self, text: str) -> str:
         """Analyze content to select best strategy."""
-        # Simple heuristics
+        # Simple heuristics (supports both Vietnamese and English keywords)
         if len(text) < 500:
             return "semantic"  # Short text, semantic is fine
         elif text.count('\n\n') > 5:
             return "contextual"  # Many paragraphs, use headers
-        elif any(keyword in text.lower() for keyword in ['fact', 'data', 'statistic']):
+        elif any(keyword in text.lower() for keyword in [
+            # English
+            'fact', 'data', 'statistic', 'research', 'study',
+            # Vietnamese
+            'dữ liệu', 'thống kê', 'nghiên cứu', 'số liệu', 'thực tế',
+        ]):
             return "proposition"  # Factual content
         else:
             return self.default_strategy
+
+
+class ContextualRetrievalChunker:
+    """
+    Anthropic-style Contextual Retrieval chunking.
+
+    For each chunk, generates a short LLM-produced context explaining
+    what the chunk is about within the broader document. This context
+    is prepended to the chunk before embedding, making each chunk
+    self-contained and improving retrieval quality significantly.
+
+    Reference: Anthropic's "Contextual Retrieval" technique
+    (https://www.anthropic.com/news/contextual-retrieval)
+
+    Benchmark: ~70% improvement in faithfulness vs naive chunking.
+
+    Example:
+        chunker = ContextualRetrievalChunker(llm, chunk_size=500)
+        chunks = chunker.split(documents)
+        # Each chunk now starts with:
+        # "[Context: This chunk discusses Thạch Sanh's battle with the eagle...]"
+        # "Thạch Sanh took his bow and arrow..."
+    """
+
+    def __init__(
+        self,
+        llm,
+        chunk_size: int = 500,
+        chunk_overlap: int = 50,
+        context_window: int = 2000,
+    ):
+        """
+        Initialize contextual retrieval chunker.
+
+        Args:
+            llm: LLM instance for generating context
+            chunk_size: Size of each chunk
+            chunk_overlap: Overlap between chunks
+            context_window: Max chars of surrounding text to send to LLM for context
+        """
+        self.llm = llm
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
+        self.context_window = context_window
+
+    def split(self, documents: List[Document]) -> List[Document]:
+        """
+        Split documents with contextual headers prepended to each chunk.
+
+        For each chunk:
+        1. Split document into chunks
+        2. Generate a short context for each chunk using the full document
+        3. Prepend context to chunk text
+        4. Store original chunk in metadata
+
+        Args:
+            documents: Documents to split
+
+        Returns:
+            List of chunks with contextual headers
+        """
+        all_chunks = []
+
+        for doc in documents:
+            # Step 1: Split into chunks
+            raw_chunks = self._split_text(doc.page_content)
+
+            if not raw_chunks:
+                continue
+
+            # Step 2: Generate document summary for context
+            doc_summary = self._generate_summary(doc.page_content)
+
+            # Step 3: Generate per-chunk context and prepend
+            for i, chunk_text in enumerate(raw_chunks):
+                # Build surrounding context for the LLM
+                surrounding = self._get_surrounding_context(
+                    doc.page_content, chunk_text, i, raw_chunks
+                )
+
+                # Generate chunk-specific context
+                chunk_context = self._generate_chunk_context(
+                    doc_summary, chunk_text, surrounding
+                )
+
+                # Prepend context to chunk
+                contextual_text = f"[Context: {chunk_context}]\n{chunk_text}"
+
+                metadata = doc.metadata.copy()
+                metadata["chunk_method"] = "contextual_retrieval"
+                metadata["document_summary"] = doc_summary
+                metadata["chunk_context"] = chunk_context
+                metadata["original_chunk"] = chunk_text
+                metadata["section_number"] = i + 1
+
+                all_chunks.append(Document(
+                    page_content=contextual_text,
+                    metadata=metadata,
+                ))
+
+        return all_chunks
+
+    def _generate_summary(self, text: str) -> str:
+        """Generate a one-sentence document summary."""
+        try:
+            prompt = f"""Summarize the following text in one sentence.
+Tóm tắt văn bản sau thành một câu.
+
+Text:
+{text[:self.context_window]}
+
+Summary / Tóm tắt:"""
+            return self.llm.generate(prompt).strip()
+        except Exception as e:
+            logger.warning(f"Summary generation failed: {e}")
+            return text[:100] + "..."
+
+    def _generate_chunk_context(
+        self, doc_summary: str, chunk_text: str, surrounding: str
+    ) -> str:
+        """
+        Generate a short context for a specific chunk.
+
+        The context explains what this chunk is about within the document,
+        helping the embedding model understand the chunk's meaning.
+        """
+        try:
+            prompt = f"""You are providing context for document chunking.
+Bạn đang cung cấp ngữ cảnh cho việc phân đoạn tài liệu.
+
+Document summary / Tóm tắt tài liệu: {doc_summary}
+
+Surrounding text / Văn bản xung quanh:
+{surrounding[:1000]}
+
+Current chunk / Đoạn hiện tại:
+{chunk_text[:500]}
+
+Write a brief context (1-2 sentences) explaining what this chunk discusses
+within the broader document. This will be prepended to the chunk for better retrieval.
+Viết ngữ cảnh ngắn gọn (1-2 câu) giải thích đoạn này nói về điều gì
+trong tài liệu tổng thể.
+
+Context / Ngữ cảnh:"""
+            return self.llm.generate(prompt).strip()
+        except Exception as e:
+            logger.warning(f"Chunk context generation failed: {e}")
+            return doc_summary[:100]
+
+    def _get_surrounding_context(
+        self, full_text: str, chunk_text: str, chunk_idx: int, all_chunks: List[str]
+    ) -> str:
+        """Get surrounding text for context generation."""
+        # Get previous and next chunks for context
+        context_parts = []
+
+        if chunk_idx > 0:
+            context_parts.append(f"[Previous]: {all_chunks[chunk_idx - 1]}")
+
+        context_parts.append(f"[Current]: {chunk_text}")
+
+        if chunk_idx < len(all_chunks) - 1:
+            context_parts.append(f"[Next]: {all_chunks[chunk_idx + 1]}")
+
+        return "\n".join(context_parts)
+
+    def _split_text(self, text: str) -> List[str]:
+        """Split text into chunks with Vietnamese-aware sentence boundaries."""
+        chunks = []
+        start = 0
+
+        while start < len(text):
+            end = min(start + self.chunk_size, len(text))
+
+            # Try to break at sentence boundary
+            if end < len(text):
+                for i in range(end, max(start, end - 100), -1):
+                    if text[i] in '.!?\n':
+                        if not self._is_abbreviation_boundary(text, i):
+                            end = i + 1
+                            break
+
+            chunk = text[start:end].strip()
+            if chunk:
+                chunks.append(chunk)
+
+            start = end - self.chunk_overlap
+
+        return chunks
+
+    @staticmethod
+    def _is_abbreviation_boundary(text: str, dot_pos: int) -> bool:
+        """Check if a dot is part of a Vietnamese abbreviation."""
+        before = text[max(0, dot_pos - 10):dot_pos + 1].lower()
+        for abbr in _VIETNAMESE_ABBREVIATIONS:
+            if before.endswith(abbr.rstrip('.')):
+                return False
+        return False

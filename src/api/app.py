@@ -18,7 +18,9 @@ Usage:
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 import io
+import logging
 import sys
+import shutil
 
 # Fix encoding for Windows
 if sys.platform == "win32":
@@ -31,6 +33,8 @@ from pydantic import BaseModel, Field
 
 from src.rag import NaiveRAG, AdvancedRAG
 from src.utils.config import Config
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -160,17 +164,21 @@ def create_app(
         )
 
     @app.post("/query", response_model=QueryResponse, tags=["RAG"])
-    async def query_rag(request: QueryRequest):
+    def query_rag(request: QueryRequest):
         """
         Query the RAG system.
 
         Send a question and receive an answer with sources.
+        Note: Uses sync def (not async) to avoid blocking the event loop.
+        FastAPI runs sync endpoints in a thread pool automatically.
         """
         try:
             if app.state.rag_type == "advanced":
                 result = app.state.rag.query_detailed(
                     question=request.question,
                     k=request.k,
+                    transform_query=request.transform_query,
+                    grade_documents=request.grade_documents,
                 )
                 return QueryResponse(
                     answer=result["answer"],
@@ -187,14 +195,16 @@ def create_app(
                     sources=result["sources"],
                 )
         except Exception as e:
+            logger.error(f"Query failed: {e}")
             raise HTTPException(status_code=500, detail=str(e))
 
     @app.post("/documents", response_model=DocumentResponse, tags=["Documents"])
-    async def add_documents(request: DocumentRequest):
+    def add_documents(request: DocumentRequest):
         """
         Add text documents to the knowledge base.
 
         Send a list of texts to be indexed.
+        Note: Uses sync def to avoid blocking the event loop.
         """
         try:
             num_chunks = app.state.rag.add_texts(
@@ -207,6 +217,7 @@ def create_app(
                 count=num_chunks,
             )
         except Exception as e:
+            logger.error(f"Add documents failed: {e}")
             raise HTTPException(status_code=500, detail=str(e))
 
     @app.get("/documents", tags=["Documents"])
@@ -228,25 +239,23 @@ def create_app(
 
         Upload files (PDF, TXT, MD, etc.) to be indexed.
         """
+        temp_dir = Path("temp_uploads")
+        file_paths = []
         try:
             # Save uploaded files temporarily
-            temp_dir = Path("temp_uploads")
             temp_dir.mkdir(exist_ok=True)
 
-            file_paths = []
             for file in files:
                 file_path = temp_dir / file.filename
                 content = await file.read()
                 file_path.write_bytes(content)
                 file_paths.append(str(file_path))
 
-            # Add documents
-            num_chunks = app.state.rag.add_documents(file_paths)
-
-            # Clean up temp files
-            for file_path in file_paths:
-                Path(file_path).unlink()
-            temp_dir.rmdir()
+            # Add documents (run in thread pool to avoid blocking)
+            import asyncio
+            num_chunks = await asyncio.to_thread(
+                app.state.rag.add_documents, file_paths
+            )
 
             return DocumentResponse(
                 status="success",
@@ -254,10 +263,23 @@ def create_app(
                 count=num_chunks,
             )
         except Exception as e:
+            logger.error(f"File ingestion failed: {e}")
             raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            # Always clean up temp files
+            for file_path in file_paths:
+                try:
+                    Path(file_path).unlink(missing_ok=True)
+                except Exception:
+                    pass
+            try:
+                if temp_dir.exists():
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+            except Exception:
+                pass
 
     @app.post("/search", tags=["RAG"])
-    async def search_documents(
+    def search_documents(
         query: str = Query(..., description="Search query"),
         k: int = Query(default=5, description="Number of results"),
     ):
@@ -265,6 +287,7 @@ def create_app(
         Search for relevant documents without generating an answer.
 
         Returns list of relevant documents.
+        Note: Uses sync def to avoid blocking the event loop.
         """
         try:
             docs = app.state.rag.retrieve(query, k=k)
@@ -278,6 +301,7 @@ def create_app(
 
             return {"results": results, "count": len(results)}
         except Exception as e:
+            logger.error(f"Search failed: {e}")
             raise HTTPException(status_code=500, detail=str(e))
 
     return app
