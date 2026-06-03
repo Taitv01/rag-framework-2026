@@ -60,3 +60,10 @@ python-multipart>=0.0.9
 
 # Monitoring & Auth
 pyjwt>=2.8.0
+
+# Web Search (optional, for fallback)
+duckduckgo-search>=7.0.0
+tavily-python>=0.5.0
+
+# Neo4j (optional, for persistent graph storage)
+neo4j>=5.20.0

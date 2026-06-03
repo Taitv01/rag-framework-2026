@@ -99,6 +99,13 @@ class AdvancedRAG:
         use_hyde: bool = False,
         use_multi_query_rrf: bool = False,
         num_query_variations: int = 3,
+        # Phase 3 options
+        use_web_search: bool = False,
+        web_search_provider: str = "duckduckgo",
+        web_search_api_key: Optional[str] = None,
+        use_hallucination_check: bool = False,
+        hallucination_threshold: float = 0.8,
+        use_metadata_enhancement: bool = False,
     ):
         """
         Initialize Advanced RAG.
@@ -123,6 +130,12 @@ class AdvancedRAG:
             use_hyde: Use HyDE (Hypothetical Document Embeddings) for retrieval
             use_multi_query_rrf: Use multi-query with RRF fusion
             num_query_variations: Number of query variations for multi-query
+            use_web_search: Enable web search fallback when retrieval quality is poor
+            web_search_provider: Web search provider ("duckduckgo" or "tavily")
+            web_search_api_key: API key for web search provider (if needed)
+            use_hallucination_check: Enable hallucination verification after generation
+            hallucination_threshold: Minimum grounded score to accept answer (0-1)
+            use_metadata_enhancement: Enable LLM-based metadata extraction for chunks
         """
         # Initialize components
         self.document_loader = DocumentLoader()
@@ -176,6 +189,35 @@ class AdvancedRAG:
                 chunk_overlap=chunk_overlap,
             )
             logger.info("Contextual retrieval chunking enabled")
+
+        # Phase 3: Web search fallback
+        self._web_searcher = None
+        if use_web_search:
+            from src.core.web_search import create_web_searcher
+            self._web_searcher = create_web_searcher(
+                provider=web_search_provider,
+                llm=self.llm,
+                api_key=web_search_api_key,
+            )
+            logger.info(f"Web search fallback enabled (provider={web_search_provider})")
+
+        # Phase 3: Hallucination grader
+        self._hallucination_grader = None
+        self.use_hallucination_check = use_hallucination_check
+        if use_hallucination_check:
+            from src.agents.hallucination_grader import HallucinationGrader
+            self._hallucination_grader = HallucinationGrader(
+                llm=self.llm,
+                grounded_threshold=hallucination_threshold,
+            )
+            logger.info(f"Hallucination check enabled (threshold={hallucination_threshold})")
+
+        # Phase 3: Metadata enhancer
+        self._metadata_enhancer = None
+        if use_metadata_enhancement:
+            from src.core.metadata_enhancer import MetadataEnhancer
+            self._metadata_enhancer = MetadataEnhancer(llm=self.llm)
+            logger.info("Metadata enhancement enabled")
 
         # Track documents
         self._documents = []
@@ -269,6 +311,11 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
         else:
             chunks = self.text_splitter.split_documents(all_docs)
 
+        # Enhance metadata if enabled
+        if self._metadata_enhancer:
+            logger.info(f"Enhancing metadata for {len(chunks)} chunks")
+            chunks = self._metadata_enhancer.enhance(chunks)
+
         self._chunks.extend(chunks)
 
         # Add to vector store
@@ -343,8 +390,10 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
         2. Transform query (optionally HyDE)
         3. Retrieve (optionally multi-query RRF)
         4. Grade documents
-        5. Generate answer
-        6. Cache result
+        5. Web search fallback (if retrieval quality poor and enabled)
+        6. Generate answer
+        7. Hallucination check (if enabled)
+        8. Cache result
 
         Args:
             question: Question to ask
@@ -380,17 +429,55 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
         if grade_documents:
             docs = self._grade_documents(question, docs)
 
-        # Step 5: Generate answer
-        context = self._build_context(docs)
-        prompt = self.system_prompt.format(
-            context=context,
-            question=question
-        )
+        # Step 5: Web search fallback if retrieval quality is poor
+        web_docs = []
+        if self._web_searcher and self._is_retrieval_quality_poor(docs, question):
+            logger.info("Retrieval quality poor, falling back to web search")
+            try:
+                web_results = self._web_searcher.search(search_query, num_results=3)
+                web_docs = self._web_searcher.to_documents(web_results)
+                logger.info(f"Web search returned {len(web_docs)} results")
+            except Exception as e:
+                logger.warning(f"Web search fallback failed: {e}")
+
+        # Step 6: Generate answer
+        if web_docs and self._web_searcher:
+            # Use special prompt that labels web sources
+            prompt = self._web_searcher.create_web_answer_prompt(
+                question=question,
+                web_docs=web_docs,
+                local_docs=docs,
+            )
+        else:
+            context = self._build_context(docs)
+            prompt = self.system_prompt.format(
+                context=context,
+                question=question,
+            )
 
         answer = self.llm.generate(prompt, **kwargs)
 
-        # Step 6: Cache the result
-        if self._cache:
+        # Step 7: Hallucination check (optional)
+        if self._hallucination_grader and docs:
+            all_docs = docs + web_docs
+            grade = self._hallucination_grader.grade(
+                answer=answer,
+                context=self._build_context(all_docs),
+            )
+            if not grade.is_grounded and grade.grounded_score < self._hallucination_grader.grounded_threshold:
+                logger.warning(
+                    f"Hallucination detected (score={grade.grounded_score:.2f}), "
+                    f"unsupported: {grade.unsupported_claims}"
+                )
+                # Regenerate with stricter prompt
+                answer, _ = self._hallucination_grader.safe_generate(
+                    question=question,
+                    context=self._build_context(all_docs),
+                    max_retries=1,
+                )
+
+        # Step 8: Cache the result (only if no web search used — web results change frequently)
+        if self._cache and not web_docs:
             try:
                 query_embedding = self.embeddings.embed_query(question)
                 self._cache.put(query_embedding, question, answer)
@@ -398,6 +485,22 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
                 logger.debug(f"Cache store failed: {e}")
 
         return answer
+
+    def _is_retrieval_quality_poor(self, docs: List[Document], question: str) -> bool:
+        """
+        Check if retrieval quality is poor enough to warrant web search fallback.
+
+        Returns True if:
+        - No documents retrieved, OR
+        - All documents were graded as irrelevant (empty after grading)
+        """
+        if not docs:
+            return True
+
+        # Check if docs have relevance metadata from grading
+        # The _grade_documents method already filters, so if we get here
+        # with docs, at least some were deemed relevant
+        return False
 
     def _retrieve(self, query: str, k: int = 5) -> List[Document]:
         """

@@ -23,8 +23,11 @@ from typing import List, Optional, Dict, Any, Tuple, Set
 from pathlib import Path
 from dataclasses import dataclass, field
 import json
+import logging
 
 from langchain_core.documents import Document
+
+logger = logging.getLogger(__name__)
 
 from src.core.document_loader import DocumentLoader
 from src.core.text_splitter import TextSplitter
@@ -66,6 +69,10 @@ class KnowledgeGraph:
     """
     Knowledge Graph for storing entities and relationships.
 
+    Supports optional Neo4j backend for persistent storage.
+    When Neo4j backend is provided, entities and relationships
+    are synced to both in-memory graph and Neo4j.
+
     Example:
         kg = KnowledgeGraph()
 
@@ -77,22 +84,41 @@ class KnowledgeGraph:
 
         # Query
         neighbors = kg.get_neighbors("Python")
+
+        # With Neo4j persistence
+        from src.core.graph_store import Neo4jBackend
+        backend = Neo4jBackend(uri="bolt://localhost:7687", password="pass")
+        backend.connect()
+        kg = KnowledgeGraph(neo4j_backend=backend)
     """
 
-    def __init__(self):
-        """Initialize knowledge graph."""
+    def __init__(self, neo4j_backend=None):
+        """
+        Initialize knowledge graph.
+
+        Args:
+            neo4j_backend: Optional Neo4jBackend for persistent storage
+        """
         self.entities: Dict[str, Entity] = {}
         self.relationships: List[Relationship] = []
         self.adjacency: Dict[str, Set[str]] = {}  # entity -> set of connected entities
+        self._neo4j = neo4j_backend
 
     def add_entity(self, entity: Entity) -> None:
-        """Add entity to graph."""
+        """Add entity to graph (and sync to Neo4j if available)."""
         self.entities[entity.name] = entity
         if entity.name not in self.adjacency:
             self.adjacency[entity.name] = set()
 
+        # Sync to Neo4j
+        if self._neo4j and self._neo4j.is_connected():
+            try:
+                self._neo4j.sync_entity(entity)
+            except Exception as e:
+                logger.warning(f"Neo4j entity sync failed: {e}")
+
     def add_relationship(self, relationship: Relationship) -> None:
-        """Add relationship to graph."""
+        """Add relationship to graph (and sync to Neo4j if available)."""
         self.relationships.append(relationship)
 
         # Update adjacency
@@ -103,6 +129,13 @@ class KnowledgeGraph:
 
         self.adjacency[relationship.source].add(relationship.target)
         self.adjacency[relationship.target].add(relationship.source)
+
+        # Sync to Neo4j
+        if self._neo4j and self._neo4j.is_connected():
+            try:
+                self._neo4j.sync_relationship(relationship)
+            except Exception as e:
+                logger.warning(f"Neo4j relationship sync failed: {e}")
 
     def get_entity(self, name: str) -> Optional[Entity]:
         """Get entity by name."""
@@ -222,6 +255,27 @@ class KnowledgeGraph:
                 description=r["description"],
             ))
 
+    def set_neo4j_backend(self, backend) -> None:
+        """
+        Set or update the Neo4j backend.
+
+        Args:
+            backend: Neo4jBackend instance
+        """
+        self._neo4j = backend
+
+    def sync_to_neo4j(self) -> int:
+        """
+        Sync all in-memory data to Neo4j.
+
+        Returns:
+            Number of entities synced
+        """
+        if not self._neo4j or not self._neo4j.is_connected():
+            logger.warning("Neo4j backend not available for sync")
+            return 0
+        return self._neo4j.sync_from_knowledge_graph(self)
+
 
 class GraphRAG:
     """
@@ -252,6 +306,9 @@ class GraphRAG:
         chunk_size: int = 500,
         chunk_overlap: int = 50,
         retrieval_k: int = 5,
+        neo4j_uri: Optional[str] = None,
+        neo4j_user: str = "neo4j",
+        neo4j_password: Optional[str] = None,
     ):
         """
         Initialize Graph RAG.
@@ -266,6 +323,9 @@ class GraphRAG:
             chunk_size: Chunk size
             chunk_overlap: Chunk overlap
             retrieval_k: Number of documents to retrieve
+            neo4j_uri: Optional Neo4j bolt URI (e.g., "bolt://localhost:7687")
+            neo4j_user: Neo4j username
+            neo4j_password: Neo4j password (or from NEO4J_PASSWORD env var)
         """
         # Initialize components
         self.document_loader = DocumentLoader()
@@ -289,8 +349,22 @@ class GraphRAG:
 
         self.retrieval_k = retrieval_k
 
-        # Knowledge graph
-        self.knowledge_graph = KnowledgeGraph()
+        # Knowledge graph with optional Neo4j backend
+        self._neo4j_backend = None
+        if neo4j_uri:
+            from src.core.graph_store import Neo4jBackend
+            self._neo4j_backend = Neo4jBackend(
+                uri=neo4j_uri,
+                user=neo4j_user,
+                password=neo4j_password,
+            )
+            if self._neo4j_backend.connect():
+                logger.info(f"GraphRAG: Neo4j connected at {neo4j_uri}")
+            else:
+                logger.warning("GraphRAG: Neo4j connection failed, using NetworkX only")
+                self._neo4j_backend = None
+
+        self.knowledge_graph = KnowledgeGraph(neo4j_backend=self._neo4j_backend)
 
         # Track documents
         self._documents = []
@@ -574,3 +648,22 @@ Trả về tên thực thể dưới dạng danh sách cách nhau bằng dấu p
     def num_relationships(self) -> int:
         """Number of relationships in knowledge graph."""
         return len(self.knowledge_graph.relationships)
+
+    @property
+    def has_neo4j(self) -> bool:
+        """Whether Neo4j backend is connected."""
+        return self._neo4j_backend is not None and self._neo4j_backend.is_connected()
+
+    def sync_to_neo4j(self) -> int:
+        """
+        Sync in-memory graph to Neo4j.
+
+        Returns:
+            Number of entities synced
+        """
+        return self.knowledge_graph.sync_to_neo4j()
+
+    def close(self):
+        """Close Neo4j connection if open."""
+        if self._neo4j_backend:
+            self._neo4j_backend.close()

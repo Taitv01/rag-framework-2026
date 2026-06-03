@@ -86,6 +86,16 @@ dev = [
     "mypy>=1.10.0",
     "ruff>=0.4.0",
 ]
+web = [
+    "duckduckgo-search>=7.0.0",
+    "tavily-python>=0.5.0",
+]
+graph = [
+    "neo4j>=5.20.0",
+]
+all = [
+    "ultimate-rag[web,graph]",
+]
 
 [project.urls]
 Homepage = "https://github.com/yourusername/ultimate-rag"

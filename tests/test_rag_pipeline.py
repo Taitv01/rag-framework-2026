@@ -280,6 +280,9 @@ class TestAdvancedRAG:
         rag.use_hyde = False
         rag.use_multi_query_rrf = False
         rag.num_query_variations = 3
+        rag._web_searcher = None
+        rag._hallucination_grader = None
+        rag.use_hallucination_check = False
 
         # Setup mock returns
         sample_docs = [
@@ -370,6 +373,9 @@ class TestAdvancedRAG:
         rag.use_hyde = False
         rag.use_multi_query_rrf = False
         rag.num_query_variations = 3
+        rag._web_searcher = None
+        rag._hallucination_grader = None
+        rag.use_hallucination_check = False
 
         # Setup mock returns
         sample_docs = [
@@ -416,6 +422,9 @@ class TestAdvancedRAG:
         rag.use_hyde = False
         rag.use_multi_query_rrf = False
         rag.num_query_variations = 3
+        rag._web_searcher = None
+        rag._hallucination_grader = None
+        rag.use_hallucination_check = False
 
         # Setup mock returns
         sample_docs = [
