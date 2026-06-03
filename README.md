@@ -2,7 +2,7 @@
 
 # 🚀 Ultimate RAG Framework
 
-### Retrieval-Augmented Generation cho AI Models (2026)
+### Retrieval-Augmented Generation for AI Models (2026)
 
 [![Python Version](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
@@ -12,193 +12,193 @@
 
 <br />
 
-Framework RAG toàn diện, hỗ trợ **nhiều paradigm RAG** — từ tìm kiếm vector cơ bản đến hệ thống agentic thông minh với khả năng tự ra quyết định.
+A production-ready RAG framework supporting **multiple RAG paradigms** — from basic vector search to advanced agentic systems with intelligent retrieval decisions. Built-in Vietnamese language support and story writing system.
 
-**🎯 Phù hợp cho:** Chatbot • Cơ sở tri thức • Viết truyện • Hỏi đáp tài liệu • Trợ lý nghiên cứu
+**🎯 Perfect for:** Chatbots • Knowledge Bases • Story Writing • Document Q&A • Research Assistants
 
-[Quick Start](#-quick-start) • [Tính năng](#-tính-năng) • [Cài đặt](#-cài-đặt) • [Ví dụ](#-ví-dụ-sử-dụng) • [API](#-api) • [Tài liệu](#-tài-liệu)
+[Quick Start](#-quick-start) • [Features](#-features) • [Installation](#-installation) • [Examples](#-usage-examples) • [API](#-api-reference) • [Docs](#-documentation)
 
 </div>
 
 ---
 
-## 📖 Mục lục
+## 📖 Table of Contents
 
-- [Tại sao chọn Ultimate RAG?](#-tại-sao-chọn-ultimate-rag)
-- [Tính năng](#-tính-năng)
-- [Cài đặt](#-cài-đặt)
+- [Why Ultimate RAG?](#-why-ultimate-rag)
+- [Features](#-features)
+- [Installation](#-installation)
 - [Quick Start](#-quick-start)
-- [Ví dụ sử dụng](#-ví-dụ-sử-dụng)
-- [Hệ thống viết truyện](#-hệ-thống-viết-truyện)
+- [Usage Examples](#-usage-examples)
+- [Story Writing System](#-story-writing-system)
 - [API Reference](#-api-reference)
 - [Web UI](#-web-ui)
-- [Cấu hình](#-cấu-hình)
+- [Configuration](#-configuration)
 - [Testing](#-testing)
-- [Cấu trúc dự án](#-cấu-trúc-dự-án)
-- [Đóng góp](#-đóng-góp)
+- [Project Structure](#-project-structure)
+- [Contributing](#-contributing)
 - [License](#-license)
 
 ---
 
-## 🎯 Tại sao chọn Ultimate RAG?
+## 🎯 Why Ultimate RAG?
 
-| Vấn đề | Giải pháp |
-|---------|-----------|
-| 🔍 **Tìm kiếm nông** | Hybrid search (vector + BM25) cho recall tốt hơn |
-| 📊 **Ngữ cảnh không liên quan** | Cross-encoder re-ranking cho precision cao |
-| 🧠 **Lý luận phức tạp** | Agentic RAG với LangGraph cho quyết định đa bước |
-| 📚 **Tài liệu dài** | Advanced chunking (semantic, proposition, contextual) |
-| 💬 **Chat đa lượt** | Conversation memory (buffer/window/summary) |
-| 🇻🇳 **Tiếng Việt** | Vietnamese NLP processor, embedding tối ưu, song ngữ |
-| 🔐 **Bảo mật production** | API key, rate limiting, JWT authentication |
-| 📈 **Monitoring** | Theo dõi usage, analytics, error tracking |
-| 📖 **Viết truyện** | Quản lý nhân vật, cốt truyện, thế giới, kiểm tra nhất quán |
-| 🤖 **Kiểm tra ảo giác** | Hallucination Grader — xác minh câu trả lời grounded |
-| 🌐 **Tìm kiếm web** | Web search fallback khi retrieval không đủ |
-| 📊 **Metadata thông minh** | Tự động gán nhân vật, địa điểm, thời gian cho chunks |
+| Problem | Solution |
+|---------|----------|
+| 🔍 **Shallow retrieval** | Hybrid search (vector + BM25) for better recall |
+| 📊 **Irrelevant context** | Cross-encoder re-ranking for precision |
+| 🧠 **Complex reasoning** | Agentic RAG with LangGraph for multi-step decisions |
+| 📚 **Long documents** | Advanced chunking (semantic, proposition, contextual) |
+| 💬 **Multi-turn chat** | Conversation memory with buffer/window/summary modes |
+| 🇻🇳 **Vietnamese language** | Vietnamese NLP processor, optimized embeddings, bilingual prompts |
+| 🔐 **Production security** | API key management, rate limiting, JWT authentication |
+| 📈 **Monitoring** | Usage tracking, analytics, error monitoring |
+| 📖 **Story writing** | Character, plot, world management with consistency checking |
+| 🤖 **Hallucination detection** | Claim-level grounding verification for answer safety |
+| 🌐 **Web search fallback** | Automatic web search when retrieval quality is poor |
+| 📊 **Smart metadata** | Auto-assign characters, locations, time periods to chunks |
 
 ---
 
-## ✨ Tính năng
+## ✨ Features
 
-### 🎨 Các mô hình RAG
+### 🎨 RAG Patterns
 
-| Mô hình | Mô tả | Sử dụng |
-|---------|-------|---------|
-| **Naive RAG** | Tìm kiếm vector cơ bản + LLM | Q&A đơn giản, chatbot |
-| **Advanced RAG** | Hybrid search + re-ranking + cache + HyDE | Tài liệu kỹ thuật, nghiên cứu |
-| **Agentic RAG** | Agent-based với LangGraph | Lý luận phức tạp |
-| **Graph RAG** | Knowledge graph (NetworkX + Neo4j) | Truy vấn mối quan hệ |
-| **Self-RAG** | Tự phản ánh, tự đánh giá | Ứng dụng cần chất lượng cao |
-| **Corrective RAG** | Tự sửa lỗi retrieval | Fact-checking |
-| **HyDE** | Hypothetical Document Embedding | Matching ngữ nghĩa tốt hơn |
+| Pattern | Description | Use Case |
+|---------|-------------|----------|
+| **Naive RAG** | Basic vector search + LLM | Simple Q&A, chatbots |
+| **Advanced RAG** | Hybrid search + re-ranking + cache + HyDE | Technical docs, research |
+| **Agentic RAG** | Agent-based with LangGraph | Complex reasoning |
+| **Graph RAG** | Knowledge graph (NetworkX + Neo4j) | Relationship queries |
+| **Self-RAG** | Self-reflective with quality scoring | Quality-critical apps |
+| **Corrective RAG** | Dynamic retrieval correction | Fact-checking |
+| **HyDE** | Hypothetical Document Embedding | Better semantic matching |
 
-### 🇻🇳 Hỗ trợ tiếng Việt
+### 🇻🇳 Vietnamese Language Support
 
-- **Vietnamese Processor** — Tách từ (`underthesea`), tách câu, phát hiện ngôn ngữ, NER cho truyện cổ tích
+- **Vietnamese Processor** — Word segmentation (`underthesea`), sentence splitting, language detection, NER for fairy tales
 - **Vietnamese Embeddings** — Default: `keepitreal/vietnamese-sbert` (768d)
 - **Vietnamese Reranker** — `AITeamVN/Vietnamese_Reranker` (MRR@10: 86.72)
-- **BM25 Vietnamese** — Tokenization tiếng Việt cho hybrid search
-- **Song ngữ** — Tất cả prompt đều VI/EN
+- **BM25 Vietnamese Tokenization** — Proper word segmentation for hybrid search
+- **Bilingual Prompts** — All LLM prompts support both Vietnamese and English
 
-### 🤖 Phase 3: Nâng cao
+### 🤖 Phase 3: Advanced Features
 
-- **Metadata Enhancement** — LLM tự gán nhân vật/địa điểm/thời gian/chủ đề/cảm xúc cho chunks
-- **Hallucination Grader** — Kiểm tra từng claim trong câu trả lời có grounded trong tài liệu
-- **Neo4j Integration** — Persistent graph storage alongside NetworkX
-- **Web Search Fallback** — Tìm kiếm web khi retrieval thất bại (OFF by default, safety-first)
+- **Metadata Enhancement** — LLM auto-extracts characters/locations/time/topic/sentiment per chunk
+- **Hallucination Grader** — Claim-level verification that answers are grounded in documents
+- **Neo4j Integration** — Persistent graph storage alongside NetworkX (supplement, not replace)
+- **Web Search Fallback** — Automatic web search when retrieval fails (OFF by default, safety-first)
 
-### 🔧 Thành phần cốt lõi
+### 🔧 Core Components
 
 - **📄 Document Loader** — PDF, DOCX, HTML, Markdown, CSV, JSON
 - **✂️ Text Splitter** — Recursive, semantic, proposition, contextual headers
-- **📊 Advanced Chunking** — Semantic, Proposition, Contextual Retrieval (Anthropic), Parent-Child
-- **💾 Semantic Cache** — Cache theo embedding similarity (giảm 50-70% LLM calls)
-- **🔢 Embeddings** — HuggingFace, OpenAI, Cohere
+- **📊 Advanced Chunking** — Semantic, Proposition, Contextual Retrieval (Anthropic pattern), Parent-Child
+- **💾 Semantic Cache** — Embedding similarity-based caching (reduces 50-70% LLM calls)
+- **🔢 Embeddings** — HuggingFace, OpenAI, Cohere (6 Vietnamese models available)
 - **💾 Vector Store** — FAISS, ChromaDB, Qdrant
 - **🔍 Retriever** — Similarity, hybrid, MMR, re-ranking, multi-query RRF, HyDE, parent-child
 - **🤖 LLM** — OpenAI, Anthropic, Ollama (local)
 
 ### 🚀 Production Features
 
-- ✅ **RESTful API** — FastAPI endpoints
-- ✅ **Web UI** — Gradio interface
-- ✅ **Streaming** — Token-by-token response
-- ✅ **Memory** — Conversation history management
+- ✅ **RESTful API** — FastAPI endpoints with Swagger UI
+- ✅ **Web UI** — Gradio interface with chat, upload, search, stats
+- ✅ **Streaming** — Token-by-token response streaming
+- ✅ **Memory** — Conversation history (buffer, window, summary modes)
 - ✅ **Auth** — API key management, rate limiting, JWT
 - ✅ **Monitoring** — Usage tracking, analytics, error monitoring
-- ✅ **Document Management** — CRUD operations, versioning
+- ✅ **Document Management** — CRUD operations, versioning, bulk operations
 
 ---
 
-## 📦 Cài đặt
+## 📦 Installation
 
-### Yêu cầu
+### Prerequisites
 
-- Python 3.10+ (khuyến nghị 3.11 hoặc 3.12)
+- Python 3.10+ (recommended: 3.11 or 3.12)
 - pip
 
-### Cài đặt nhanh
+### Quick Install
 
 ```bash
 # 1. Clone repository
 git clone https://github.com/Taitv01/rag-framework-2026.git
 cd rag-framework-2026
 
-# 2. Tạo virtual environment
+# 2. Create virtual environment
 python -m venv venv
 
-# 3. Kích hoạt venv
+# 3. Activate venv
 # Windows:
 venv\Scripts\activate
 # Linux/Mac:
 source venv/bin/activate
 
-# 4. Cài dependencies
+# 4. Install dependencies
 pip install -r requirements.txt
 
-# 5. Copy file cấu hình
+# 5. Copy environment template
 cp .env.example .env
-# Chỉnh sửa .env với API keys của bạn
+# Edit .env with your API keys
 ```
 
-### Cài đặt theo module (tùy chọn)
+### Modular Install (Optional)
 
 ```bash
-# Cài đầy đủ (bao gồm web search + Neo4j)
+# Full install (includes web search + Neo4j)
 pip install -e ".[all]"
 
-# Chỉ cài web search (DuckDuckGo, Tavily)
+# Web search only (DuckDuckGo, Tavily)
 pip install -e ".[web]"
 
-# Chỉ cài Neo4j graph storage
+# Neo4j graph storage only
 pip install -e ".[graph]"
 
-# Cài dev tools (pytest, black, ruff)
+# Dev tools (pytest, black, ruff)
 pip install -e ".[dev]"
 ```
 
-### Cài đặt thủ công từng package
+### Manual Package Install
 
 ```bash
-# Core (bắt buộc)
+# Core (required)
 pip install langchain langchain-core langchain-community langchain-text-splitters
 pip install faiss-cpu sentence-transformers
 pip install pypdf python-docx beautifulsoup4 markdown rank-bm25
 pip install fastapi uvicorn python-multipart
 pip install pydantic python-dotenv rich tiktoken
 
-# Vietnamese NLP (khuyến nghị)
+# Vietnamese NLP (recommended)
 pip install underthesea pyvi
 
-# Web Search (tùy chọn)
+# Web Search (optional)
 pip install duckduckgo-search
 pip install tavily-python
 
-# Neo4j (tùy chọn)
+# Neo4j (optional)
 pip install neo4j
 ```
 
-### Cấu hình môi trường
+### Environment Configuration
 
-Chỉnh sửa file `.env`:
+Edit the `.env` file:
 
 ```bash
 # ===== LLM API Keys =====
 OPENAI_API_KEY=sk-...
-# Hoặc dùng Anthropic:
+# Or use Anthropic:
 # ANTHROPIC_API_KEY=sk-ant-...
 
-# ===== Web Search (tùy chọn) =====
-# Tavily (khuyến nghị cho RAG): https://tavily.com
+# ===== Web Search (optional) =====
+# Tavily (recommended for RAG): https://tavily.com
 # TAVILY_API_KEY=tvly-...
-# DuckDuckGo: miễn phí, không cần API key
+# DuckDuckGo: free, no API key needed
 
-# ===== Neo4j (tùy chọn) =====
+# ===== Neo4j (optional) =====
 # NEO4J_URI=bolt://localhost:7687
 # NEO4J_PASSWORD=your_password
 
-# ===== Cấu hình mặc định =====
+# ===== Default Settings =====
 DEFAULT_EMBEDDING_MODEL=keepitreal/vietnamese-sbert
 DEFAULT_RERANKER_MODEL=AITeamVN/Vietnamese_Reranker
 CHUNK_SIZE=500
@@ -210,26 +210,26 @@ RETRIEVAL_K=5
 
 ## 🚀 Quick Start
 
-### 1️⃣ Demo không cần API Key
+### 1️⃣ Demo (No API Key Needed)
 
 ```bash
 python examples/00_demo_no_api.py
 ```
 
-Chạy demo hoàn chỉnh bằng HuggingFace embeddings local — không cần API key!
+Runs a complete demo using local HuggingFace embeddings — no API key required!
 
-### 2️⃣ Basic RAG (3 dòng code)
+### 2️⃣ Basic RAG (3 Lines of Code)
 
 ```python
 from src.rag import NaiveRAG
 
 rag = NaiveRAG()
 rag.add_documents(["document.pdf", "article.txt"])
-answer = rag.query("Nội dung chính là gì?")
+answer = rag.query("What is the main topic?")
 print(answer)
 ```
 
-### 3️⃣ Advanced RAG (tối ưu cho tiếng Việt)
+### 3️⃣ Advanced RAG (Optimized for Vietnamese)
 
 ```python
 from src.rag import AdvancedRAG
@@ -245,11 +245,11 @@ rag = AdvancedRAG(
 )
 
 rag.add_documents(["docs/"])
-answer = rag.query("Thạch Sanh là ai?")
+answer = rag.query("What is Thạch Sanh?")
 print(answer)
 ```
 
-### 4️⃣ Advanced RAG với tất cả tính năng Phase 3
+### 4️⃣ Advanced RAG with All Phase 3 Features
 
 ```python
 from src.rag import AdvancedRAG
@@ -258,53 +258,53 @@ rag = AdvancedRAG(
     llm_provider="openai",
     use_hybrid=True,
     use_reranking=True,
-    # Phase 2
+    # Phase 2 features
     use_cache=True,
     use_contextual_chunking=True,  # Anthropic contextual retrieval
     use_hyde=True,                 # Hypothetical Document Embedding
-    use_multi_query_rrf=True,      # Multi-query RRF
-    # Phase 3
-    use_metadata_enhancement=True, # Tự gán metadata nhân vật/địa điểm/thời gian
-    use_hallucination_check=True,  # Kiểm tra ảo giác
+    use_multi_query_rrf=True,      # Multi-query RRF fusion
+    # Phase 3 features
+    use_metadata_enhancement=True, # Auto-extract characters/locations/time
+    use_hallucination_check=True,  # Verify answer grounding
     use_web_search=True,           # Web search fallback (OFF by default)
     web_search_provider="duckduckgo",
 )
 
 rag.add_documents(["docs/"])
-answer = rag.query("Thạch Sanh đánh đại bàng như thế nào?")
+answer = rag.query("How did Thạch Sanh defeat the eagle?")
 ```
 
-### 5️⃣ Graph RAG với Neo4j
+### 5️⃣ Graph RAG with Neo4j
 
 ```python
 from src.rag import GraphRAG
 
-# Không cần Neo4j (dùng NetworkX in-memory)
+# Without Neo4j (in-memory NetworkX)
 rag = GraphRAG()
 rag.add_documents(["docs/"])
-answer = rag.query("Mối quan hệ giữa Thạch Sanh và Lý Thông?")
+answer = rag.query("What is the relationship between Thạch Sanh and Lý Thông?")
 
-# Với Neo4j (persistent storage)
+# With Neo4j (persistent storage)
 rag = GraphRAG(
     neo4j_uri="bolt://localhost:7687",
     neo4j_password="your_password",
 )
 rag.add_documents(["docs/"])
-answer = rag.query("Ai là kẻ thù của Thạch Sanh?")
+answer = rag.query("Who is Thạch Sanh's enemy?")
 ```
 
 ### 6️⃣ REST API Server
 
 ```bash
 python examples/06_api_server.py
-# Truy cập: http://localhost:8000/docs
+# Visit: http://localhost:8000/docs
 ```
 
 ```python
 import requests
 
 response = requests.post("http://localhost:8000/query", json={
-    "question": "Thạch Sanh là ai?",
+    "question": "What is Thạch Sanh?",
     "k": 5
 })
 print(response.json()["answer"])
@@ -314,12 +314,12 @@ print(response.json()["answer"])
 
 ```bash
 python examples/07_web_ui.py
-# Truy cập: http://localhost:7860
+# Visit: http://localhost:7860
 ```
 
 ---
 
-## 📚 Ví dụ sử dụng
+## 📚 Usage Examples
 
 ### Streaming Response
 
@@ -332,8 +332,8 @@ rag.add_documents(["docs/"])
 
 conv_rag = ConversationalRAG(rag, memory_type="buffer")
 
-# Stream response
-for token in conv_rag.stream("Kể về Thạch Sanh"):
+# Stream response token by token
+for token in conv_rag.stream("Tell me about Thạch Sanh"):
     print(token, end="", flush=True)
 ```
 
@@ -344,10 +344,10 @@ from src.core.memory import ConversationalRAG
 
 conv_rag = ConversationalRAG(rag, memory_type="window", max_history=10)
 
-# Multi-turn conversation
-answer1 = conv_rag.query("Thạch Sanh là ai?")
-answer2 = conv_rag.query("Anh ta đã làm gì?")  # Nhớ context
-answer3 = conv_rag.query("So sánh với Thánh Gióng")  # Vẫn nhớ
+# Multi-turn conversation with context
+answer1 = conv_rag.query("Who is Thạch Sanh?")
+answer2 = conv_rag.query("What did he do?")          # Remembers context
+answer3 = conv_rag.query("Compare with Thánh Gióng")  # Still remembers
 ```
 
 ### Metadata Enhancement
@@ -358,12 +358,12 @@ from src.core.metadata_enhancer import MetadataEnhancer
 enhancer = MetadataEnhancer(llm=rag.llm)
 enhanced_chunks = enhancer.enhance(chunks)
 
-# Mỗi chunk giờ có metadata:
+# Each chunk now has structured metadata:
 # chunk.metadata["characters"] = ["Thạch Sanh", "Lý Thông"]
-# chunk.metadata["locations"] = ["hang đại bàng"]
-# chunk.metadata["time_period"] = "xưa"
-# chunk.metadata["topic"] = "Thạch Sanh giết đại bàng cứu công chúa"
-# chunk.metadata["sentiment"] = "bi tráng"
+# chunk.metadata["locations"] = ["eagle's cave"]
+# chunk.metadata["time_period"] = "ancient"
+# chunk.metadata["topic"] = "Thạch Sanh defeats the eagle to rescue the princess"
+# chunk.metadata["sentiment"] = "heroic"
 ```
 
 ### Hallucination Grading
@@ -373,21 +373,21 @@ from src.agents.hallucination_grader import HallucinationGrader
 
 grader = HallucinationGrader(llm=rag.llm)
 
-# Kiểm tra câu trả lời
+# Verify an answer against source documents
 grade = grader.grade(
-    answer="Thạch Sanh giết đại bàng bằng cung tên.",
-    context="Thạch Sanh dùng cây đàn đánh đại bàng."
+    answer="Thạch Sanh killed the eagle with a bow and arrow.",
+    context="Thạch Sanh used his magic bow to defeat the eagle."
 )
 
-print(grade.is_grounded)        # False
-print(grade.grounded_score)     # 0.3
-print(grade.unsupported_claims) # ["giết đại bàng bằng cung tên"]
+print(grade.is_grounded)        # False — "bow and arrow" vs "magic bow"
+print(grade.grounded_score)     # 0.5
+print(grade.unsupported_claims) # ["killed with a bow and arrow"]
 
-# Safe generate với auto-verification
+# Safe generation with automatic verification
 answer, grade = grader.safe_generate(question, context, max_retries=2)
 ```
 
-### Web Search (an toàn)
+### Web Search (Safety-First)
 
 ```python
 from src.core.web_search import SafeWebSearcher, DuckDuckGoSearchProvider
@@ -395,13 +395,13 @@ from src.core.web_search import SafeWebSearcher, DuckDuckGoSearchProvider
 provider = DuckDuckGoSearchProvider()
 searcher = SafeWebSearcher(provider=provider, llm=rag.llm)
 
-# Tìm kiếm + verify relevance
-results = searcher.search("Thạch Sanh là ai?", num_results=3)
+# Search + verify relevance with LLM
+results = searcher.search("Thạch Sanh fairy tale", num_results=3)
 docs = searcher.to_documents(results)
 
-# Mỗi kết quả web đều có metadata:
+# All web results are clearly labeled:
 # docs[0].metadata["source_type"] = "web"
-# docs[0].metadata["url"] = "https://vi.wikipedia.org/wiki/Thạch_Sanh"
+# docs[0].metadata["url"] = "https://en.wikipedia.org/wiki/Thạch_Sanh"
 ```
 
 ### Advanced Chunking
@@ -414,16 +414,16 @@ from src.core.advanced_chunking import (
     ParentChildChunker,
 )
 
-# Semantic chunking — chia theo ngữ nghĩa
+# Semantic chunking — split by meaning
 chunker = SemanticChunker(embeddings, threshold=0.8)
 chunks = chunker.split(documents)
 
-# Contextual Retrieval (Anthropic pattern) — thêm context cho mỗi chunk
+# Contextual Retrieval (Anthropic pattern) — prepend context to each chunk
 chunker = ContextualRetrievalChunker(llm, chunk_size=500)
 chunks = chunker.split(documents)
-# Mỗi chunk giờ bắt đầu: "[Context: Đoạn này kể về...]"
+# Each chunk now starts with: "[Context: This chunk discusses...]"
 
-# Parent-Child — tìm bằng child, trả về parent
+# Parent-Child — search with small chunks, return large context
 parent_chunks, child_chunks = ParentChildChunker(
     parent_size=2000, child_size=200
 ).split(documents)
@@ -446,16 +446,16 @@ retriever = RetrieverManager(
 results = retriever.search("Thạch Sanh", k=5)
 
 # Hybrid search (vector + BM25)
-results = retriever.hybrid_search("Thạch Sanh đánh đại bàng", k=5)
+results = retriever.hybrid_search("Thạch Sanh fights eagle", k=5)
 
-# Re-ranking với cross-encoder
-results = retriever.search_with_reranking("câu chuyện Thạch Sanh", k=5)
+# Re-ranking with cross-encoder
+results = retriever.search_with_reranking("Thạch Sanh story", k=5)
 
-# Multi-query + RRF
-results = retriever.multi_query_rrf_search("Thạch Sanh là ai?", k=5, llm=llm)
+# Multi-query + RRF (Reciprocal Rank Fusion)
+results = retriever.multi_query_rrf_search("Who is Thạch Sanh?", k=5, llm=llm)
 
-# HyDE — tìm bằng câu trả lời giả thuyết
-results = retriever.hyde_search("Thạch Sanh là ai?", k=5, llm=llm)
+# HyDE — search using hypothetical answer
+results = retriever.hyde_search("Who is Thạch Sanh?", k=5, llm=llm)
 
 # Parent-Child search
 results = retriever.parent_child_search("Thạch Sanh", k=5, parent_chunks=parents)
@@ -463,7 +463,7 @@ results = retriever.parent_child_search("Thạch Sanh", k=5, parent_chunks=paren
 
 ---
 
-## 📖 Hệ thống viết truyện
+## 📖 Story Writing System
 
 ```python
 from src.story import (
@@ -474,36 +474,38 @@ from src.story import (
     ChapterManager, TimelineManager,
 )
 
-# Tạo nhân vật
+# Create characters
 char_mgr = CharacterManager()
 char_mgr.add_character(Character(
     name="Thạch Sanh",
-    personality="Thật thà, dũng cảm, hiếu thảo",
-    backstory="Con mồ côi, sống dưới gốc cây",
-    strengths=["Sức mạnh phi thường", "Tài bắn cung"],
-    weaknesses=["Quá thật thà"],
+    personality="Honest, brave, filial",
+    backstory="Orphan living under a tree",
+    strengths=["Superhuman strength", "Archery skills"],
+    weaknesses=["Too trusting"],
 ))
 
-# Quản lý cốt truyện
+# Manage plot
 plot_mgr = PlotManager()
 plot_mgr.add_plot_point(PlotPoint(
     chapter=1,
-    event="Thạch Sanh gặp Lý Thông",
+    event="Thạch Sanh meets Lý Thông",
     importance="high",
     characters_involved=["Thạch Sanh", "Lý Thông"],
 ))
 
-# Xây dựng thế giới
+# Build world
 world = WorldBuilder()
 world.add_location(Location(
-    name="Hang đại bàng",
-    description="Hang tối sâu hun hút, nơi giam giữ công chúa",
+    name="Eagle's Cave",
+    description="Deep dark cave where the princess is imprisoned",
     first_appearance=3,
 ))
 
-# Kiểm tra nhất quán
+# Check consistency
 checker = ConsistencyChecker(llm)
 issues = checker.check_chapter(chapter_text, chapter_number)
+for issue in issues:
+    print(f"[{issue.severity}] {issue.description}")
 ```
 
 ---
@@ -512,23 +514,23 @@ issues = checker.check_chapter(chapter_text, chapter_number)
 
 ### Endpoints
 
-| Method | Endpoint | Mô tả |
-|--------|----------|-------|
+| Method | Endpoint | Description |
+|--------|----------|-------------|
 | `GET` | `/health` | Health check |
-| `POST` | `/query` | Truy vấn RAG |
-| `POST` | `/documents` | Thêm documents |
-| `GET` | `/documents` | Liệt kê documents |
-| `POST` | `/ingest` | Upload files |
-| `POST` | `/search` | Tìm kiếm documents |
+| `POST` | `/query` | Query the RAG system |
+| `POST` | `/documents` | Add text documents |
+| `GET` | `/documents` | List indexed documents |
+| `POST` | `/ingest` | Upload and index files |
+| `POST` | `/search` | Search documents without generation |
 
-### Ví dụ
+### Examples
 
 ```python
 import requests
 
 # Query
 response = requests.post("http://localhost:8000/query", json={
-    "question": "Thạch Sanh là ai?",
+    "question": "What is Thạch Sanh?",
     "k": 5,
     "transform_query": True,
     "grade_documents": True,
@@ -537,7 +539,7 @@ print(response.json()["answer"])
 
 # Add documents
 response = requests.post("http://localhost:8000/documents", json={
-    "texts": ["Thạch Sanh là nhân vật trong truyện cổ tích Việt Nam..."],
+    "texts": ["Thạch Sanh is a character in Vietnamese fairy tales..."],
 })
 print(response.json()["status"])
 
@@ -554,36 +556,36 @@ Swagger UI: `http://localhost:8000/docs`
 
 ```bash
 python examples/07_web_ui.py
-# Truy cập: http://localhost:7860
+# Visit: http://localhost:7860
 ```
 
-Tính năng:
-- 💬 **Chat Interface** — Chat với knowledge base
-- 📄 **Document Upload** — Upload và index documents
-- 🔍 **Search** — Tìm kiếm documents
-- 📊 **Statistics** — Xem thống kê usage
+Features:
+- 💬 **Chat Interface** — Chat with your knowledge base
+- 📄 **Document Upload** — Upload and index documents
+- 🔍 **Search** — Search through indexed documents
+- 📊 **Statistics** — View usage analytics
 
 ---
 
-## ⚙️ Cấu hình
+## ⚙️ Configuration
 
-### Biến môi trường
+### Environment Variables
 
-| Biến | Mặc định | Mô tả |
-|------|----------|-------|
-| `OPENAI_API_KEY` | — | API key cho OpenAI |
-| `ANTHROPIC_API_KEY` | — | API key cho Anthropic |
-| `DEFAULT_EMBEDDING_MODEL` | `keepitreal/vietnamese-sbert` | Model embedding mặc định |
-| `DEFAULT_RERANKER_MODEL` | `AITeamVN/Vietnamese_Reranker` | Model re-ranking mặc định |
-| `CHUNK_SIZE` | `500` | Kích thước chunk |
-| `CHUNK_OVERLAP` | `50` | Độ chồng chunk |
-| `RETRIEVAL_K` | `5` | Số documents retrieve |
-| `TAVILY_API_KEY` | — | API key cho Tavily web search |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OPENAI_API_KEY` | — | OpenAI API key |
+| `ANTHROPIC_API_KEY` | — | Anthropic API key |
+| `DEFAULT_EMBEDDING_MODEL` | `keepitreal/vietnamese-sbert` | Default embedding model |
+| `DEFAULT_RERANKER_MODEL` | `AITeamVN/Vietnamese_Reranker` | Default reranker model |
+| `CHUNK_SIZE` | `500` | Chunk size for text splitting |
+| `CHUNK_OVERLAP` | `50` | Chunk overlap |
+| `RETRIEVAL_K` | `5` | Number of documents to retrieve |
+| `TAVILY_API_KEY` | — | Tavily web search API key |
 | `NEO4J_URI` | `bolt://localhost:7687` | Neo4j connection URI |
 | `NEO4J_PASSWORD` | — | Neo4j password |
-| `LOG_LEVEL` | `INFO` | Mức log |
+| `LOG_LEVEL` | `INFO` | Logging level |
 
-### Programmatic
+### Programmatic Configuration
 
 ```python
 from src.utils.config import Config
@@ -598,21 +600,20 @@ rag_config = config.get_rag_config()
 ## 🧪 Testing
 
 ```bash
-# Chạy tất cả tests
+# Run all tests
 pytest -v
 
-# Chạy với coverage
+# Run with coverage
 pytest --cov=src
 
-# Chạy test cụ thể
+# Run specific test module
 pytest tests/test_phase3_features.py -v
 
-# Chạy test theo module
+# Run specific test
 pytest tests/test_retriever.py -v
-pytest tests/test_rag_pipeline.py -v
 ```
 
-### Kết quả
+### Results
 
 ```
 ============================= 116 passed in 20.82s ==============================
@@ -626,47 +627,47 @@ tests/test_retriever.py          : 16 tests  ✅
 
 ---
 
-## 📁 Cấu trúc dự án
+## 📁 Project Structure
 
 ```
 rag-framework-2026/
 ├── src/
-│   ├── core/                        # Thành phần cốt lõi
-│   │   ├── document_loader.py       # Đọc tài liệu (PDF, DOCX, HTML...)
-│   │   ├── text_splitter.py         # Chia văn bản
-│   │   ├── embeddings.py            # Quản lý embedding models
-│   │   ├── vector_store.py          # Quản lý vector stores
-│   │   ├── retriever.py             # Tìm kiếm (hybrid, MMR, RRF, HyDE)
-│   │   ├── llm.py                   # Quản lý LLM providers
+│   ├── core/                        # Core components
+│   │   ├── document_loader.py       # Load documents (PDF, DOCX, HTML...)
+│   │   ├── text_splitter.py         # Text splitting strategies
+│   │   ├── embeddings.py            # Embedding model management
+│   │   ├── vector_store.py          # Vector store management
+│   │   ├── retriever.py             # Retrieval (hybrid, MMR, RRF, HyDE)
+│   │   ├── llm.py                   # LLM provider management
 │   │   ├── streaming.py             # Token streaming
 │   │   ├── memory.py                # Conversation memory
 │   │   ├── advanced_chunking.py     # Semantic, proposition, contextual chunking
-│   │   ├── vietnamese_processor.py  # Xử lý tiếng Việt
+│   │   ├── vietnamese_processor.py  # Vietnamese NLP processing
 │   │   ├── metadata_enhancer.py     # [Phase 3] Metadata enhancement
 │   │   ├── graph_store.py           # [Phase 3] Neo4j backend
 │   │   └── web_search.py            # [Phase 3] Web search fallback
 │   │
-│   ├── rag/                         # Các mô hình RAG
+│   ├── rag/                         # RAG implementations
 │   │   ├── naive_rag.py             # Basic RAG
 │   │   ├── advanced_rag.py          # Advanced RAG (hybrid, reranking, cache)
 │   │   ├── agentic_rag.py           # Agentic RAG (LangGraph)
 │   │   ├── graph_rag.py             # Graph RAG (Knowledge Graph + Neo4j)
 │   │   └── advanced_techniques.py   # Self-RAG, CRAG, HyDE, HyPE
 │   │
-│   ├── agents/                      # Agents chuyên biệt
-│   │   ├── retrieval_agent.py       # Agent quyết định retrieval
-│   │   ├── grading_agent.py         # Agent đánh giá tài liệu
-│   │   ├── query_rewriter.py        # Agent tối ưu query
-│   │   └── hallucination_grader.py  # [Phase 3] Kiểm tra ảo giác
+│   ├── agents/                      # Specialized agents
+│   │   ├── retrieval_agent.py       # Retrieval decision agent
+│   │   ├── grading_agent.py         # Document grading agent
+│   │   ├── query_rewriter.py        # Query optimization agent
+│   │   └── hallucination_grader.py  # [Phase 3] Hallucination detection
 │   │
-│   ├── story/                       # Hệ thống viết truyện
-│   │   ├── character_manager.py     # Quản lý nhân vật
-│   │   ├── plot_manager.py          # Quản lý cốt truyện
-│   │   ├── world_builder.py         # Xây dựng thế giới
-│   │   ├── consistency_checker.py   # Kiểm tra nhất quán
-│   │   ├── chapter_manager.py       # Quản lý chương
-│   │   ├── timeline_manager.py      # Quản lý timeline
-│   │   └── writing_assistant.py     # Trợ lý viết
+│   ├── story/                       # Story writing system
+│   │   ├── character_manager.py     # Character management
+│   │   ├── plot_manager.py          # Plot management
+│   │   ├── world_builder.py         # World building
+│   │   ├── consistency_checker.py   # Consistency checking
+│   │   ├── chapter_manager.py       # Chapter management
+│   │   ├── timeline_manager.py      # Timeline management
+│   │   └── writing_assistant.py     # AI writing assistant
 │   │
 │   ├── api/                         # REST API
 │   │   └── app.py                   # FastAPI endpoints
@@ -674,18 +675,18 @@ rag-framework-2026/
 │   ├── ui/                          # Web UI
 │   │   └── __init__.py              # Gradio interface
 │   │
-│   ├── auth/                        # Xác thực
+│   ├── auth/                        # Authentication
 │   │   ├── auth_manager.py          # JWT authentication
 │   │   ├── api_key_manager.py       # API key management
 │   │   └── rate_limiter.py          # Rate limiting
 │   │
 │   ├── monitoring/                  # Monitoring
-│   │   └── metrics_collector.py     # Thu thập metrics
+│   │   └── metrics_collector.py     # Metrics collection
 │   │
-│   ├── documents/                   # Quản lý tài liệu
+│   ├── documents/                   # Document management
 │   │   └── manager.py               # CRUD operations
 │   │
-│   ├── evaluation/                  # Đánh giá
+│   ├── evaluation/                  # Evaluation
 │   │   ├── metrics.py               # RAGAS metrics
 │   │   └── evaluator.py             # Evaluation pipeline
 │   │
@@ -694,37 +695,37 @@ rag-framework-2026/
 │       ├── cache.py                 # Cache (exact + semantic)
 │       └── logger.py                # Logging
 │
-├── examples/                        # Ví dụ (00-08)
+├── examples/                        # Example scripts (00-08)
 ├── tests/                           # Unit tests (116 tests)
 ├── notebooks/                       # Jupyter notebooks
-├── docs/                            # Tài liệu
-├── PHASES.md                        # Lộ trình phát triển
+├── docs/                            # Documentation
+├── PHASES.md                        # Development roadmap
 ├── pyproject.toml                   # Project config
 ├── requirements.txt                 # Dependencies
-└── README.md                        # ← Bạn đang đọc
+└── README.md                        # ← You are here
 ```
 
 ---
 
-## 🤝 Đóng góp
+## 🤝 Contributing
 
-Chào mừng đóng góp! Xem [Contributing Guide](CONTRIBUTING.md).
+Contributions are welcome! See [Contributing Guide](CONTRIBUTING.md).
 
-1. Fork repository
-2. Tạo feature branch: `git checkout -b feature/my-feature`
-3. Commit: `git commit -m "Add my feature"`
-4. Push: `git push origin feature/my-feature`
-5. Mở Pull Request
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/my-feature`
+3. Commit your changes: `git commit -m "Add my feature"`
+4. Push to the branch: `git push origin feature/my-feature`
+5. Open a Pull Request
 
 ---
 
 ## 📄 License
 
-MIT License — xem [LICENSE](LICENSE).
+MIT License — see [LICENSE](LICENSE).
 
 ---
 
-## 🙏 Cảm ơn
+## 🙏 Acknowledgments
 
 - [LangChain](https://langchain.com) — LLM framework
 - [LangGraph](https://langchain-ai.github.io/langgraph/) — Agent orchestration
@@ -736,7 +737,7 @@ MIT License — xem [LICENSE](LICENSE).
 
 ---
 
-## 📞 Hỗ trợ
+## 📞 Support
 
 - 🐛 **Bug Reports**: [GitHub Issues](https://github.com/Taitv01/rag-framework-2026/issues)
 - 💡 **Feature Requests**: [GitHub Discussions](https://github.com/Taitv01/rag-framework-2026/discussions)
@@ -745,7 +746,7 @@ MIT License — xem [LICENSE](LICENSE).
 
 <div align="center">
 
-**Made with ❤️ for Vietnamese Story Writers and AI Enthusiasts**
+**Made with ❤️ for Story Writers and AI Enthusiasts**
 
 [⬆ Back to Top](#-ultimate-rag-framework)
 
