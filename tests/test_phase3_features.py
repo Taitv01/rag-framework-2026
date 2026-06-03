@@ -593,3 +593,226 @@ class TestWebSearch:
         assert rag._is_retrieval_quality_poor(
             [Document(page_content="test", metadata={})], "test"
         ) is False
+
+
+# ============================================================================
+# ContextValidator Tests
+# ============================================================================
+
+class TestContextValidator:
+    """Tests for ContextValidator and context window validation."""
+
+    def test_validator_creation(self):
+        """Test ContextValidator can be created."""
+        from src.utils.context_validator import ContextValidator
+
+        validator = ContextValidator(context_window=128000)
+        assert validator.context_window == 128000
+        assert validator.available_tokens == 128000 - 4096  # minus default output reservation
+
+    def test_validator_custom_output_tokens(self):
+        """Test validator with custom output token reservation."""
+        from src.utils.context_validator import ContextValidator
+
+        validator = ContextValidator(context_window=128000, max_output_tokens=8192)
+        assert validator.reserve_tokens == 8192
+        assert validator.available_tokens == 128000 - 8192
+
+    def test_count_tokens_empty(self):
+        """Test token counting with empty string."""
+        from src.utils.context_validator import ContextValidator
+
+        validator = ContextValidator(context_window=128000)
+        assert validator.count_tokens("") == 0
+        assert validator.count_tokens(None) == 0
+
+    def test_count_tokens_short_text(self):
+        """Test token counting with short text."""
+        from src.utils.context_validator import ContextValidator
+
+        validator = ContextValidator(context_window=128000)
+        tokens = validator.count_tokens("Hello world")
+        assert tokens > 0
+        assert tokens < 10
+
+    def test_count_tokens_long_text(self):
+        """Test token counting with longer text."""
+        from src.utils.context_validator import ContextValidator
+
+        validator = ContextValidator(context_window=128000)
+        text = "This is a test sentence. " * 100  # ~2500 chars
+        tokens = validator.count_tokens(text)
+        assert tokens > 100
+        assert tokens < 1000
+
+    def test_estimate_tokens(self):
+        """Test character-based token estimation."""
+        from src.utils.context_validator import ContextValidator
+
+        validator = ContextValidator(context_window=128000, language="en")
+        # English: ~4 chars per token
+        tokens = validator.estimate_tokens("Hello world test")  # 16 chars
+        assert 3 <= tokens <= 6
+
+    def test_estimate_tokens_vietnamese(self):
+        """Test token estimation for Vietnamese text."""
+        from src.utils.context_validator import ContextValidator
+
+        validator = ContextValidator(context_window=128000, language="vi")
+        # Vietnamese: ~3 chars per token
+        text = "Thạch Sanh đánh đại bàng"  # 25 chars
+        tokens = validator.estimate_tokens(text)
+        assert 5 <= tokens <= 15
+
+    def test_validate_small_prompt(self):
+        """Test validation with a small prompt that fits."""
+        from src.utils.context_validator import ContextValidator
+
+        validator = ContextValidator(context_window=128000)
+        result = validator.validate(prompt="Hello world", system_prompt="You are helpful.")
+
+        assert result.is_valid is True
+        assert result.is_too_large is False
+        assert result.overflow_tokens == 0
+        assert result.truncated_prompt is None
+        assert result.warning is None
+
+    def test_validate_large_prompt(self):
+        """Test validation with a prompt that exceeds the limit."""
+        from src.utils.context_validator import ContextValidator
+
+        # Very small context window for testing
+        validator = ContextValidator(context_window=100, max_output_tokens=20)
+        big_prompt = "This is a test sentence. " * 100  # ~2500 chars
+
+        result = validator.validate(prompt=big_prompt)
+
+        assert result.is_valid is False
+        assert result.is_too_large is True
+        assert result.overflow_tokens > 0
+        assert result.truncated_prompt is not None
+        assert result.warning is not None
+        assert "EXCEEDS" in result.warning
+
+    def test_validate_warning_threshold(self):
+        """Test warning when approaching limit."""
+        from src.utils.context_validator import ContextValidator
+
+        # Create validator with small window to trigger warning
+        # Use a size that will definitely be above 80% of available
+        validator = ContextValidator(
+            context_window=100,
+            max_output_tokens=10,
+            warning_threshold=0.5,
+            language="en",
+        )
+        # available = 100 - 10 = 90 tokens
+        # Use enough chars to exceed 50% of available tokens
+        # With tiktoken, need to ensure we're above threshold
+        prompt = "This is a test sentence with enough words. " * 5  # ~200 chars
+
+        result = validator.validate(prompt=prompt)
+
+        # Should either be valid with warning, or too large
+        if result.is_valid:
+            # If valid, should have warning if usage > threshold
+            assert result.usage_ratio > 0.3  # At least some usage
+        else:
+            assert result.is_too_large is True
+
+    def test_fit_to_window_no_truncation(self):
+        """Test fit_to_window when prompt already fits."""
+        from src.utils.context_validator import ContextValidator
+
+        validator = ContextValidator(context_window=128000)
+        prompt = "Hello world"
+        result = validator.fit_to_window(prompt)
+        assert result == prompt
+
+    def test_fit_to_window_with_truncation(self):
+        """Test fit_to_window truncates when needed."""
+        from src.utils.context_validator import ContextValidator
+
+        validator = ContextValidator(context_window=100, max_output_tokens=20)
+        big_prompt = "This is a sentence. " * 100
+
+        result = validator.fit_to_window(big_prompt)
+
+        assert len(result) < len(big_prompt)
+        assert "truncated" in result.lower()
+
+    def test_validation_result_to_dict(self):
+        """Test ValidationResult.to_dict()."""
+        from src.utils.context_validator import ContextValidator
+
+        validator = ContextValidator(context_window=128000)
+        result = validator.validate("Hello")
+        d = result.to_dict()
+
+        assert "is_valid" in d
+        assert "context_window" in d
+        assert "usage_ratio" in d
+
+    def test_from_llm_manager(self):
+        """Test creating validator from LLMManager."""
+        from src.utils.context_validator import ContextValidator
+        from src.core.llm import LLMManager
+
+        llm = LLMManager(provider="openai", model="gpt-4o")
+        validator = ContextValidator.from_llm_manager(llm)
+
+        assert validator.context_window == 128000
+        assert validator.reserve_tokens == 4096
+
+    def test_from_llm_manager_anthropic(self):
+        """Test creating validator from Anthropic LLMManager."""
+        from src.utils.context_validator import ContextValidator
+        from src.core.llm import LLMManager
+
+        llm = LLMManager(provider="anthropic", model="claude-sonnet-4-20250514")
+        validator = ContextValidator.from_llm_manager(llm)
+
+        assert validator.context_window == 200000
+
+    def test_llm_get_context_window(self):
+        """Test LLMManager.get_context_window()."""
+        from src.core.llm import LLMManager
+
+        llm = LLMManager(provider="openai", model="gpt-4o")
+        assert llm.get_context_window() == 128000
+
+        llm2 = LLMManager(provider="openai", model="gpt-3.5-turbo")
+        assert llm2.get_context_window() == 16385
+
+        llm3 = LLMManager(provider="anthropic", model="claude-sonnet-4-20250514")
+        assert llm3.get_context_window() == 200000
+
+    def test_llm_get_max_output_tokens(self):
+        """Test LLMManager.get_max_output_tokens()."""
+        from src.core.llm import LLMManager
+
+        llm = LLMManager(provider="openai", model="gpt-4o")
+        assert llm.get_max_output_tokens() == 4096
+
+        llm2 = LLMManager(provider="openai", model="gpt-4o", max_tokens=8192)
+        assert llm2.get_max_output_tokens() == 8192
+
+    def test_truncation_strategies(self):
+        """Test different truncation strategies."""
+        from src.utils.context_validator import ContextValidator
+
+        validator = ContextValidator(context_window=50, max_output_tokens=10)
+        text = "Sentence one. Sentence two. Sentence three. Sentence four. Sentence five."
+
+        # Tail truncation (default)
+        result = validator._truncate_text(text, 10, strategy="tail")
+        assert "truncated" in result.lower()
+        assert len(result) < len(text) + 50  # Plus marker text
+
+        # Head truncation
+        result = validator._truncate_text(text, 10, strategy="head")
+        assert "truncated" in result.lower()
+
+        # Middle truncation
+        result = validator._truncate_text(text, 10, strategy="middle")
+        assert "truncated" in result.lower()

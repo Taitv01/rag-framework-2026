@@ -162,6 +162,10 @@ class AdvancedRAG:
         self.use_reranking = use_reranking
         self.system_prompt = system_prompt or self._get_default_system_prompt()
 
+        # Context window validation
+        from src.utils.context_validator import ContextValidator
+        self._context_validator = ContextValidator.from_llm_manager(self.llm)
+
         # Phase 2 options
         self.use_hyde = use_hyde
         self.use_multi_query_rrf = use_multi_query_rrf
@@ -658,12 +662,31 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
         return relevant_docs if relevant_docs else docs[:1]
 
     def _build_context(self, docs: List[Document]) -> str:
-        """Build context from documents."""
+        """Build context from documents with context window validation."""
         context_parts = []
         for i, doc in enumerate(docs, 1):
             context_parts.append(f"[Document {i}]\n{doc.page_content}")
 
-        return "\n\n".join(context_parts)
+        context = "\n\n".join(context_parts)
+
+        # Validate context fits within model's window
+        if self._context_validator:
+            result = self._context_validator.validate(
+                prompt=context,
+                system_prompt=self.system_prompt,
+            )
+
+            if result.warning:
+                logger.warning(result.warning)
+
+            if result.is_too_large and result.truncated_prompt:
+                logger.warning(
+                    f"Context truncated: {result.prompt_tokens:,} → "
+                    f"{self._context_validator.count_tokens(result.truncated_prompt):,} tokens"
+                )
+                return result.truncated_prompt
+
+        return context
 
     def retrieve(
         self,
@@ -716,6 +739,37 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
     def num_chunks(self) -> int:
         """Number of chunks."""
         return len(self._chunks)
+
+    @property
+    def context_info(self) -> Dict[str, Any]:
+        """
+        Get context window information.
+
+        Returns:
+            Dict with context window size, available tokens, and current usage
+        """
+        if not self._context_validator:
+            return {"error": "Context validator not initialized"}
+
+        # Estimate current context size
+        total_chunk_chars = sum(len(c.page_content) for c in self._chunks)
+        estimated_context_tokens = self._context_validator.estimate_tokens(
+            "\n\n".join(c.page_content for c in self._chunks[:self.retrieval_k])
+        )
+
+        return {
+            "context_window": self._context_validator.context_window,
+            "available_tokens": self._context_validator.available_tokens,
+            "max_output_tokens": self._context_validator.reserve_tokens,
+            "retrieval_k": self.retrieval_k,
+            "chunk_size_avg": total_chunk_chars // max(len(self._chunks), 1),
+            "estimated_context_tokens": estimated_context_tokens,
+            "usage_ratio": round(
+                estimated_context_tokens / self._context_validator.available_tokens, 3
+            ) if self._context_validator.available_tokens > 0 else 1.0,
+            "model": self.llm.config.model,
+            "provider": self.llm.config.provider,
+        }
 
     def stream(
         self,

@@ -21,11 +21,14 @@ Usage:
 """
 
 import os
+import logging
 from typing import List, Optional, Dict, Any, Union
 from dataclasses import dataclass, field
 
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_core.language_models import BaseChatModel
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -362,6 +365,56 @@ class LLMManager:
         if provider:
             return cls.POPULAR_MODELS.get(provider, {})
         return cls.POPULAR_MODELS
+
+    def get_context_window(self) -> int:
+        """
+        Get the context window size for the current model.
+
+        Returns:
+            Context window size in tokens. Returns 128000 as default
+            if model is not in the known models catalog.
+        """
+        provider_models = self.POPULAR_MODELS.get(self.config.provider, {})
+        model_info = provider_models.get(self.config.model, {})
+
+        if "context_window" in model_info:
+            return model_info["context_window"]
+
+        # Fallback: try to infer from model name
+        model_lower = self.config.model.lower()
+        if "gpt-4" in model_lower:
+            return 128000
+        elif "gpt-3.5" in model_lower:
+            return 16385
+        elif "claude" in model_lower:
+            return 200000
+        elif "llama" in model_lower or "mistral" in model_lower:
+            return 8192  # Common local model default
+
+        # Default: assume a generous context window
+        logger.warning(
+            f"Unknown model '{self.config.model}'. "
+            f"Assuming 128000 token context window."
+        )
+        return 128000
+
+    def get_max_output_tokens(self) -> int:
+        """
+        Get the maximum output tokens for the current model.
+
+        Returns:
+            Max output tokens. Uses configured max_tokens or defaults to 4096.
+        """
+        if self.config.max_tokens:
+            return self.config.max_tokens
+
+        # Default output token limits by provider
+        provider_defaults = {
+            "openai": 4096,
+            "anthropic": 4096,
+            "ollama": 2048,
+        }
+        return provider_defaults.get(self.config.provider, 4096)
 
     @classmethod
     def from_provider(cls, provider: str, **kwargs) -> "LLMManager":
