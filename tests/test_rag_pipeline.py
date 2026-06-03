@@ -275,6 +275,11 @@ class TestAdvancedRAG:
         rag._documents = []
         rag._chunks = []
         rag._retriever = None
+        rag._cache = None
+        rag._contextual_chunker = None
+        rag.use_hyde = False
+        rag.use_multi_query_rrf = False
+        rag.num_query_variations = 3
 
         # Setup mock returns
         sample_docs = [
@@ -313,6 +318,11 @@ class TestAdvancedRAG:
         rag._documents = []
         rag._chunks = []
         rag._retriever = None
+        rag._cache = None
+        rag._contextual_chunker = None
+        rag.use_hyde = False
+        rag.use_multi_query_rrf = False
+        rag.num_query_variations = 3
 
         # Setup mock returns
         sample_docs = [
@@ -355,6 +365,11 @@ class TestAdvancedRAG:
         rag._documents = []
         rag._chunks = []
         rag._retriever = None
+        rag._cache = None
+        rag._contextual_chunker = None
+        rag.use_hyde = False
+        rag.use_multi_query_rrf = False
+        rag.num_query_variations = 3
 
         # Setup mock returns
         sample_docs = [
@@ -396,6 +411,11 @@ class TestAdvancedRAG:
         rag._documents = []
         rag._chunks = []
         rag._retriever = None
+        rag._cache = None
+        rag._contextual_chunker = None
+        rag.use_hyde = False
+        rag.use_multi_query_rrf = False
+        rag.num_query_variations = 3
 
         # Setup mock returns
         sample_docs = [

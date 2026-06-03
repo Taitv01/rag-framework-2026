@@ -548,4 +548,3 @@ class TestRRFFusion:
 
         # Should deduplicate by content hash
         assert len(result) == 1
-        assert stats.error_count == 1

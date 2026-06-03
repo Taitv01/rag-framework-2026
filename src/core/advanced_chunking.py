@@ -395,7 +395,15 @@ Summary:"""
             if chunk:
                 chunks.append(chunk)
 
-            start = end - self.chunk_overlap
+            # If we've reached the end, stop
+            if end >= len(text):
+                break
+
+            # Advance start, ensuring we always move forward
+            new_start = end - self.chunk_overlap
+            if new_start <= start:
+                new_start = end
+            start = new_start
 
         return chunks
 
@@ -509,7 +517,15 @@ class ParentChildChunker:
             if chunk:
                 chunks.append(chunk)
 
-            start = end - self.child_overlap
+            # If we've reached the end, stop
+            if end >= len(text):
+                break
+
+            # Advance start, ensuring we always move forward
+            new_start = end - self.child_overlap
+            if new_start <= start:
+                new_start = end
+            start = new_start
 
         return chunks
 
@@ -788,7 +804,15 @@ Context / Ngữ cảnh:"""
             if chunk:
                 chunks.append(chunk)
 
-            start = end - self.chunk_overlap
+            # If we've reached the end, stop
+            if end >= len(text):
+                break
+
+            # Advance start, ensuring we always move forward
+            new_start = end - self.chunk_overlap
+            if new_start <= start:
+                new_start = end
+            start = new_start
 
         return chunks
 

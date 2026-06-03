@@ -385,11 +385,12 @@ class SemanticCache:
 
         best_score = 0.0
         best_key = None
+        expired_keys = []
 
         for key, (query_text, answer, cached_embedding, timestamp) in self._cache.items():
             # Check TTL
             if time.time() - timestamp > self.ttl:
-                self._remove(key)
+                expired_keys.append(key)
                 continue
 
             # Compute cosine similarity
@@ -397,6 +398,10 @@ class SemanticCache:
             if score > best_score:
                 best_score = score
                 best_key = key
+
+        # Remove expired keys after iteration
+        for key in expired_keys:
+            self._remove(key)
 
         if best_key and best_score >= self.threshold:
             # Move to end (most recently used)
@@ -429,16 +434,21 @@ class SemanticCache:
 
         best_score = 0.0
         best_key = None
+        expired_keys = []
 
         for key, (query_text, answer, cached_embedding, timestamp) in self._cache.items():
             if time.time() - timestamp > self.ttl:
-                self._remove(key)
+                expired_keys.append(key)
                 continue
 
             score = self._cosine_similarity(query_embedding, cached_embedding)
             if score > best_score:
                 best_score = score
                 best_key = key
+
+        # Remove expired keys after iteration
+        for key in expired_keys:
+            self._remove(key)
 
         if best_key and best_score >= self.threshold:
             if best_key in self._access_order:
