@@ -29,7 +29,23 @@ from typing import List, Optional, Dict, Any, Tuple
 from dataclasses import dataclass
 import json
 
+import numpy as np
 from langchain_core.documents import Document
+
+
+def _cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
+    """Calculate cosine similarity between two vectors."""
+    v1 = np.array(vec1)
+    v2 = np.array(vec2)
+
+    dot_product = np.dot(v1, v2)
+    norm1 = np.linalg.norm(v1)
+    norm2 = np.linalg.norm(v2)
+
+    if norm1 == 0 or norm2 == 0:
+        return 0.0
+
+    return dot_product / (norm1 * norm2)
 
 
 @dataclass
@@ -469,7 +485,7 @@ Passage:"""
         # Calculate similarities
         similarities = []
         for i, doc_emb in enumerate(doc_embeddings):
-            sim = self._cosine_similarity(query_embedding, doc_emb)
+            sim = _cosine_similarity(query_embedding, doc_emb)
             similarities.append((i, sim))
 
         # Sort by similarity
@@ -478,21 +494,7 @@ Passage:"""
         # Return top-k
         return [documents[i] for i, _ in similarities[:k]]
 
-    def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
-        """Calculate cosine similarity."""
-        import numpy as np
 
-        vec1 = np.array(vec1)
-        vec2 = np.array(vec2)
-
-        dot_product = np.dot(vec1, vec2)
-        norm1 = np.linalg.norm(vec1)
-        norm2 = np.linalg.norm(vec2)
-
-        if norm1 == 0 or norm2 == 0:
-            return 0.0
-
-        return dot_product / (norm1 * norm2)
 
 
 class HyPE:
@@ -580,15 +582,13 @@ Return one question per line, nothing else."""
         Returns:
             List of relevant documents
         """
-        import numpy as np
-
         # Embed query
         query_embedding = self.embeddings.embed_query(query)
 
         # Calculate similarities with all prompt embeddings
         similarities = []
         for i, prompt_emb in enumerate(self._prompt_embeddings):
-            sim = self._cosine_similarity(query_embedding, prompt_emb)
+            sim = _cosine_similarity(query_embedding, prompt_emb)
             similarities.append((i, sim))
 
         # Sort by similarity
@@ -609,21 +609,7 @@ Return one question per line, nothing else."""
 
         return results
 
-    def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
-        """Calculate cosine similarity."""
-        import numpy as np
 
-        vec1 = np.array(vec1)
-        vec2 = np.array(vec2)
-
-        dot_product = np.dot(vec1, vec2)
-        norm1 = np.linalg.norm(vec1)
-        norm2 = np.linalg.norm(vec2)
-
-        if norm1 == 0 or norm2 == 0:
-            return 0.0
-
-        return dot_product / (norm1 * norm2)
 
 
 class ContextualCompression:

@@ -19,7 +19,7 @@ Usage:
     answer = rag.query("What is the relationship between X and Y?")
 """
 
-from typing import List, Optional, Dict, Any, Tuple, Set
+from typing import List, Optional, Dict, Any, Tuple, Set, Union
 from pathlib import Path
 from dataclasses import dataclass, field
 import json

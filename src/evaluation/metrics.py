@@ -51,7 +51,7 @@ class RAGMetrics:
         )
 
         # Batch evaluation
-        results = metrics.batch_evalute(evaluation_data)
+        results = metrics.batch_evaluate(evaluation_data)
     """
 
     def __init__(self, llm):

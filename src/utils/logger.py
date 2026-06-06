@@ -15,6 +15,7 @@ Usage:
 """
 
 import logging
+import os
 import sys
 from typing import Optional
 from pathlib import Path
@@ -85,6 +86,3 @@ def get_logger(name: str) -> logging.Logger:
     """
     return logging.getLogger(name)
 
-
-# Import os at module level
-import os

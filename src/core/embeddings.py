@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 class EmbeddingConfig:
     """Configuration for embedding models."""
     provider: str = "huggingface"
-    model_name: str = "keepitreal/vietnamese-sbert"
+    model_name: str = "BAAI/bge-m3"
     api_key: Optional[str] = None
     batch_size: int = 32
     device: Optional[str] = None
@@ -88,11 +88,19 @@ class EmbeddingsManager:
             },
             "BAAI/bge-m3": {
                 "dimensions": 1024,
-                "description": "Best multilingual, dense+sparse+ColBERT hybrid",
+                "description": "[RECOMMENDED] Best multilingual, dense+sparse+ColBERT hybrid, 2026 baseline for Vietnamese RAG",
             },
             "intfloat/multilingual-e5-large": {
                 "dimensions": 1024,
                 "description": "Strong multilingual, MIT license",
+            },
+            "intfloat/multilingual-e5-large-instruct": {
+                "dimensions": 1024,
+                "description": "Top multilingual performer with instruction-tuning, excellent for Vietnamese",
+            },
+            "Alibaba-NLP/gte-Qwen2-7B-instruct": {
+                "dimensions": 3584,
+                "description": "Premium 7B parameter model, long context (32k), highest quality multilingual",
             },
             # English models (for English-only content)
             "all-MiniLM-L6-v2": {
@@ -164,11 +172,11 @@ class EmbeddingsManager:
     def _get_default_model(self, provider: str) -> str:
         """Get default model for provider."""
         defaults = {
-            "huggingface": "keepitreal/vietnamese-sbert",
+            "huggingface": "BAAI/bge-m3",
             "openai": "text-embedding-3-small",
             "cohere": "embed-multilingual-v3.0",
         }
-        return defaults.get(provider, "keepitreal/vietnamese-sbert")
+        return defaults.get(provider, "BAAI/bge-m3")
 
     @property
     def embeddings(self):
@@ -317,7 +325,7 @@ class EmbeddingsManager:
 
 # Convenience functions for quick embedding creation
 def get_local_embeddings(
-    model_name: str = "keepitreal/vietnamese-sbert",
+    model_name: str = "BAAI/bge-m3",
     device: Optional[str] = None
 ) -> EmbeddingsManager:
     """

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ultimate-rag"
-version = "1.0.0"
+version = "1.1.0"
 description = "Ultimate RAG Framework - Comprehensive Retrieval-Augmented Generation for AI Models (2026)"
 readme = "README.md"
 license = { text = "MIT" }
@@ -75,6 +75,13 @@ dependencies = [
     "tenacity>=8.3.0",
     "tiktoken>=0.7.0",
     "rich>=13.7.0",
+
+    # 2026 Updates
+    "FlagEmbedding>=1.2.0",
+    "deepeval>=1.0.0",
+    "langfuse>=2.0.0",
+    "litellm>=1.40.0",
+    "instructor>=1.0.0",
 ]
 
 [project.optional-dependencies]

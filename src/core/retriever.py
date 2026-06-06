@@ -40,6 +40,11 @@ class RetrieverConfig:
     score_threshold: Optional[float] = None
     use_hybrid: bool = False
     use_reranking: bool = False
+    # Available reranker models:
+    #   - AITeamVN/Vietnamese_Reranker (default, best for Vietnamese)
+    #   - Qwen/Qwen3-Reranker-0.6B (top open-source, multilingual, 32k context)
+    #   - BAAI/bge-reranker-v2-m3 (reliable lightweight multilingual baseline)
+    #   - cross-encoder/ms-marco-MiniLM-L-6-v2 (English-only fallback)
     reranker_model: str = "AITeamVN/Vietnamese_Reranker"
     bm25_weight: float = 0.3
     vector_weight: float = 0.7
@@ -73,6 +78,26 @@ class RetrieverManager:
         # With re-ranking
         results = retriever.search_with_reranking("câu chuyện Thạch Sanh")
     """
+
+    # Supported reranker models
+    RERANKER_MODELS = {
+        "AITeamVN/Vietnamese_Reranker": {
+            "description": "Vietnamese-specific reranker, best for Vietnamese content (default)",
+            "context_length": 512,
+        },
+        "Qwen/Qwen3-Reranker-0.6B": {
+            "description": "Top open-source multilingual reranker, 32k context, excellent quality",
+            "context_length": 32768,
+        },
+        "BAAI/bge-reranker-v2-m3": {
+            "description": "Reliable lightweight multilingual baseline, good balance of speed and quality",
+            "context_length": 8192,
+        },
+        "cross-encoder/ms-marco-MiniLM-L-6-v2": {
+            "description": "English-only cross-encoder, fast fallback",
+            "context_length": 512,
+        },
+    }
 
     def __init__(
         self,

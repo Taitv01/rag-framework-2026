@@ -67,11 +67,13 @@ A production-ready RAG framework supporting **multiple RAG paradigms** — from 
 |---------|-------------|----------|
 | **Naive RAG** | Basic vector search + LLM | Simple Q&A, chatbots |
 | **Advanced RAG** | Hybrid search + re-ranking + cache + HyDE | Technical docs, research |
+| **Adaptive RAG** | Query router + auto-select pipeline | Cost-optimized production |
 | **Agentic RAG** | Agent-based with LangGraph | Complex reasoning |
 | **Graph RAG** | Knowledge graph (NetworkX + Neo4j) | Relationship queries |
 | **Self-RAG** | Self-reflective with quality scoring | Quality-critical apps |
 | **Corrective RAG** | Dynamic retrieval correction | Fact-checking |
 | **HyDE** | Hypothetical Document Embedding | Better semantic matching |
+| **RAPTOR** | Tree-organized recursive retrieval | Cross-document reasoning |
 
 ### 🇻🇳 Vietnamese Language Support
 
@@ -91,7 +93,7 @@ A production-ready RAG framework supporting **multiple RAG paradigms** — from 
 ### 🔧 Core Components
 
 - **📄 Document Loader** — PDF, DOCX, HTML, Markdown, CSV, JSON
-- **✂️ Text Splitter** — Recursive, semantic, proposition, contextual headers
+- **✂️ Text Splitter** — Recursive, semantic, proposition, contextual headers, RAPTOR, late chunking
 - **📊 Advanced Chunking** — Semantic, Proposition, Contextual Retrieval (Anthropic pattern), Parent-Child
 - **💾 Semantic Cache** — Embedding similarity-based caching (reduces 50-70% LLM calls)
 - **🔢 Embeddings** — HuggingFace, OpenAI, Cohere (6 Vietnamese models available)
@@ -508,6 +510,25 @@ for issue in issues:
     print(f"[{issue.severity}] {issue.description}")
 ```
 
+### Adaptive RAG (NEW — 2026)
+
+```python
+from src.rag import AdaptiveRAG
+
+# Auto-selects the best pipeline based on query complexity
+rag = AdaptiveRAG(
+    llm_provider="openai",
+    embedding_provider="huggingface",
+)
+rag.add_documents(["docs/"])
+
+# Simple query → NaiveRAG (fast, cheap)
+answer = rag.query("Thạch Sanh là ai?")
+
+# Complex query → AgenticRAG (thorough)
+answer = rag.query("So sánh nhân vật Thạch Sanh và Lý Thông qua các khía cạnh tính cách, hành động và kết cục")
+```
+
 ---
 
 ## 🌐 API Reference
@@ -641,7 +662,7 @@ rag-framework-2026/
 │   │   ├── llm.py                   # LLM provider management
 │   │   ├── streaming.py             # Token streaming
 │   │   ├── memory.py                # Conversation memory
-│   │   ├── advanced_chunking.py     # Semantic, proposition, contextual chunking
+│   │   ├── advanced_chunking.py     # Semantic, proposition, contextual, RAPTOR, late chunking
 │   │   ├── vietnamese_processor.py  # Vietnamese NLP processing
 │   │   ├── metadata_enhancer.py     # [Phase 3] Metadata enhancement
 │   │   ├── graph_store.py           # [Phase 3] Neo4j backend
@@ -650,6 +671,7 @@ rag-framework-2026/
 │   ├── rag/                         # RAG implementations
 │   │   ├── naive_rag.py             # Basic RAG
 │   │   ├── advanced_rag.py          # Advanced RAG (hybrid, reranking, cache)
+│   │   ├── adaptive_rag.py          # NEW: Query router + auto-select pipeline
 │   │   ├── agentic_rag.py           # Agentic RAG (LangGraph)
 │   │   ├── graph_rag.py             # Graph RAG (Knowledge Graph + Neo4j)
 │   │   └── advanced_techniques.py   # Self-RAG, CRAG, HyDE, HyPE

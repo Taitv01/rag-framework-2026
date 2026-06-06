@@ -19,6 +19,7 @@ from typing import List, Optional, Dict, Any
 from pathlib import Path
 import io
 import logging
+import os
 import sys
 import shutil
 
@@ -116,10 +117,17 @@ def create_app(
         redoc_url="/redoc",
     )
 
-    # CORS middleware
+    # CORS middleware — origins configurable via CORS_ORIGINS env var
+    default_origins = ["http://localhost:3000", "http://localhost:7860", "http://localhost:8000"]
+    cors_origins_env = os.getenv("CORS_ORIGINS")
+    if cors_origins_env:
+        cors_origins = [o.strip() for o in cors_origins_env.split(",") if o.strip()]
+    else:
+        cors_origins = default_origins
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -311,11 +319,12 @@ def create_app(
 # Default Application Instance
 # ============================================================================
 
-# Create default app for uvicorn
-config = Config()
-app = create_app(
-    rag_type="advanced",
-    llm_provider=config.get("DEFAULT_LLM_PROVIDER", "openai"),
-    llm_model=config.get("DEFAULT_LLM_MODEL", "gpt-4o-mini"),
-    embedding_provider=config.get("DEFAULT_EMBEDDING_PROVIDER", "huggingface"),
-)
+if __name__ == "__main__":
+    # Create default app for uvicorn when run directly
+    config = Config()
+    app = create_app(
+        rag_type="advanced",
+        llm_provider=config.get("DEFAULT_LLM_PROVIDER", "openai"),
+        llm_model=config.get("DEFAULT_LLM_MODEL", "gpt-4o-mini"),
+        embedding_provider=config.get("DEFAULT_EMBEDDING_PROVIDER", "huggingface"),
+    )

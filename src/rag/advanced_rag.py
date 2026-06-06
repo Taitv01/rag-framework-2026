@@ -320,10 +320,29 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
             logger.info(f"Enhancing metadata for {len(chunks)} chunks")
             chunks = self._metadata_enhancer.enhance(chunks)
 
-        self._chunks.extend(chunks)
+        # Store parent chunks for parent-child retrieval
+        parent_start_idx = len(self._parent_chunks)
+        self._parent_chunks.extend(chunks)
+
+        # Create smaller child chunks for retrieval, linking to parents
+        child_splitter = TextSplitter(
+            chunk_size=self.text_splitter.chunk_size // 2,
+            chunk_overlap=self.text_splitter.chunk_overlap,
+        )
+        child_chunks = []
+        for parent_idx, parent_chunk in enumerate(chunks, start=parent_start_idx):
+            sub_chunks = child_splitter.split_documents([parent_chunk])
+            for child in sub_chunks:
+                child.metadata = {**child.metadata, "_parent_idx": parent_idx}
+            child_chunks.extend(sub_chunks)
+
+        # Use child chunks for retrieval if any were created,
+        # otherwise fall back to the parent chunks themselves
+        retrieval_chunks = child_chunks if child_chunks else chunks
+        self._chunks.extend(retrieval_chunks)
 
         # Add to vector store
-        self.vector_store.add_documents(chunks)
+        self.vector_store.add_documents(retrieval_chunks)
 
         # Initialize retriever
         self._retriever = RetrieverManager(
@@ -335,7 +354,7 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
             use_reranking=self.use_reranking,
         )
 
-        return len(chunks)
+        return len(retrieval_chunks)
 
     def add_texts(
         self,

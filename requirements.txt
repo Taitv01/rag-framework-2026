@@ -67,3 +67,10 @@ tavily-python>=0.5.0
 
 # Neo4j (optional, for persistent graph storage)
 neo4j>=5.20.0
+
+# 2026 Updates
+FlagEmbedding>=1.2.0
+deepeval>=1.0.0
+langfuse>=2.0.0
+litellm>=1.40.0
+instructor>=1.0.0
