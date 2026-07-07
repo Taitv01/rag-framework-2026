@@ -60,7 +60,8 @@ class Config:
 
         # Embedding Configuration
         "DEFAULT_EMBEDDING_PROVIDER": "huggingface",
-        "DEFAULT_EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
+        "DEFAULT_EMBEDDING_MODEL": "keepitreal/vietnamese-sbert",
+        "DEFAULT_RERANKER_MODEL": "AITeamVN/Vietnamese_Reranker",
 
         # Vector Store Configuration
         "DEFAULT_VECTOR_STORE": "faiss",
@@ -75,6 +76,12 @@ class Config:
         "ENABLE_HYBRID_SEARCH": "true",
         "ENABLE_RERANKING": "true",
         "ENABLE_CACHE": "true",
+        "ENABLE_API_AUTH": "false",
+        "API_KEYS": "",
+        "API_RATE_LIMIT": "100",
+        "API_RATE_LIMIT_WINDOW": "60",
+        "MAX_UPLOAD_SIZE_MB": "25",
+        "CORS_ALLOW_ORIGINS": "http://localhost:3000,http://localhost:7860,http://localhost:8000",
 
         # Cache Configuration
         "CACHE_TTL": "3600",

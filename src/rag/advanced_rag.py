@@ -380,6 +380,12 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
 
         # Split into chunks
         chunks = self.text_splitter.split_documents(docs)
+
+        # Enhance metadata if enabled
+        if getattr(self, "_metadata_enhancer", None):
+            logger.info(f"Enhancing metadata for {len(chunks)} chunks")
+            chunks = self._metadata_enhancer.enhance(chunks)
+
         self._chunks.extend(chunks)
 
         # Add to vector store
@@ -590,6 +596,7 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
                         "original_query": question,
                         "transformed_query": None,
                         "relevant_docs": [],
+                        "citations": [],
                         "total_docs_retrieved": 0,
                         "relevant_docs_count": 0,
                         "cache_hit": True,
@@ -627,19 +634,15 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
             except Exception:
                 pass
 
-        # Format sources
-        sources = []
-        for doc in relevant_docs:
-            sources.append({
-                "content": doc.page_content[:300] + "..." if len(doc.page_content) > 300 else doc.page_content,
-                "metadata": doc.metadata,
-            })
+        # Format sources and citations
+        sources = self._format_sources(relevant_docs)
 
         return {
             "answer": answer,
             "original_query": question,
             "transformed_query": transformed_query,
             "relevant_docs": sources,
+            "citations": sources,
             "total_docs_retrieved": len(docs),
             "relevant_docs_count": len(relevant_docs),
             "cache_hit": cache_hit,
@@ -682,9 +685,18 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
 
     def _build_context(self, docs: List[Document]) -> str:
         """Build context from documents with context window validation."""
-        context_parts = []
+        context_parts = [
+            "Source IDs are shown as [S1], [S2], etc. Cite them when using facts."
+        ]
         for i, doc in enumerate(docs, 1):
-            context_parts.append(f"[Document {i}]\n{doc.page_content}")
+            metadata = doc.metadata or {}
+            source = (
+                metadata.get("source")
+                or metadata.get("file_name")
+                or metadata.get("url")
+                or f"Document {i}"
+            )
+            context_parts.append(f"[S{i}] Source: {source}\n{doc.page_content}")
 
         context = "\n\n".join(context_parts)
 
@@ -706,6 +718,29 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
                 return result.truncated_prompt
 
         return context
+
+    def _format_sources(self, docs: List[Document]) -> List[Dict[str, Any]]:
+        """Format retrieved documents with stable source IDs for citations."""
+        sources = []
+
+        for i, doc in enumerate(docs, 1):
+            metadata = doc.metadata or {}
+            content = doc.page_content
+            source = (
+                metadata.get("source")
+                or metadata.get("file_name")
+                or metadata.get("url")
+                or f"Document {i}"
+            )
+
+            sources.append({
+                "source_id": f"S{i}",
+                "source": source,
+                "content": content[:300] + "..." if len(content) > 300 else content,
+                "metadata": metadata,
+            })
+
+        return sources
 
     def retrieve(
         self,

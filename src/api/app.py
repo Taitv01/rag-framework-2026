@@ -22,20 +22,50 @@ import logging
 import os
 import sys
 import shutil
+import uuid
 
 # Fix encoding for Windows
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Query
+from fastapi import FastAPI, HTTPException, UploadFile, File, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from src.rag import NaiveRAG, AdvancedRAG
+from src.auth import RateLimiter
 from src.utils.config import Config
 
 logger = logging.getLogger(__name__)
+
+
+def _split_csv(value: Optional[str]) -> List[str]:
+    """Split comma-separated config values."""
+    if not value:
+        return []
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _extract_api_key(request: Request) -> Optional[str]:
+    """Read API key from X-API-Key or Bearer Authorization header."""
+    api_key = request.headers.get("x-api-key")
+    if api_key:
+        return api_key.strip()
+
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        return auth_header[7:].strip()
+
+    return None
+
+
+def _safe_upload_name(filename: Optional[str]) -> str:
+    """Return a safe local filename for an uploaded file."""
+    safe_name = Path(filename or "upload").name
+    safe_name = safe_name.replace("\x00", "").strip()
+    return safe_name or "upload"
 
 
 # ============================================================================
@@ -54,6 +84,7 @@ class QueryResponse(BaseModel):
     """Response model for query endpoint."""
     answer: str = Field(..., description="Generated answer")
     sources: List[Dict[str, Any]] = Field(default=[], description="Source documents")
+    citations: List[Dict[str, Any]] = Field(default=[], description="Citation-ready source documents")
     transformed_query: Optional[str] = Field(default=None, description="Transformed query")
 
 
@@ -94,6 +125,7 @@ def create_app(
     llm_provider: str = "openai",
     llm_model: str = "gpt-4o-mini",
     embedding_provider: str = "huggingface",
+    embedding_model: Optional[str] = None,
     **kwargs
 ) -> FastAPI:
     """
@@ -104,11 +136,52 @@ def create_app(
         llm_provider: LLM provider
         llm_model: LLM model name
         embedding_provider: Embedding provider
+        embedding_model: Embedding model name
         **kwargs: Additional arguments
 
     Returns:
         FastAPI application
     """
+    config = Config()
+    cors_origins = kwargs.pop(
+        "cors_allow_origins",
+        os.getenv("CORS_ORIGINS") or config.get("CORS_ALLOW_ORIGINS", ""),
+    )
+    if isinstance(cors_origins, str):
+        cors_origins = _split_csv(cors_origins) or [
+            "http://localhost:3000",
+            "http://localhost:7860",
+            "http://localhost:8000",
+        ]
+
+    enable_auth = kwargs.pop(
+        "enable_auth",
+        config.get_bool("ENABLE_API_AUTH", default=False),
+    )
+    api_keys = kwargs.pop("api_keys", None)
+    if api_keys is None:
+        api_keys = _split_csv(config.get("API_KEYS", ""))
+    api_key_set = set(api_keys)
+
+    rate_limit = int(kwargs.pop(
+        "rate_limit",
+        config.get_int("API_RATE_LIMIT", default=100),
+    ))
+    rate_limit_window = int(kwargs.pop(
+        "rate_limit_window",
+        config.get_int("API_RATE_LIMIT_WINDOW", default=60),
+    ))
+    max_upload_size_mb = int(kwargs.pop(
+        "max_upload_size_mb",
+        config.get_int("MAX_UPLOAD_SIZE_MB", default=25),
+    ))
+    max_upload_size_bytes = max_upload_size_mb * 1024 * 1024
+    rate_limiter = RateLimiter(
+        max_requests=rate_limit,
+        window_seconds=rate_limit_window,
+    )
+    public_paths = {"/health", "/docs", "/redoc", "/openapi.json"}
+
     app = FastAPI(
         title="Ultimate RAG API",
         description="RESTful API for Retrieval-Augmented Generation",
@@ -117,21 +190,49 @@ def create_app(
         redoc_url="/redoc",
     )
 
-    # CORS middleware — origins configurable via CORS_ORIGINS env var
-    default_origins = ["http://localhost:3000", "http://localhost:7860", "http://localhost:8000"]
-    cors_origins_env = os.getenv("CORS_ORIGINS")
-    if cors_origins_env:
-        cors_origins = [o.strip() for o in cors_origins_env.split(",") if o.strip()]
-    else:
-        cors_origins = default_origins
-
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,
-        allow_credentials=True,
+        allow_credentials=cors_origins != ["*"],
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def api_guard(request: Request, call_next):
+        """Optional API-key auth plus sliding-window rate limiting."""
+        path = request.url.path
+        if path in public_paths:
+            return await call_next(request)
+
+        identity = request.client.host if request.client else "anonymous"
+
+        if enable_auth:
+            api_key = _extract_api_key(request)
+            if not api_key or api_key not in api_key_set:
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Missing or invalid API key"},
+                )
+            identity = api_key
+
+        if not rate_limiter.is_allowed(identity):
+            reset_in = rate_limiter.get_reset_time(identity)
+            headers = {}
+            if reset_in is not None:
+                headers["Retry-After"] = str(max(1, int(reset_in)))
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Rate limit exceeded"},
+                headers=headers,
+            )
+
+        response = await call_next(request)
+        response.headers["X-RateLimit-Limit"] = str(rate_limit)
+        response.headers["X-RateLimit-Remaining"] = str(
+            rate_limiter.get_remaining(identity)
+        )
+        return response
 
     # Initialize RAG
     if rag_type == "advanced":
@@ -139,6 +240,7 @@ def create_app(
             llm_provider=llm_provider,
             llm_model=llm_model,
             embedding_provider=embedding_provider,
+            embedding_model=embedding_model,
             **kwargs
         )
     else:
@@ -146,6 +248,7 @@ def create_app(
             llm_provider=llm_provider,
             llm_model=llm_model,
             embedding_provider=embedding_provider,
+            embedding_model=embedding_model,
             **kwargs
         )
 
@@ -191,6 +294,7 @@ def create_app(
                 return QueryResponse(
                     answer=result["answer"],
                     sources=result["relevant_docs"],
+                    citations=result.get("citations", result["relevant_docs"]),
                     transformed_query=result.get("transformed_query"),
                 )
             else:
@@ -198,9 +302,18 @@ def create_app(
                     question=request.question,
                     k=request.k,
                 )
+                citations = [
+                    {
+                        "source_id": f"S{i}",
+                        "source": source.get("metadata", {}).get("source", f"Document {i}"),
+                        **source,
+                    }
+                    for i, source in enumerate(result["sources"], 1)
+                ]
                 return QueryResponse(
                     answer=result["answer"],
                     sources=result["sources"],
+                    citations=citations,
                 )
         except Exception as e:
             logger.error(f"Query failed: {e}")
@@ -254,8 +367,18 @@ def create_app(
             temp_dir.mkdir(exist_ok=True)
 
             for file in files:
-                file_path = temp_dir / file.filename
                 content = await file.read()
+                if len(content) > max_upload_size_bytes:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=(
+                            f"File '{file.filename}' exceeds "
+                            f"{max_upload_size_mb} MB upload limit"
+                        ),
+                    )
+
+                safe_name = _safe_upload_name(file.filename)
+                file_path = temp_dir / f"{uuid.uuid4().hex}_{safe_name}"
                 file_path.write_bytes(content)
                 file_paths.append(str(file_path))
 
@@ -270,6 +393,8 @@ def create_app(
                 message=f"Ingested {len(files)} files with {num_chunks} chunks",
                 count=num_chunks,
             )
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"File ingestion failed: {e}")
             raise HTTPException(status_code=500, detail=str(e))
@@ -319,12 +444,12 @@ def create_app(
 # Default Application Instance
 # ============================================================================
 
-if __name__ == "__main__":
-    # Create default app for uvicorn when run directly
-    config = Config()
-    app = create_app(
-        rag_type="advanced",
-        llm_provider=config.get("DEFAULT_LLM_PROVIDER", "openai"),
-        llm_model=config.get("DEFAULT_LLM_MODEL", "gpt-4o-mini"),
-        embedding_provider=config.get("DEFAULT_EMBEDDING_PROVIDER", "huggingface"),
-    )
+# Create default app for uvicorn
+config = Config()
+app = create_app(
+    rag_type="advanced",
+    llm_provider=config.get("DEFAULT_LLM_PROVIDER", "openai"),
+    llm_model=config.get("DEFAULT_LLM_MODEL", "gpt-4o-mini"),
+    embedding_provider=config.get("DEFAULT_EMBEDDING_PROVIDER", "huggingface"),
+    embedding_model=config.get("DEFAULT_EMBEDDING_MODEL", "keepitreal/vietnamese-sbert"),
+)

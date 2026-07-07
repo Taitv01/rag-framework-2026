@@ -120,6 +120,23 @@ class TestRetrieverManager:
 
         assert len(results) > 0
 
+    def test_search_stacks_hybrid_and_reranking(self):
+        """Test search applies reranking after hybrid retrieval when both are enabled."""
+        retriever = RetrieverManager(
+            vector_store=self.mock_vector_store,
+            embeddings=self.mock_embeddings,
+        )
+        retriever.config.use_hybrid = True
+        retriever.config.use_reranking = True
+        retriever.hybrid_search = Mock(return_value=self.sample_docs)
+        retriever._reranker = Mock()
+        retriever._reranker.predict.return_value = [0.1, 0.9, 0.2]
+
+        results = retriever.search("programming", k=2)
+
+        retriever.hybrid_search.assert_called_once()
+        assert results == [self.sample_docs[1], self.sample_docs[2]]
+
     def test_multi_query_search(self):
         """Test multi-query search."""
         self.mock_vector_store.similarity_search.return_value = self.sample_docs[:2]
@@ -183,6 +200,21 @@ class TestRetrieverManager:
         normalized = retriever._normalize_scores(scores)
 
         assert all(s == 1.0 for s in normalized)
+
+    def test_normalize_vector_scores_for_distance_backend(self):
+        """Test lower vector-store distances become higher relevance scores."""
+        self.mock_vector_store.config.provider = "faiss"
+        retriever = RetrieverManager(
+            vector_store=self.mock_vector_store,
+            embeddings=self.mock_embeddings,
+        )
+
+        normalized = retriever._normalize_vector_scores([
+            (self.sample_docs[0], 0.1),
+            (self.sample_docs[1], 0.9),
+        ])
+
+        assert normalized == [1.0, 0.0]
 
 
 class TestVietnameseRetriever:

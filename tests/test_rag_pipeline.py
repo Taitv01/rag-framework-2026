@@ -350,6 +350,8 @@ class TestAdvancedRAG:
         assert "answer" in result
         assert "transformed_query" in result
         assert "relevant_docs" in result
+        assert "citations" in result
+        assert result["citations"][0]["source_id"] == "S1"
         assert "total_docs_retrieved" in result
         assert "relevant_docs_count" in result
 
@@ -555,6 +557,7 @@ class TestRAGIntegration:
         # Test default values
         chunk_size = config.get_int("CHUNK_SIZE", default=500)
         assert chunk_size == 500
+        assert config.get("DEFAULT_EMBEDDING_MODEL") == "keepitreal/vietnamese-sbert"
 
     def test_cache(self):
         """Test cache functionality."""

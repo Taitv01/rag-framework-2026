@@ -23,6 +23,7 @@ Usage:
     results = retriever.search_with_reranking("câu chuyện Thạch Sanh", k=5)
 """
 
+import hashlib
 import logging
 from typing import List, Optional, Dict, Any, Tuple
 from dataclasses import dataclass, field
@@ -48,6 +49,7 @@ class RetrieverConfig:
     reranker_model: str = "AITeamVN/Vietnamese_Reranker"
     bm25_weight: float = 0.3
     vector_weight: float = 0.7
+    vector_score_mode: str = "auto"  # "auto", "distance", or "similarity"
     extra: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -223,7 +225,11 @@ class RetrieverManager:
         """
         k = k or self.config.k
 
-        if self.config.use_hybrid:
+        if self.config.use_hybrid and self.config.use_reranking:
+            initial_k = kwargs.pop("initial_k", k * 4)
+            candidates = self.hybrid_search(query, k=initial_k, filter=filter)
+            return self._rerank_documents(query, candidates, k=k, filter=filter)
+        elif self.config.use_hybrid:
             return self.hybrid_search(query, k=k, filter=filter)
         elif self.config.use_reranking:
             return self.search_with_reranking(query, k=k, filter=filter)
@@ -306,23 +312,20 @@ class RetrieverManager:
         bm25_scores_normalized = self._normalize_scores(
             [score for _, score in bm25_results]
         )
-        vector_scores_normalized = self._normalize_scores(
-            [score for _, score in vector_results]
-        )
+        vector_scores_normalized = self._normalize_vector_scores(vector_results)
 
-        # Combine results using content hash for deduplication
-        # (not id() which is memory-address-based and fragile)
+        # Combine results using stable document keys for deduplication.
         combined_scores = {}
 
         for i, (doc, _) in enumerate(bm25_results):
-            doc_key = hash(doc.page_content[:200])
+            doc_key = self._document_key(doc)
             combined_scores[doc_key] = {
                 "doc": doc,
                 "score": bm25_weight * bm25_scores_normalized[i],
             }
 
         for i, (doc, _) in enumerate(vector_results):
-            doc_key = hash(doc.page_content[:200])
+            doc_key = self._document_key(doc)
             if doc_key in combined_scores:
                 combined_scores[doc_key]["score"] += (
                     vector_weight * vector_scores_normalized[i]
@@ -375,16 +378,39 @@ class RetrieverManager:
             query, k=initial_k, filter=filter
         )
 
+        return self._rerank_documents(query, candidates, k=k, filter=filter)
+
+    def _rerank_documents(
+        self,
+        query: str,
+        candidates: List[Document],
+        k: Optional[int] = None,
+        filter: Optional[Dict[str, Any]] = None,
+    ) -> List[Document]:
+        """
+        Re-rank an existing candidate set with the configured cross-encoder.
+
+        This is used by both vector-only reranking and hybrid+reranking so the
+        two retrieval improvements can stack instead of being mutually exclusive.
+        """
+        k = k or self.config.k
+
         if not candidates:
             return []
 
-        # Create query-document pairs for re-ranking
-        pairs = [(query, doc.page_content) for doc in candidates]
+        if not self._reranker:
+            logger.warning("Re-ranker not initialized. Returning original candidates.")
+            return candidates[:k]
 
-        # Get re-ranking scores
+        if filter:
+            candidates = self._filter_documents(candidates, filter)
+
+        if not candidates:
+            return []
+
+        pairs = [(query, doc.page_content) for doc in candidates]
         scores = self._reranker.predict(pairs)
 
-        # Sort by re-ranking score
         scored_candidates = list(zip(candidates, scores))
         scored_candidates.sort(key=lambda x: x[1], reverse=True)
 
@@ -735,6 +761,88 @@ Passage / Đoạn văn:"""
             (score - min_score) / (max_score - min_score)
             for score in scores
         ]
+
+    def _normalize_vector_scores(
+        self,
+        vector_results: List[Tuple[Document, float]]
+    ) -> List[float]:
+        """
+        Normalize vector-store scores into relevance scores where higher is better.
+
+        LangChain vector stores are not consistent here: FAISS/Chroma commonly
+        return distances where lower is better, while some remote stores return
+        similarity scores where higher is better. Hybrid search needs relevance
+        scores before combining with BM25.
+        """
+        scores = [score for _, score in vector_results]
+        if not scores:
+            return []
+
+        mode = self._infer_vector_score_mode()
+        if mode == "distance":
+            return self._normalize_distance_scores(scores)
+
+        return self._normalize_scores(scores)
+
+    def _normalize_distance_scores(self, scores: List[float]) -> List[float]:
+        """Normalize distance scores to relevance scores where lower distance wins."""
+        if not scores:
+            return []
+
+        min_score = min(scores)
+        max_score = max(scores)
+
+        if max_score == min_score:
+            return [1.0] * len(scores)
+
+        return [
+            (max_score - score) / (max_score - min_score)
+            for score in scores
+        ]
+
+    def _infer_vector_score_mode(self) -> str:
+        """Infer whether vector-store scores are distances or similarities."""
+        mode = self.config.vector_score_mode.lower()
+        if mode in ("distance", "similarity"):
+            return mode
+
+        provider = getattr(getattr(self.vector_store, "config", None), "provider", "")
+        provider = (provider or "").lower()
+
+        if provider in ("faiss", "chroma"):
+            return "distance"
+        if provider in ("qdrant",):
+            return "similarity"
+
+        return "similarity"
+
+    def _document_key(self, doc: Document) -> str:
+        """Build a stable key for deduplicating retrieved documents."""
+        metadata = doc.metadata or {}
+        key_parts = [
+            str(metadata.get("source", "")),
+            str(metadata.get("page_number", "")),
+            str(metadata.get("start_index", "")),
+            doc.page_content[:500],
+        ]
+        raw_key = "\n".join(key_parts)
+        return hashlib.sha1(raw_key.encode("utf-8")).hexdigest()
+
+    def _filter_documents(
+        self,
+        docs: List[Document],
+        filter: Dict[str, Any],
+    ) -> List[Document]:
+        """Apply simple equality metadata filters to in-memory candidates."""
+        if not filter:
+            return docs
+
+        filtered = []
+        for doc in docs:
+            metadata = doc.metadata or {}
+            if all(metadata.get(key) == value for key, value in filter.items()):
+                filtered.append(doc)
+        return filtered
 
     def get_retriever(self, search_type: str = "similarity", **kwargs):
         """

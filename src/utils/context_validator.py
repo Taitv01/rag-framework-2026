@@ -155,8 +155,8 @@ class ContextValidator:
             import tiktoken
             self._encoding = tiktoken.get_encoding("cl100k_base")
             self._tiktoken_available = True
-        except ImportError:
-            pass
+        except Exception as e:
+            logger.debug(f"tiktoken encoding unavailable, using token estimation: {e}")
 
     def count_tokens(self, text: str) -> int:
         """
