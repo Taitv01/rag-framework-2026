@@ -188,6 +188,10 @@ class LLMManager:
             "streaming": self.config.streaming,
         }
 
+        base_url = os.getenv("OPENAI_BASE_URL")
+        if base_url:
+            kwargs["base_url"] = base_url
+
         if self.config.max_tokens:
             kwargs["max_tokens"] = self.config.max_tokens
 
@@ -216,6 +220,10 @@ class LLMManager:
             "temperature": self.config.temperature,
             "streaming": self.config.streaming,
         }
+
+        base_url = os.getenv("ANTHROPIC_BASE_URL")
+        if base_url:
+            kwargs["anthropic_api_url"] = base_url
 
         if self.config.max_tokens:
             kwargs["max_tokens"] = self.config.max_tokens
