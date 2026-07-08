@@ -11,7 +11,7 @@
 | Phase 1 | Vietnamese Language Foundation | ✅ Hoàn thành | 15 files |
 | Phase 2 | RAG Quality Improvements | ✅ Hoàn thành | 6 files |
 | Phase 2.5 | 2026 Modernization Update | ✅ Hoàn thành | 12+ files |
-| Phase 3 | Vietnamese Fairy Tale Features | ⏳ Chưa bắt đầu | - |
+| Phase 3 | Vietnamese Fairy Tale Features | In progress | 4 files |
 | Phase 4 | Production Readiness | ⏳ Chưa bắt đầu | - |
 | Phase 5 | Advanced Features | ⏳ Chưa bắt đầu | - |
 
@@ -368,3 +368,17 @@ datasets>=2.18.0
 - **RAGAS Docs**: https://docs.ragas.io/en/latest/
 - **DeepEval Docs**: https://docs.confident-ai.com/
 - **Langfuse Docs**: https://langfuse.com/docs
+
+
+---
+
+## Update 2026-07-08: Phase 3 Partial Implementation
+
+Implemented the first deterministic Vietnamese fairy tale layer:
+
+- `src/rag/cross_story_rag.py`: `CrossStoryRAG`, `StoryRecord`, motif search, moral pattern search, character comparison, and LangChain Document conversion.
+- `src/data/fairy_tale_builder.py`: `FairyTaleDatasetBuilder`, `FairyTaleRecord`, directory ingestion, JSON/JSONL export, and Document conversion.
+- `docs/phase3_fairy_tale_features.md`: usage notes and examples.
+- `tests/test_fairy_tale_phase3.py`: focused coverage for the new APIs.
+
+This covers the Phase 3 cross-story query and dataset-builder foundation without requiring an LLM or external services.
