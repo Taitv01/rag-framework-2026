@@ -33,6 +33,7 @@ from src.core.text_splitter import TextSplitter
 from src.core.embeddings import EmbeddingsManager
 from src.core.vector_store import VectorStoreManager
 from src.core.llm import LLMManager
+from src.core.markdown_index import MarkdownFolderIndexer
 
 
 class NaiveRAG:
@@ -170,6 +171,99 @@ Question: {question}"""
         self.vector_store.add_documents(chunks)
 
         return len(chunks)
+
+    def refresh_markdown_directory(
+        self,
+        directory: Union[str, Path],
+        metadata: Optional[Dict[str, Any]] = None,
+        manifest_path: Optional[Union[str, Path]] = None,
+        force: bool = False,
+        strict: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Refresh the knowledge base from a Markdown folder.
+
+        The folder is compared against a content-hash manifest. When files are
+        added, updated, or removed, chunks from this folder are replaced instead
+        of appended, preventing stale facts and duplicate chunks.
+        """
+        directory = Path(directory).resolve()
+        indexer = MarkdownFolderIndexer()
+        result, current_manifest = indexer.compare(
+            directory,
+            Path(manifest_path) if manifest_path else None,
+        )
+
+        if not force and not result.changed:
+            return result.to_dict()
+
+        docs = self.document_loader.load_markdown_directory(
+            directory,
+            metadata=metadata,
+            strict=strict,
+        )
+        chunks = self.text_splitter.split_documents(docs)
+        indexer.assign_stable_chunk_ids(chunks)
+
+        self._replace_source_root(str(directory), docs, chunks)
+        indexer.save_manifest(Path(result.manifest_path), current_manifest)
+
+        result.documents_loaded = len(docs)
+        result.chunks_indexed = len(chunks)
+        result.rebuilt = True
+        return result.to_dict()
+
+    def _replace_source_root(
+        self,
+        source_root: str,
+        docs: List[Document],
+        chunks: List[Document],
+    ) -> None:
+        """Replace all in-memory/vector chunks for one source folder."""
+        remaining_docs = [
+            doc for doc in self._documents
+            if (doc.metadata or {}).get("source_root") != source_root
+        ]
+        remaining_chunks = [
+            chunk for chunk in self._chunks
+            if (chunk.metadata or {}).get("source_root") != source_root
+        ]
+
+        provider = getattr(self.vector_store.config, "provider", "faiss")
+        if provider == "faiss":
+            self._documents = remaining_docs + docs
+            self._chunks = remaining_chunks + chunks
+            self._rebuild_vector_store_from_chunks()
+            return
+
+        self.vector_store.delete(filter={"source_root": source_root})
+        self._documents = remaining_docs + docs
+        self._chunks = remaining_chunks + chunks
+        self._add_chunks_to_vector_store(chunks)
+
+    def _rebuild_vector_store_from_chunks(self) -> None:
+        """Recreate the vector store from current chunks."""
+        config = self.vector_store.config
+        self.vector_store = VectorStoreManager(
+            provider=config.provider,
+            embeddings=self.embeddings,
+            collection_name=config.collection_name,
+            persist_directory=config.persist_directory,
+            url=config.url,
+            api_key=config.api_key,
+        )
+        self._add_chunks_to_vector_store(self._chunks)
+
+    def _add_chunks_to_vector_store(self, chunks: List[Document]) -> None:
+        """Add chunks with stable IDs when available."""
+        if not chunks:
+            return
+
+        ids = [chunk.metadata.get("chunk_id") for chunk in chunks]
+        if all(ids):
+            self.vector_store.add_documents(chunks, ids=ids)
+        else:
+            self.vector_store.add_documents(chunks)
 
     def add_texts(
         self,

@@ -147,3 +147,43 @@ class TestDocumentLoader:
             assert "key" in docs[0].page_content
         finally:
             Path(temp_path).unlink()
+
+    def test_load_markdown_directory_only_markdown(self):
+        """Test loading only Markdown files from a directory tree."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "b.txt").write_text("ignore me", encoding="utf-8")
+            (root / "a.md").write_text("# A\n\nRevenue: 100", encoding="utf-8")
+            subdir = root / "sub"
+            subdir.mkdir()
+            (subdir / "c.markdown").write_text("# C\n\nCost: 50", encoding="utf-8")
+
+            docs = self.loader.load_markdown_directory(root)
+
+            assert [doc.metadata["relative_source"] for doc in docs] == [
+                "a.md",
+                "sub/c.markdown",
+            ]
+            assert all(doc.metadata["file_type"] == "markdown" for doc in docs)
+            assert all("source_root" in doc.metadata for doc in docs)
+            assert all("source_sha256" in doc.metadata for doc in docs)
+
+    def test_markdown_source_hash_changes_after_update(self):
+        """Test source hash metadata changes when Markdown content changes."""
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".md",
+            delete=False,
+            encoding="utf-8",
+        ) as f:
+            f.write("# Metrics\n\nRevenue: 100")
+            temp_path = f.name
+
+        try:
+            first_hash = self.loader.load(temp_path)[0].metadata["source_sha256"]
+            Path(temp_path).write_text("# Metrics\n\nRevenue: 200", encoding="utf-8")
+            second_hash = self.loader.load(temp_path)[0].metadata["source_sha256"]
+
+            assert first_hash != second_hash
+        finally:
+            Path(temp_path).unlink()

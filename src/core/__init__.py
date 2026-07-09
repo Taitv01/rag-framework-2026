@@ -15,6 +15,7 @@ from src.core.vietnamese_processor import VietnameseProcessor, get_vietnamese_pr
 from src.core.metadata_enhancer import MetadataEnhancer
 from src.core.graph_store import Neo4jBackend
 from src.core.web_search import SafeWebSearcher, DuckDuckGoSearchProvider, TavilySearchProvider, create_web_searcher
+from src.core.markdown_index import MarkdownFolderIndexer, MarkdownRefreshResult
 
 __all__ = [
     "DocumentLoader",
@@ -31,4 +32,6 @@ __all__ = [
     "DuckDuckGoSearchProvider",
     "TavilySearchProvider",
     "create_web_searcher",
+    "MarkdownFolderIndexer",
+    "MarkdownRefreshResult",
 ]

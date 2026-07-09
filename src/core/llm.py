@@ -28,6 +28,8 @@ from dataclasses import dataclass, field
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_core.language_models import BaseChatModel
 
+from src.utils.config import load_environment
+
 logger = logging.getLogger(__name__)
 
 
@@ -174,6 +176,7 @@ class LLMManager:
                 "Install it with: pip install langchain-openai"
             )
 
+        load_environment()
         api_key = self.config.api_key or os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError(
@@ -207,6 +210,7 @@ class LLMManager:
                 "Install it with: pip install langchain-anthropic"
             )
 
+        load_environment()
         api_key = self.config.api_key or os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
             raise ValueError(

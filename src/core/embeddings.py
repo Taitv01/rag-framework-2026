@@ -26,6 +26,8 @@ Usage:
 from typing import List, Optional, Dict, Any, Union
 from dataclasses import dataclass, field
 
+from src.utils.config import load_environment
+
 
 @dataclass
 class EmbeddingConfig:
@@ -233,6 +235,7 @@ class EmbeddingsManager:
 
         import os
 
+        load_environment()
         api_key = self.config.api_key or os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError(
@@ -257,6 +260,7 @@ class EmbeddingsManager:
 
         import os
 
+        load_environment()
         api_key = self.config.api_key or os.getenv("COHERE_API_KEY")
         if not api_key:
             raise ValueError(

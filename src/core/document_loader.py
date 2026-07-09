@@ -19,11 +19,12 @@ Usage:
     docs = loader.load_directory("path/to/docs/")
 """
 
-import os
 import json
 import csv
+import hashlib
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Dict, Any, Union, Iterable
 from dataclasses import dataclass, field
 
 from langchain_core.documents import Document
@@ -139,7 +140,10 @@ class DocumentLoader:
         self,
         directory: Union[str, Path],
         glob_pattern: str = "**/*",
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        extensions: Optional[Iterable[str]] = None,
+        exclude_dirs: Optional[Iterable[str]] = None,
+        strict: bool = False,
     ) -> List[Document]:
         """
         Load all documents from a directory.
@@ -148,28 +152,71 @@ class DocumentLoader:
             directory: Path to directory
             glob_pattern: Glob pattern for file matching
             metadata: Additional metadata to attach to all documents
+            extensions: Optional file extensions to include (for example [".md"])
+            exclude_dirs: Directory names to skip while scanning
+            strict: Raise on the first load error instead of warning and continuing
 
         Returns:
             List of Document objects from all files
         """
-        directory = Path(directory)
+        directory = Path(directory).resolve()
 
         if not directory.exists():
             raise FileNotFoundError(f"Directory not found: {directory}")
 
         all_docs = []
+        allowed_extensions = None
+        if extensions:
+            allowed_extensions = {
+                ext.lower() if str(ext).startswith(".") else f".{str(ext).lower()}"
+                for ext in extensions
+            }
+        excluded = set(exclude_dirs or [])
 
-        for file_path in directory.glob(glob_pattern):
+        for file_path in sorted(directory.glob(glob_pattern)):
             if file_path.is_file():
+                if any(part in excluded for part in file_path.parts):
+                    continue
+
                 file_ext = file_path.suffix.lower()
+                if allowed_extensions and file_ext not in allowed_extensions:
+                    continue
+
                 if file_ext in self.SUPPORTED_EXTENSIONS:
                     try:
                         docs = self.load(file_path, metadata)
+                        relative_source = file_path.relative_to(directory).as_posix()
+                        for doc in docs:
+                            doc.metadata["source_root"] = str(directory)
+                            doc.metadata["relative_source"] = relative_source
                         all_docs.extend(docs)
                     except Exception as e:
+                        if strict:
+                            raise
                         print(f"Warning: Failed to load {file_path}: {e}")
 
         return all_docs
+
+    def load_markdown_directory(
+        self,
+        directory: Union[str, Path],
+        metadata: Optional[Dict[str, Any]] = None,
+        strict: bool = False,
+    ) -> List[Document]:
+        """
+        Load only Markdown files from a directory tree.
+
+        This is intended for RAG knowledge folders where non-Markdown files
+        should not accidentally enter the index.
+        """
+        return self.load_directory(
+            directory=directory,
+            glob_pattern="**/*",
+            metadata=metadata,
+            extensions=(".md", ".markdown"),
+            exclude_dirs=(".git", ".venv", "__pycache__", ".pytest_cache"),
+            strict=strict,
+        )
 
     def _get_file_type(self, file_path: Path) -> str:
         """Detect file type from extension."""
@@ -185,14 +232,32 @@ class DocumentLoader:
     def _get_file_metadata(self, file_path: Path) -> Dict[str, Any]:
         """Extract file metadata."""
         stat = file_path.stat()
+        resolved_path = file_path.resolve()
 
         return {
-            "source": str(file_path),
+            "source": str(resolved_path),
+            "absolute_source": str(resolved_path),
             "file_name": file_path.name,
             "file_type": self._get_file_type(file_path),
             "file_size": stat.st_size,
             "file_extension": file_path.suffix.lower(),
+            "created_at": self._format_timestamp(stat.st_ctime),
+            "modified_at": self._format_timestamp(stat.st_mtime),
+            "source_mtime_ns": stat.st_mtime_ns,
+            "source_sha256": self._sha256_file(file_path),
         }
+
+    def _format_timestamp(self, timestamp: float) -> str:
+        """Format a filesystem timestamp as UTC ISO 8601."""
+        return datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat()
+
+    def _sha256_file(self, file_path: Path) -> str:
+        """Return a stable content hash for update detection."""
+        digest = hashlib.sha256()
+        with open(file_path, "rb") as f:
+            for block in iter(lambda: f.read(1024 * 1024), b""):
+                digest.update(block)
+        return digest.hexdigest()
 
     def _load_pdf(self, file_path: Path, metadata: Dict[str, Any]) -> List[Document]:
         """Load PDF document."""

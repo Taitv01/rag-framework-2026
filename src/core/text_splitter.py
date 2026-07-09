@@ -84,6 +84,16 @@ class TextSplitter:
         # Default separators for recursive splitting
         self._default_separators = ["\n\n", "\n", ". ", " ", ""]
 
+    @property
+    def chunk_size(self) -> int:
+        """Configured maximum chunk size."""
+        return self.config.chunk_size
+
+    @property
+    def chunk_overlap(self) -> int:
+        """Configured overlap between chunks."""
+        return self.config.chunk_overlap
+
     def split_documents(
         self,
         documents: List[Document],

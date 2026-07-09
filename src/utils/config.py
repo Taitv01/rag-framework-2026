@@ -25,6 +25,26 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 
+def load_environment(env_file: Optional[str] = None) -> None:
+    """
+    Load environment files in a predictable order.
+
+    `.env.local` is loaded after `.env` and can override local developer
+    secrets such as OPENAI_API_KEY without changing the committed template.
+    """
+    if env_file:
+        load_dotenv(env_file)
+        return
+
+    env_path = Path.cwd() / ".env"
+    if env_path.exists():
+        load_dotenv(env_path)
+
+    local_env_path = Path.cwd() / ".env.local"
+    if local_env_path.exists():
+        load_dotenv(local_env_path, override=True)
+
+
 class Config:
     """
     Configuration manager.
@@ -97,14 +117,8 @@ class Config:
         Args:
             env_file: Path to .env file (default: auto-detect)
         """
-        # Load .env file
-        if env_file:
-            load_dotenv(env_file)
-        else:
-            # Try to find .env file
-            env_path = Path.cwd() / ".env"
-            if env_path.exists():
-                load_dotenv(env_path)
+        # Load .env and .env.local files
+        load_environment(env_file)
 
     def get(self, key: str, default: Any = None) -> Any:
         """

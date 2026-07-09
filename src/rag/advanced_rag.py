@@ -44,6 +44,7 @@ from src.core.embeddings import EmbeddingsManager
 from src.core.vector_store import VectorStoreManager
 from src.core.retriever import RetrieverManager
 from src.core.llm import LLMManager
+from src.core.markdown_index import MarkdownFolderIndexer
 
 logger = logging.getLogger(__name__)
 
@@ -306,6 +307,53 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
                 docs = self.document_loader.load(source, metadata=metadata)
             all_docs.extend(docs)
 
+        return self._index_loaded_documents(all_docs)
+
+    def refresh_markdown_directory(
+        self,
+        directory: Union[str, Path],
+        metadata: Optional[Dict[str, Any]] = None,
+        manifest_path: Optional[Union[str, Path]] = None,
+        force: bool = False,
+        strict: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Refresh the knowledge base from a Markdown folder.
+
+        The folder is compared against a content-hash manifest. When files are
+        added, updated, or removed, chunks from this folder are replaced instead
+        of appended, preventing stale facts and duplicate chunks.
+        """
+        directory = Path(directory).resolve()
+        indexer = MarkdownFolderIndexer()
+        result, current_manifest = indexer.compare(
+            directory,
+            Path(manifest_path) if manifest_path else None,
+        )
+
+        if not force and not result.changed:
+            return result.to_dict()
+
+        docs = self.document_loader.load_markdown_directory(
+            directory,
+            metadata=metadata,
+            strict=strict,
+        )
+        self._drop_source_root(str(directory))
+        chunks_indexed = self._index_loaded_documents(docs)
+        indexer.save_manifest(Path(result.manifest_path), current_manifest)
+
+        result.documents_loaded = len(docs)
+        result.chunks_indexed = chunks_indexed
+        result.rebuilt = True
+        return result.to_dict()
+
+    def _index_loaded_documents(self, all_docs: List[Document]) -> int:
+        """Split, index, and register already-loaded documents."""
+        if not all_docs:
+            self._refresh_retriever()
+            return 0
+
         self._documents.extend(all_docs)
 
         # Split into chunks (contextual or standard)
@@ -326,7 +374,7 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
 
         # Create smaller child chunks for retrieval, linking to parents
         child_splitter = TextSplitter(
-            chunk_size=self.text_splitter.chunk_size // 2,
+            chunk_size=max(1, self.text_splitter.chunk_size // 2),
             chunk_overlap=self.text_splitter.chunk_overlap,
         )
         child_chunks = []
@@ -339,12 +387,68 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
         # Use child chunks for retrieval if any were created,
         # otherwise fall back to the parent chunks themselves
         retrieval_chunks = child_chunks if child_chunks else chunks
+        MarkdownFolderIndexer().assign_stable_chunk_ids(retrieval_chunks)
         self._chunks.extend(retrieval_chunks)
 
         # Add to vector store
-        self.vector_store.add_documents(retrieval_chunks)
+        self._add_chunks_to_vector_store(retrieval_chunks)
 
         # Initialize retriever
+        self._refresh_retriever()
+
+        return len(retrieval_chunks)
+
+    def _drop_source_root(self, source_root: str) -> None:
+        """Remove one source folder from memory and the vector store."""
+        self._documents = [
+            doc for doc in self._documents
+            if (doc.metadata or {}).get("source_root") != source_root
+        ]
+        self._chunks = [
+            chunk for chunk in self._chunks
+            if (chunk.metadata or {}).get("source_root") != source_root
+        ]
+        self._parent_chunks = [
+            chunk for chunk in self._parent_chunks
+            if (chunk.metadata or {}).get("source_root") != source_root
+        ]
+
+        provider = getattr(self.vector_store.config, "provider", "faiss")
+        if provider == "faiss":
+            self._rebuild_vector_store_from_chunks()
+        else:
+            self.vector_store.delete(filter={"source_root": source_root})
+
+    def _rebuild_vector_store_from_chunks(self) -> None:
+        """Recreate the vector store from current chunks."""
+        config = self.vector_store.config
+        self.vector_store = VectorStoreManager(
+            provider=config.provider,
+            embeddings=self.embeddings,
+            collection_name=config.collection_name,
+            persist_directory=config.persist_directory,
+            url=config.url,
+            api_key=config.api_key,
+        )
+        self._add_chunks_to_vector_store(self._chunks)
+
+    def _add_chunks_to_vector_store(self, chunks: List[Document]) -> None:
+        """Add chunks with stable IDs when available."""
+        if not chunks:
+            return
+
+        ids = [chunk.metadata.get("chunk_id") for chunk in chunks]
+        if all(ids):
+            self.vector_store.add_documents(chunks, ids=ids)
+        else:
+            self.vector_store.add_documents(chunks)
+
+    def _refresh_retriever(self) -> None:
+        """Refresh hybrid/reranking retriever state from current chunks."""
+        if not self._chunks:
+            self._retriever = None
+            return
+
         self._retriever = RetrieverManager(
             vector_store=self.vector_store,
             embeddings=self.embeddings,
@@ -353,8 +457,6 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
             use_hybrid=self.use_hybrid,
             use_reranking=self.use_reranking,
         )
-
-        return len(retrieval_chunks)
 
     def add_texts(
         self,

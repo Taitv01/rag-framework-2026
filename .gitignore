@@ -110,3 +110,4 @@ models/
 tmp/
 temp/
 *.tmp
+.env.local
