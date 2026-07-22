@@ -20,6 +20,7 @@ Usage:
 """
 
 import json
+import logging
 import os
 import re
 import shutil
@@ -27,6 +28,8 @@ import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Dict, Any, Union, Tuple
+
+logger = logging.getLogger(__name__)
 
 from langchain_core.documents import Document
 from src.core.document_loader import DocumentLoader
