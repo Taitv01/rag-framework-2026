@@ -1,175 +1,191 @@
-# Ultimate RAG Framework
+# 🚀 Ultimate RAG Framework (2026 Edition)
 
-Ultimate RAG Framework is a Python toolkit for building Retrieval-Augmented Generation systems. It supports simple RAG pipelines, advanced retrieval, graph and agentic workflows, Vietnamese processing, and now update-safe Markdown folder ingestion.
+[![Python Version](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-1.1.0-009688.svg)](https://fastapi.tiangolo.com/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
+[![Vietnamese NLP](https://img.shields.io/badge/NLP-Vietnamese_Aware-red.svg)](https://huggingface.co/BAAI/bge-m3)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-This repository is suitable for a living knowledge base: reports, MMO notes, operating documents, story/worldbuilding files, and any `.md` folder where numbers and facts change over time.
+**Ultimate RAG Framework** là bộ công cụ Python toàn diện cho việc xây dựng, đánh giá và triển khai các hệ thống **Retrieval-Augmented Generation (RAG)** hiện đại. 
 
-## Main Capabilities
+Hệ thống được tối ưu hóa đặc biệt cho **Tiếng Việt**, hỗ trợ đa dạng pipeline RAG (Naive, Advanced, Agentic, Graph, Adaptive, Cross-Story), cơ chế **tự động cập nhật file Markdown theo hash SHA-256**, cùng khả năng **Real-time SSE Streaming** và **Langfuse Tracing** đạt chuẩn Production.
 
-- Markdown folder refresh with content hashes and a persistent manifest.
-- Multi-format document loading: `.txt`, `.md`, `.pdf`, `.docx`, `.html`, `.json`, `.csv`.
-- Naive RAG and Advanced RAG pipelines.
-- Hybrid retrieval, reranking, parent-child chunking, and query rewriting hooks.
-- Agentic, graph, adaptive, and cross-story RAG modules for larger workflows.
-- Vietnamese-aware processing and examples.
-- Vector store support for FAISS, Chroma, and Qdrant.
-- `.env.local` support for local secrets without committing them.
+---
 
-## New Markdown Refresh Flow
+## 🌟 Tính Năng Nổi Bật (Key Capabilities)
 
-Use `refresh_markdown_directory()` when your `.md` files are updated regularly and you need the vector index to reflect the latest data.
+### 1. 🇻🇳 Tối Ưu Hóa Ngôn Ngữ Tiếng Việt (Vietnamese NLP Engine)
+- **Embedding Models**: Hỗ trợ mặc định `BAAI/bge-m3` (1024d), `keepitreal/vietnamese-sbert` (768d), `bkai-foundation-models/vietnamese-bi-encoder`.
+- **Vietnamese Reranker**: Tích hợp `AITeamVN/Vietnamese_Reranker` & `Qwen/Qwen3-Reranker-0.6B`.
+- **Word Segmentation**: Tách từ Tiếng Việt chuyên sâu với `underthesea` (xử lý từ ghép "Thạch_Sanh", "đại_bàng").
 
-The refresh flow:
+### 2. ⚡ Real-Time SSE Streaming & Production API
+- **Server-Sent Events (SSE)**: API `/query/stream` phản hồi câu trả lời theo thời gian thực (chunk-by-chunk) cho trải nghiệm người dùng tương tác tức thì.
+- **RESTful Endpoints**: `/query`, `/query/stream`, `/documents`, `/ingest`, `/search`, `/health`, `/ready`.
+- **Rate Limiting & Authentication**: Giới hạn tần suất truy cập sliding-window và xác thực API-Key.
 
-1. Scans the Markdown folder recursively.
-2. Computes SHA-256 hashes for each source file.
-3. Compares the current folder state with `.rag_markdown_manifest.json`.
-4. Reloads and rechunks the folder only when files are added, updated, removed, or when `force=True`.
-5. Replaces old chunks for that folder instead of appending duplicates.
-6. Stores stable `document_id`, `chunk_id`, and `chunk_sha256` metadata.
+### 3. 📂 Thư Mục Markdown Refresh Tự Động (SHA-256 Incremental Ingestion)
+- Tự động quét thư mục `.md`, tính toán hash SHA-256 cho từng file.
+- **Chỉ cập nhật/thêm mới/xóa các file bị thay đổi** mà không cần index lại toàn bộ cơ sở dữ liệu.
+- Phù hợp cho kho tri thức sống (living knowledge base): báo cáo, ghi chú MMO, tài liệu vận hành, kịch bản sáng tác.
 
-The returned result includes `added`, `updated`, `removed`, `changed`, `documents_loaded`, `chunks_indexed`, `rebuilt`, and `manifest_path`.
+### 4. 🧩 Đa Dạng RAG Pipelines (Multi-Pipeline Architecture)
+- **Naive RAG**: Pipeline RAG cơ bản, siêu nhanh.
+- **Advanced RAG**: Hybrid Search (Dense Vector + BM25) + Reranking + Parent-Child Chunking + Semantic Cache + HyDE.
+- **Agentic RAG**: AI Agents tự động đánh giá độ liên quan của tài liệu, chấm điểm ảo giác (hallucination) và viết lại câu hỏi (query rewrite).
+- **Graph RAG**: Kết hợp Đồ thị tri thức (Knowledge Graph) để truy xuất quan hệ nhân vật, địa điểm, sự kiện.
+- **Adaptive RAG**: Tự động phân loại độ phức tạp câu hỏi (Simple/Medium/Complex) để định tuyến pipeline tối ưu nhất.
+- **Cross-Story RAG**: Tìm kiếm motif, so sánh nhân vật và phân tích bài học đạo đức trong kho truyện cổ tích/tiểu thuyết.
 
-## Installation
+### 5. 📊 Production Tracing & Monitoring (Langfuse & Docker)
+- **Langfuse Integration**: Đo lường chi phí token, độ trễ từng bước truy xuất, versioning prompt.
+- **Graceful Fallback**: Tự động chuyển sang ghi log nội bộ mượt mà khi không cấu hình khóa Langfuse.
+- **Containerization**: `docker-compose.yml` sẵn sàng với 3 dịch vụ: FastAPI Server (`rag-api`), Qdrant Vector Store (`rag-qdrant`), và Redis Cache (`rag-redis`).
+
+---
+
+## 🏗️ Cấu Trúc Dự Án (Project Layout)
+
+```text
+D:\RAG/
+├── src/
+│   ├── api/             # FastAPI REST Server & SSE Streaming endpoints
+│   ├── core/            # Loaders, Splitters, Embeddings, Retrievers, Vietnamese NLP, Markdown Indexer
+│   ├── rag/             # Naive, Advanced, Agentic, Graph, Adaptive, và Cross-Story RAG pipelines
+│   ├── agents/          # Retrieval, Grading, Hallucination, và Query Rewrite Agents
+│   ├── story/           # Consistency Checker, Character Manager, World Builder cho truyện dài
+│   ├── monitoring/      # Langfuse Tracer & Metrics Collector
+│   ├── evaluation/      # RAG metrics & RAGAS / DeepEval pipeline
+│   └── utils/           # Semantic Cache, Config loader, Logging
+├── docs/                # Tài liệu chi tiết & hướng dẫn triển khai
+├── examples/            # Ví dụ mã nguồn có thể chạy trực tiếp
+├── tests/               # Bộ test suite tự động (150+ test cases PASS)
+├── Dockerfile           # Docker multi-stage build definition
+├── docker-compose.yml   # Multi-service deployment (API + Qdrant + Redis)
+├── PHASES.md            # Lộ trình phát triển qua từng giai đoạn
+├── pyproject.toml       # Quản lý dependencies & cấu hình dự án
+└── README.md            # Tài liệu hướng dẫn sử dụng
+```
+
+---
+
+## ⚙️ Cài Đặt & Cấu Hình (Installation & Setup)
+
+### 1. Khởi Tạo Môi Trường Python
 
 ```powershell
+# Tạo môi trường ảo
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
+
+# Cập nhật pip & cài đặt dependencies
 py -m pip install --upgrade pip
 py -m pip install -e ".[dev]"
 ```
 
-If you only need runtime dependencies:
+### 2. Cấu Hình Biến Môi Trường (`.env.local`)
 
-```powershell
-py -m pip install -r requirements.txt
-```
-
-## Local Configuration
-
-Create `.env.local` in the repo root for local secrets. This file is ignored by Git.
+Tạo file `.env.local` tại thư mục gốc dự án (file này được Git phớt lờ để bảo vệ bí mật):
 
 ```dotenv
-OPENAI_API_KEY=<your-openai-api-key>
+# API Keys
+OPENAI_API_KEY=sk-your-openai-api-key
+ANTHROPIC_API_KEY=your-anthropic-api-key
+
+# Tracing (Tùy chọn)
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_HOST=https://cloud.langfuse.com
+
+# Server & Auth Settings
+ENABLE_API_AUTH=false
+API_KEYS=rag_secret_key_123
+CORS_ORIGINS=http://localhost:3000,http://localhost:8000
 ```
 
-The config loader reads `.env` first, then `.env.local`, so local values can override shared defaults.
+---
 
-## Quick Start: Markdown Knowledge Base
+## 💡 Hướng Dẫn Sử Dụng Nhanh (Quick Start)
 
-```python
-from src.rag import NaiveRAG
-
-rag = NaiveRAG()
-
-markdown_dir = r"D:\E & D Cá nhân\MMO_Project_2026\RAG"
-result = rag.refresh_markdown_directory(markdown_dir)
-
-print(result)
-answer = rag.query("Tóm tắt số liệu mới nhất trong các file Markdown.")
-print(answer)
-```
-
-Run the same call again after editing, adding, or deleting `.md` files. If nothing changed, the method returns quickly and does not rebuild the index.
-
-To force a rebuild:
-
-```python
-result = rag.refresh_markdown_directory(markdown_dir, force=True)
-```
-
-To use a custom manifest path:
-
-```python
-result = rag.refresh_markdown_directory(
-    markdown_dir,
-    manifest_path=".cache/rag_markdown_manifest.json",
-)
-```
-
-## Advanced RAG Example
+### 1. Cập Nhật Thư Mục Markdown (Incremental Ingestion)
 
 ```python
 from src.rag import AdvancedRAG
 
-rag = AdvancedRAG(
-    chunk_size=1000,
-    chunk_overlap=200,
-    retrieval_method="hybrid",
-)
+# Khởi tạo Advanced RAG với Hybrid Search
+rag = AdvancedRAG(retrieval_method="hybrid")
 
-result = rag.refresh_markdown_directory(r"D:\E & D Cá nhân\MMO_Project_2026\RAG")
-print(result)
+# Quét và cập nhật thư mục Markdown (chỉ index file thêm mới hoặc sửa đổi)
+result = rag.refresh_markdown_directory(r"D:\path\to\your\markdown_folder")
+print("Kết quả refresh:", result)
 
-response = rag.query("Các số liệu quan trọng nào vừa thay đổi?")
-print(response)
+# Truy vấn dữ liệu
+answer = rag.query("Các số liệu mới nhất trong tài liệu là gì?")
+print("Trả lời:", answer)
 ```
 
-## Loading Markdown Directly
-
-For lower-level workflows, use the document loader directly:
+### 2. Sử Dụng Cross-Story RAG Cho Truyện Cổ Tích / Truyện Dài
 
 ```python
-from src.core import DocumentLoader
+from src.rag import CrossStoryRAG
 
-loader = DocumentLoader()
-docs = loader.load_markdown_directory(r"D:\E & D Cá nhân\MMO_Project_2026\RAG")
+cross_rag = CrossStoryRAG()
 
-for doc in docs:
-    print(doc.metadata["relative_source"], doc.metadata["source_sha256"])
+# Tìm kiếm motif cổ tích trong kho dữ liệu
+motifs = cross_rag.find_motifs("con vật biết nói", top_k=2)
+print("Motifs tìm thấy:", motifs)
+
+# So sánh 2 nhân vật
+comparison = cross_rag.compare_characters("Thạch Sanh", "Lý Thông")
+print("So sánh nhân vật:", comparison)
 ```
 
-Each loaded Markdown document includes metadata such as `source`, `source_root`, `relative_source`, `source_sha256`, `source_mtime`, and `source_mtime_ns`.
+---
 
-## Vector Store Notes
+## 🌐 Triển Khai API Server & Real-Time Streaming
 
-- FAISS refresh rebuilds the in-memory vector store from the current chunk list.
-- Chroma and Qdrant refresh delete chunks by `source_root`, then add the new chunks.
-- Stable chunk IDs prevent avoidable duplication when a supported vector store accepts explicit IDs.
-
-## Project Layout
-
-```text
-src/core/                 Core loaders, splitters, embeddings, LLM, vector store, Markdown indexer
-src/rag/                  Naive, advanced, agentic, graph, adaptive, and cross-story RAG pipelines
-src/agents/               Retrieval, grading, hallucination, and query rewrite agents
-src/story/                Long-form story and consistency tooling
-src/evaluation/           RAG metrics and evaluation helpers
-examples/                 Runnable examples and demos
-tests/                    Unit and pipeline tests
-```
-
-Key files for Markdown refresh:
-
-```text
-src/core/document_loader.py
-src/core/markdown_index.py
-src/rag/naive_rag.py
-src/rag/advanced_rag.py
-tests/test_markdown_index.py
-tests/test_document_loader.py
-tests/test_config_env.py
-```
-
-## Verification
-
-Recommended checks before pushing changes:
+### 1. Chạy API Server Trực Tiếp (Local)
 
 ```powershell
-py -m compileall src tests
-py -m pytest tests/test_document_loader.py tests/test_markdown_index.py tests/test_config_env.py -q
-py -m pytest tests/test_rag_pipeline.py -q -k "not embeddings_manager"
+uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-The skipped `embeddings_manager` path is intentionally excluded in the focused command when a full embedding model download or provider-backed test is not needed.
+* **Swagger UI Docs**: `http://localhost:8000/docs`
+* **Health Check**: `http://localhost:8000/health`
 
-## Data And Secret Safety
+### 2. Gọi API Streaming với SSE (cURL Example)
 
-- Do not commit `.env.local` or any real API key.
-- The Markdown manifest stores hashes and metadata, not secret values.
-- If Markdown files contain sensitive business data, keep the repository and vector store private.
-- Review generated answers against source documents before using them for reporting or financial decisions.
+```bash
+curl -X POST "http://localhost:8000/query/stream" \
+     -H "Content-Type: application/json" \
+     -d '{"question": "Tóm tắt quy trình xử lý Tiếng Việt trong RAG"}'
+```
 
-## License
+### 3. Chạy Bằng Docker Compose (Production)
 
-MIT. See `LICENSE` for details.
+```powershell
+# Khởi động full-stack API + Qdrant + Redis
+docker-compose up -d --build
+```
+
+---
+
+## 🧪 Kiểm Thử Hệ Thống (Verification & Testing)
+
+Chạy bộ kiểm thử tự động với `pytest`:
+
+```powershell
+# Kiểm tra biên dịch code
+py -m compileall src tests
+
+# Chạy toàn bộ unit test suite
+py -m pytest -v
+```
+
+---
+
+## 📜 Giấy Phép & Đóng Góp (License)
+
+Dự án được phát hành theo giấy phép **[MIT License](LICENSE)**.
+
+- **GitHub Repository**: [https://github.com/Taitv01/rag-framework-2026.git](https://github.com/Taitv01/rag-framework-2026.git)
