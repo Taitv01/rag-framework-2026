@@ -70,6 +70,10 @@ class NaiveRAG:
         embedding_provider: str = "huggingface",
         embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
         vector_store_provider: str = "faiss",
+        collection_name: str = "default",
+        persist_directory: Optional[str] = None,
+        vector_store_url: Optional[str] = None,
+        vector_store_api_key: Optional[str] = None,
         chunk_size: int = 500,
         chunk_overlap: int = 50,
         retrieval_k: int = 4,
@@ -85,6 +89,10 @@ class NaiveRAG:
             embedding_provider: Embedding provider ('huggingface', 'openai')
             embedding_model: Embedding model name
             vector_store_provider: Vector store ('faiss', 'chroma')
+            collection_name: Vector store collection/index name
+            persist_directory: Directory for persistent local vector stores
+            vector_store_url: URL for remote vector stores
+            vector_store_api_key: API key for remote vector stores
             chunk_size: Chunk size for text splitting
             chunk_overlap: Overlap between chunks
             retrieval_k: Number of documents to retrieve
@@ -103,6 +111,10 @@ class NaiveRAG:
         self.vector_store = VectorStoreManager(
             provider=vector_store_provider,
             embeddings=self.embeddings,
+            collection_name=collection_name,
+            persist_directory=persist_directory,
+            url=vector_store_url,
+            api_key=vector_store_api_key,
         )
         self.llm = LLMManager(
             provider=llm_provider,

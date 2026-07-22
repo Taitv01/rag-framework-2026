@@ -9,16 +9,17 @@ Features:
 - Response time tracking
 - Token usage tracking
 - Error rate monitoring
+- Langfuse LLM & RAG Tracing
 - Usage dashboard
 
 Usage:
-    from src.monitoring import MetricsCollector
+    from src.monitoring import MetricsCollector, LangfuseTracer
 
     metrics = MetricsCollector()
-    metrics.track_query(question, response_time, tokens_used)
-    stats = metrics.get_analytics(period="7d")
+    tracer = LangfuseTracer()
 """
 
 from src.monitoring.metrics_collector import MetricsCollector
+from src.monitoring.langfuse_tracer import LangfuseTracer
 
-__all__ = ["MetricsCollector"]
+__all__ = ["MetricsCollector", "LangfuseTracer"]

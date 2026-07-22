@@ -67,78 +67,74 @@ pytest tests/test_rag_pipeline.py
 
 ## Docker Deployment
 
-### Dockerfile
+The repository includes a production-oriented `Dockerfile` and `docker-compose.yml`.
+The compose stack starts:
 
-```dockerfile
-FROM python:3.11-slim
+- `rag-api`: FastAPI application on port `8000`
+- `qdrant`: production vector store on ports `6333` and `6334`
+- `redis`: cache service on port `6379`
 
-WORKDIR /app
+### Configure
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements
-COPY requirements.txt .
-
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application
-COPY . .
-
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-
-# Run application
-CMD ["python", "examples/04_production_rag.py"]
+```bash
+cp .env.example .env
 ```
 
-### Docker Compose
+For the compose profile, use these production values in `.env`:
 
-```yaml
-version: '3.8'
-
-services:
-  rag-app:
-    build: .
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - DEFAULT_LLM_MODEL=gpt-4o-mini
-    volumes:
-      - ./data:/app/data
-    ports:
-      - "8000:8000"
-
-  qdrant:
-    image: qdrant/qdrant:latest
-    ports:
-      - "6333:6333"
-    volumes:
-      - qdrant_data:/qdrant/storage
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-
-volumes:
-  qdrant_data:
+```bash
+DOCKER_DEFAULT_VECTOR_STORE=qdrant
+DOCKER_COLLECTION_NAME=rag_documents
+DOCKER_QDRANT_URL=http://qdrant:6333
+DOCKER_REDIS_URL=redis://redis:6379/0
+DOCKER_ENABLE_API_AUTH=true
+API_KEYS=replace_with_a_long_random_key
+OPENAI_API_KEY=sk-...
 ```
 
-### Build and Run
+The non-Docker `QDRANT_URL` can stay `http://localhost:6333` for local Python
+runs. The compose stack uses `DOCKER_QDRANT_URL` internally.
+
+### Build And Run
 
 ```bash
 # Build image
 docker build -t ultimate-rag .
 
-# Run container
-docker run -it --env-file .env ultimate-rag
+# Run the production stack
+docker compose up -d --build
 
-# Run with docker-compose
-docker-compose up -d
+# Check health
+curl http://localhost:8000/health
+curl http://localhost:8000/ready
+
+# View logs
+docker compose logs -f rag-api
 ```
+
+### API Requests
+
+When `ENABLE_API_AUTH=true`, pass the key with `X-API-Key`:
+
+```bash
+curl -X POST http://localhost:8000/query \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: replace_with_a_long_random_key" \
+  -d '{"question":"RAG này đang có những tài liệu nào?","k":5}'
+```
+
+### Data And Cache Volumes
+
+The compose stack persists state in Docker volumes:
+
+- `qdrant_storage`: vector database data
+- `redis_data`: Redis append-only data
+- `huggingface_cache`: downloaded embedding/reranker models
+
+The app also mounts local directories:
+
+- `./data:/app/data`
+- `./logs:/app/logs`
 
 ## Cloud Deployment
 

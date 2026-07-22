@@ -1,0 +1,94 @@
+services:
+  rag-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ultimate-rag:local
+    container_name: rag-api
+    restart: unless-stopped
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      COHERE_API_KEY: ${COHERE_API_KEY:-}
+      DEFAULT_LLM_PROVIDER: ${DEFAULT_LLM_PROVIDER:-openai}
+      DEFAULT_LLM_MODEL: ${DEFAULT_LLM_MODEL:-gpt-4o-mini}
+      DEFAULT_EMBEDDING_PROVIDER: ${DEFAULT_EMBEDDING_PROVIDER:-huggingface}
+      DEFAULT_EMBEDDING_MODEL: ${DEFAULT_EMBEDDING_MODEL:-BAAI/bge-m3}
+      DEFAULT_VECTOR_STORE: ${DOCKER_DEFAULT_VECTOR_STORE:-qdrant}
+      DEFAULT_COLLECTION_NAME: ${DOCKER_COLLECTION_NAME:-rag_documents}
+      QDRANT_URL: ${DOCKER_QDRANT_URL:-http://qdrant:6333}
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      REDIS_URL: ${DOCKER_REDIS_URL:-redis://redis:6379/0}
+      ENABLE_API_AUTH: ${DOCKER_ENABLE_API_AUTH:-true}
+      API_KEYS: ${API_KEYS:-rag_change_me}
+      API_RATE_LIMIT: ${API_RATE_LIMIT:-100}
+      API_RATE_LIMIT_WINDOW: ${API_RATE_LIMIT_WINDOW:-60}
+      MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-25}
+      ENABLE_HYBRID_SEARCH: ${ENABLE_HYBRID_SEARCH:-true}
+      ENABLE_RERANKING: ${ENABLE_RERANKING:-true}
+      ENABLE_CACHE: ${ENABLE_CACHE:-true}
+      CACHE_TTL: ${CACHE_TTL:-3600}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:7860,http://localhost:8000}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      HF_HOME: /app/.cache/huggingface
+      TRANSFORMERS_CACHE: /app/.cache/huggingface
+    ports:
+      - "${RAG_API_PORT:-8000}:8000"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - huggingface_cache:/app/.cache/huggingface
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=5).read()"
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: rag-qdrant
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -fsS
+        - http://127.0.0.1:6333/readyz
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  redis:
+    image: redis:7-alpine
+    container_name: rag-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  qdrant_storage:
+  redis_data:
+  huggingface_cache:
