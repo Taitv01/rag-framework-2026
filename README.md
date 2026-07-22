@@ -37,7 +37,12 @@ Hệ thống được tối ưu hóa đặc biệt cho **Tiếng Việt**, hỗ 
 - **Adaptive RAG**: Tự động phân loại độ phức tạp câu hỏi (Simple/Medium/Complex) để định tuyến pipeline tối ưu nhất.
 - **Cross-Story RAG**: Tìm kiếm motif, so sánh nhân vật và phân tích bài học đạo đức trong kho truyện cổ tích/tiểu thuyết.
 
-### 5. 📊 Production Tracing & Monitoring (Langfuse & Docker)
+### 5. 📚 Thư Viện Tri Thức Thông Minh & OCR Chuyển Đổi (Smart Library & OCR Engine)
+- **Tự động phân loại tài liệu (Auto-Classification)**: Tự động phân bổ file vào các danh mục thư viện (`Cổ tích / Kịch bản`, `Báo cáo / Tài chính`, `Học tập / Nghiên cứu`, `Vận hành / MMO`, `Tài liệu Scan / OCR`, `Chung`).
+- **Trích xuất chữ từ ảnh & PDF Scan (OCR Engine)**: Đọc file ảnh (`.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`) và PDF dạng scan ảnh bằng PyTesseract / EasyOCR / Pillow với thuật toán làm sạch dấu Tiếng Việt.
+- **Library Manifest & Tagging**: Quản lý kho tri thức tại `library/` với file `.rag_library_manifest.json` theo dõi metadata, tóm tắt tự động, và tìm kiếm theo tag.
+
+### 6. 📊 Production Tracing & Monitoring (Langfuse & Docker)
 - **Langfuse Integration**: Đo lường chi phí token, độ trễ từng bước truy xuất, versioning prompt.
 - **Graceful Fallback**: Tự động chuyển sang ghi log nội bộ mượt mà khi không cấu hình khóa Langfuse.
 - **Containerization**: `docker-compose.yml` sẵn sàng với 3 dịch vụ: FastAPI Server (`rag-api`), Qdrant Vector Store (`rag-qdrant`), và Redis Cache (`rag-redis`).
@@ -138,6 +143,23 @@ print("Motifs tìm thấy:", motifs)
 # So sánh 2 nhân vật
 comparison = cross_rag.compare_characters("Thạch Sanh", "Lý Thông")
 print("So sánh nhân vật:", comparison)
+```
+
+### 3. Đọc File & Tự Động Phân Bổ Vào Thư Viện Tri Thức (Smart Library & OCR)
+
+```python
+from src.rag import NaiveRAG
+
+rag = NaiveRAG()
+
+# Đọc file/ảnh scan/PDF, tự động OCR và tự động phân bổ vào danh mục thư viện (library/<category>/...)
+result = rag.ingest_to_library("path/to/scanned_document.png")
+print("Đã phân bổ vào danh mục:", result["records"][0]["category"])
+print("Đường dẫn trong thư viện:", result["records"][0]["library_path"])
+
+# Tìm kiếm trong thư viện theo danh mục hoặc từ khóa
+docs_co_tich = rag.library_manager.get_documents_by_category("cổ_tích_kịch_bản")
+print("Thống kê danh mục thư viện:", rag.library_manager.list_library_categories())
 ```
 
 ---

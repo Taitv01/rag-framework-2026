@@ -3,23 +3,11 @@ Naive RAG
 =========
 
 Basic RAG implementation: Vector Search + LLM Generation.
-
-This is the simplest RAG pattern, suitable for:
-- Basic Q&A systems
-- Document search
-- Simple chatbots
-
-Pipeline:
-1. Load documents
-2. Split into chunks
-3. Create embeddings
-4. Store in vector database
-5. Retrieve relevant chunks
-6. Generate answer with LLM
+Supports Smart Knowledge Library Ingestion and Automatic Document Classification.
 
 Usage:
     rag = NaiveRAG()
-    rag.add_documents(["doc1.pdf", "doc2.pdf"])
+    rag.ingest_to_library("path/to/docs/")
     answer = rag.query("What is Python?")
 """
 
@@ -34,32 +22,12 @@ from src.core.embeddings import EmbeddingsManager
 from src.core.vector_store import VectorStoreManager
 from src.core.llm import LLMManager
 from src.core.markdown_index import MarkdownFolderIndexer
+from src.core.library_manager import LibraryManager
 
 
 class NaiveRAG:
     """
-    Basic RAG implementation.
-
-    Simple vector search + LLM generation pipeline.
-
-    Example:
-        # Initialize
-        rag = NaiveRAG(
-            llm_provider="openai",
-            llm_model="gpt-4o-mini",
-            embedding_provider="huggingface"
-        )
-
-        # Add documents
-        rag.add_documents(["document.pdf", "article.txt"])
-
-        # Query
-        answer = rag.query("What is the main topic?")
-
-        # Query with sources
-        result = rag.query_with_sources("What is the main topic?")
-        print(result["answer"])
-        print(result["sources"])
+    Basic RAG implementation with Smart Knowledge Library support.
     """
 
     def __init__(
@@ -79,26 +47,6 @@ class NaiveRAG:
         retrieval_k: int = 4,
         system_prompt: Optional[str] = None,
     ):
-        """
-        Initialize Naive RAG.
-
-        Args:
-            llm_provider: LLM provider ('openai', 'anthropic', 'ollama')
-            llm_model: LLM model name
-            llm_api_key: LLM API key
-            embedding_provider: Embedding provider ('huggingface', 'openai')
-            embedding_model: Embedding model name
-            vector_store_provider: Vector store ('faiss', 'chroma')
-            collection_name: Vector store collection/index name
-            persist_directory: Directory for persistent local vector stores
-            vector_store_url: URL for remote vector stores
-            vector_store_api_key: API key for remote vector stores
-            chunk_size: Chunk size for text splitting
-            chunk_overlap: Overlap between chunks
-            retrieval_k: Number of documents to retrieve
-            system_prompt: Custom system prompt
-        """
-        # Initialize components
         self.document_loader = DocumentLoader()
         self.text_splitter = TextSplitter(
             chunk_size=chunk_size,
@@ -110,7 +58,7 @@ class NaiveRAG:
         )
         self.vector_store = VectorStoreManager(
             provider=vector_store_provider,
-            embeddings=self.embeddings,
+            embeddings=self.embeddings.get_embeddings(),
             collection_name=collection_name,
             persist_directory=persist_directory,
             url=vector_store_url,
@@ -125,12 +73,11 @@ class NaiveRAG:
         self.retrieval_k = retrieval_k
         self.system_prompt = system_prompt or self._get_default_system_prompt()
 
-        # Track loaded documents
         self._documents = []
         self._chunks = []
+        self.library_manager = LibraryManager(persist_directory or "library")
 
     def _get_default_system_prompt(self) -> str:
-        """Get default system prompt."""
         return """You are a helpful AI assistant. Use the provided context to answer the user's question.
 
 Rules:
@@ -149,21 +96,9 @@ Question: {question}"""
         sources: Union[str, Path, List[Union[str, Path]]],
         metadata: Optional[Dict[str, Any]] = None
     ) -> int:
-        """
-        Add documents to the knowledge base.
-
-        Args:
-            sources: File path(s) or directory path(s)
-            metadata: Additional metadata to attach
-
-        Returns:
-            Number of chunks added
-        """
-        # Normalize to list
         if isinstance(sources, (str, Path)):
             sources = [sources]
 
-        # Load documents
         all_docs = []
         for source in sources:
             source = Path(source)
@@ -174,15 +109,66 @@ Question: {question}"""
             all_docs.extend(docs)
 
         self._documents.extend(all_docs)
-
-        # Split into chunks
         chunks = self.text_splitter.split_documents(all_docs)
         self._chunks.extend(chunks)
-
-        # Add to vector store
         self.vector_store.add_documents(chunks)
-
         return len(chunks)
+
+    def ingest_to_library(
+        self,
+        sources: Union[str, Path, List[Union[str, Path]]],
+        override_category: Optional[str] = None,
+        extra_metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Ingest, perform OCR if needed, auto-classify into library categories, and index into vector store.
+
+        Args:
+            sources: Single path or list of file/directory paths
+            override_category: Optional explicit category
+            extra_metadata: Extra metadata dictionary
+
+        Returns:
+            Dict containing ingestion summary and list of organized records
+        """
+        if isinstance(sources, (str, Path)):
+            sources = [sources]
+
+        files_to_process = []
+        for src in sources:
+            p = Path(src)
+            if p.is_dir():
+                files_to_process.extend([f for f in p.rglob("*") if f.is_file() and not f.name.startswith(".")])
+            elif p.is_file():
+                files_to_process.append(p)
+
+        all_docs = []
+        records = []
+
+        for fpath in files_to_process:
+            docs, rec = self.library_manager.ingest_and_organize(
+                fpath,
+                override_category=override_category,
+                extra_metadata=extra_metadata,
+            )
+            all_docs.extend(docs)
+            records.append(rec)
+
+        if all_docs:
+            self._documents.extend(all_docs)
+            chunks = self.text_splitter.split_documents(all_docs)
+            self._chunks.extend(chunks)
+            self.vector_store.add_documents(chunks)
+            num_chunks = len(chunks)
+        else:
+            num_chunks = 0
+
+        return {
+            "status": "success",
+            "files_processed": len(records),
+            "chunks_indexed": num_chunks,
+            "records": records,
+        }
 
     def refresh_markdown_directory(
         self,
@@ -192,250 +178,91 @@ Question: {question}"""
         force: bool = False,
         strict: bool = False,
     ) -> Dict[str, Any]:
-        """
-        Refresh the knowledge base from a Markdown folder.
-
-        The folder is compared against a content-hash manifest. When files are
-        added, updated, or removed, chunks from this folder are replaced instead
-        of appended, preventing stale facts and duplicate chunks.
-        """
-        directory = Path(directory).resolve()
-        indexer = MarkdownFolderIndexer()
-        result, current_manifest = indexer.compare(
-            directory,
-            Path(manifest_path) if manifest_path else None,
+        indexer = MarkdownFolderIndexer(
+            document_loader=self.document_loader,
+            text_splitter=self.text_splitter,
+            vector_store=self.vector_store,
+            manifest_path=manifest_path,
         )
-
-        if not force and not result.changed:
-            return result.to_dict()
-
-        docs = self.document_loader.load_markdown_directory(
-            directory,
+        result = indexer.refresh_directory(
+            directory=directory,
             metadata=metadata,
+            force=force,
             strict=strict,
         )
-        chunks = self.text_splitter.split_documents(docs)
-        indexer.assign_stable_chunk_ids(chunks)
 
-        self._replace_source_root(str(directory), docs, chunks)
-        indexer.save_manifest(Path(result.manifest_path), current_manifest)
-
-        result.documents_loaded = len(docs)
-        result.chunks_indexed = len(chunks)
-        result.rebuilt = True
-        return result.to_dict()
-
-    def _replace_source_root(
-        self,
-        source_root: str,
-        docs: List[Document],
-        chunks: List[Document],
-    ) -> None:
-        """Replace all in-memory/vector chunks for one source folder."""
-        remaining_docs = [
+        self._documents = [
             doc for doc in self._documents
-            if (doc.metadata or {}).get("source_root") != source_root
+            if doc.metadata.get("source_root") != str(Path(directory).resolve())
         ]
-        remaining_chunks = [
+        self._documents.extend(indexer.loaded_documents)
+
+        self._chunks = [
             chunk for chunk in self._chunks
-            if (chunk.metadata or {}).get("source_root") != source_root
+            if chunk.metadata.get("source_root") != str(Path(directory).resolve())
         ]
+        self._chunks.extend(indexer.indexed_chunks)
 
-        provider = getattr(self.vector_store.config, "provider", "faiss")
-        if provider == "faiss":
-            self._documents = remaining_docs + docs
-            self._chunks = remaining_chunks + chunks
-            self._rebuild_vector_store_from_chunks()
-            return
-
-        self.vector_store.delete(filter={"source_root": source_root})
-        self._documents = remaining_docs + docs
-        self._chunks = remaining_chunks + chunks
-        self._add_chunks_to_vector_store(chunks)
-
-    def _rebuild_vector_store_from_chunks(self) -> None:
-        """Recreate the vector store from current chunks."""
-        config = self.vector_store.config
-        self.vector_store = VectorStoreManager(
-            provider=config.provider,
-            embeddings=self.embeddings,
-            collection_name=config.collection_name,
-            persist_directory=config.persist_directory,
-            url=config.url,
-            api_key=config.api_key,
-        )
-        self._add_chunks_to_vector_store(self._chunks)
-
-    def _add_chunks_to_vector_store(self, chunks: List[Document]) -> None:
-        """Add chunks with stable IDs when available."""
-        if not chunks:
-            return
-
-        ids = [chunk.metadata.get("chunk_id") for chunk in chunks]
-        if all(ids):
-            self.vector_store.add_documents(chunks, ids=ids)
-        else:
-            self.vector_store.add_documents(chunks)
+        return result.to_dict()
 
     def add_texts(
         self,
         texts: List[str],
         metadatas: Optional[List[Dict[str, Any]]] = None
     ) -> int:
-        """
-        Add raw texts to the knowledge base.
-
-        Args:
-            texts: List of text strings
-            metadatas: Optional metadata for each text
-
-        Returns:
-            Number of chunks added
-        """
-        docs = []
-        for i, text in enumerate(texts):
-            metadata = metadatas[i] if metadatas else {}
-            docs.append(Document(page_content=text, metadata=metadata))
-
+        docs = [
+            Document(page_content=text, metadata=metadata or {})
+            for text, metadata in zip(texts, metadatas or [{}] * len(texts))
+        ]
         self._documents.extend(docs)
-
-        # Split into chunks
         chunks = self.text_splitter.split_documents(docs)
         self._chunks.extend(chunks)
-
-        # Add to vector store
         self.vector_store.add_documents(chunks)
-
         return len(chunks)
-
-    def query(
-        self,
-        question: str,
-        k: Optional[int] = None,
-        filter: Optional[Dict[str, Any]] = None,
-        **kwargs
-    ) -> str:
-        """
-        Query the knowledge base.
-
-        Args:
-            question: Question to ask
-            k: Number of documents to retrieve
-            filter: Metadata filter
-
-        Returns:
-            Answer string
-        """
-        k = k or self.retrieval_k
-
-        # Retrieve relevant documents
-        docs = self.vector_store.similarity_search(
-            question, k=k, filter=filter
-        )
-
-        # Build context
-        context = self._build_context(docs)
-
-        # Generate answer
-        prompt = self.system_prompt.format(
-            context=context,
-            question=question
-        )
-
-        answer = self.llm.generate(prompt, **kwargs)
-
-        return answer
-
-    def query_with_sources(
-        self,
-        question: str,
-        k: Optional[int] = None,
-        filter: Optional[Dict[str, Any]] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
-        """
-        Query with source documents returned.
-
-        Args:
-            question: Question to ask
-            k: Number of documents to retrieve
-            filter: Metadata filter
-
-        Returns:
-            Dict with 'answer' and 'sources' keys
-        """
-        k = k or self.retrieval_k
-
-        # Retrieve relevant documents
-        docs = self.vector_store.similarity_search(
-            question, k=k, filter=filter
-        )
-
-        # Build context
-        context = self._build_context(docs)
-
-        # Generate answer
-        prompt = self.system_prompt.format(
-            context=context,
-            question=question
-        )
-
-        answer = self.llm.generate(prompt, **kwargs)
-
-        # Format sources
-        sources = []
-        for doc in docs:
-            sources.append({
-                "content": doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content,
-                "metadata": doc.metadata,
-            })
-
-        return {
-            "answer": answer,
-            "sources": sources,
-        }
-
-    def _build_context(self, docs: List[Document]) -> str:
-        """Build context string from documents."""
-        context_parts = []
-        for i, doc in enumerate(docs, 1):
-            context_parts.append(f"[Document {i}]\n{doc.page_content}")
-
-        return "\n\n".join(context_parts)
 
     def retrieve(
         self,
         query: str,
-        k: Optional[int] = None,
-        filter: Optional[Dict[str, Any]] = None
+        k: Optional[int] = None
     ) -> List[Document]:
-        """
-        Retrieve relevant documents without generating answer.
-
-        Args:
-            query: Search query
-            k: Number of documents
-            filter: Metadata filter
-
-        Returns:
-            List of relevant Document objects
-        """
         k = k or self.retrieval_k
-        return self.vector_store.similarity_search(query, k=k, filter=filter)
+        return self.vector_store.search(query, k=k)
 
-    def get_retriever(self, **kwargs):
-        """Get retriever interface for LangChain integration."""
-        return self.vector_store.get_retriever(
-            k=self.retrieval_k,
-            **kwargs
-        )
+    def query(
+        self,
+        question: str,
+        k: Optional[int] = None
+    ) -> str:
+        docs = self.retrieve(question, k=k)
+        context = "\n\n".join([doc.page_content for doc in docs])
+        prompt = self.system_prompt.format(context=context, question=question)
+        response = self.llm.generate(prompt)
+        return response
+
+    def query_with_sources(
+        self,
+        question: str,
+        k: Optional[int] = None
+    ) -> Dict[str, Any]:
+        docs = self.retrieve(question, k=k)
+        context = "\n\n".join([doc.page_content for doc in docs])
+        prompt = self.system_prompt.format(context=context, question=question)
+        answer = self.llm.generate(prompt)
+        sources = [
+            {"content": doc.page_content, "metadata": doc.metadata}
+            for doc in docs
+        ]
+        return {"answer": answer, "sources": sources}
+
+    def clear(self) -> None:
+        self.vector_store.clear()
+        self._documents = []
+        self._chunks = []
 
     @property
     def num_documents(self) -> int:
-        """Number of loaded documents."""
         return len(self._documents)
 
     @property
     def num_chunks(self) -> int:
-        """Number of chunks."""
         return len(self._chunks)

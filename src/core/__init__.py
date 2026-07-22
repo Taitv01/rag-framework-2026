@@ -16,6 +16,8 @@ from src.core.metadata_enhancer import MetadataEnhancer
 from src.core.graph_store import Neo4jBackend
 from src.core.web_search import SafeWebSearcher, DuckDuckGoSearchProvider, TavilySearchProvider, create_web_searcher
 from src.core.markdown_index import MarkdownFolderIndexer, MarkdownRefreshResult
+from src.core.ocr_engine import OCREngine
+from src.core.library_manager import LibraryManager, DocumentClassifier
 
 __all__ = [
     "DocumentLoader",
@@ -34,4 +36,7 @@ __all__ = [
     "create_web_searcher",
     "MarkdownFolderIndexer",
     "MarkdownRefreshResult",
+    "OCREngine",
+    "LibraryManager",
+    "DocumentClassifier",
 ]
