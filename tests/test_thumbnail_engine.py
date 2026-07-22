@@ -15,7 +15,8 @@ def test_thumbnail_engine_generates_master_prompt():
         "category_badge": "CỔ TÍCH VIỆT NAM"
     })
     
-    assert "SỰ TÍCH TRẦU CAU" in prompt
+    assert "Sự Tích Trầu Cau" in prompt
+    assert "TRẦU CAU" in prompt
     assert "=== SCENE COMPOSITION ===" in prompt
     assert "=== TEXT LAYOUT" in prompt
     assert "=== CTR OPTIMIZATION NOTES ===" in prompt
