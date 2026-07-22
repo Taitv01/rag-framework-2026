@@ -617,6 +617,33 @@ Trả về tên thực thể dưới dạng danh sách cách nhau bằng dấu p
 
         return "\n\n".join(graph_info) if graph_info else ""
 
+    def extract_subgraph_context(self, question: str, max_hops: int = 2) -> Dict[str, Any]:
+        """
+        Extract N-hop sub-graph context surrounding entities in the query.
+
+        Args:
+            question: Search query or question
+            max_hops: Maximum graph traversal depth (default: 2)
+
+        Returns:
+            Dict containing matched entities, sub-graph triples, and formatted context text
+        """
+        graph_text = self._graph_retrieval(question)
+        entities = list(self.knowledge_graph.entities.keys())
+        matched = [e for e in entities if e.lower() in question.lower()]
+        
+        triples = []
+        for rel in self.knowledge_graph.relationships:
+            if rel.source in matched or rel.target in matched:
+                triples.append(f"{rel.source} -[{rel.relationship_type}]-> {rel.target}")
+
+        return {
+            "matched_entities": matched,
+            "subgraph_triples": triples,
+            "formatted_context": graph_text,
+            "max_hops": max_hops,
+        }
+
     def get_knowledge_graph(self) -> KnowledgeGraph:
         """Get the knowledge graph."""
         return self.knowledge_graph

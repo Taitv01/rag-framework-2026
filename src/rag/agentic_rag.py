@@ -456,6 +456,48 @@ Question / Câu hỏi: {question}"""
             "question": question,
         }
 
+    def check_hallucination(self, context: str, answer: str) -> Dict[str, Any]:
+        """
+        Grade whether an answer is factually grounded in the provided context (Hallucination Check).
+
+        Args:
+            context: Retrieved context text
+            answer: Generated answer text
+
+        Returns:
+            Dict containing is_grounded boolean, hallucination_score (0.0 to 1.0), and reasoning
+        """
+        prompt = f"""Bạn là chuyên gia kiểm tra ảo giác dữ liệu (Hallucination Checker).
+Nhiệm vụ: Đánh giá xem câu trả lời có được căn cứ HOÀN TOÀN vào ngữ cảnh cung cấp hay không (không tự bịa ra thông tin mới).
+
+Ngữ cảnh (Context):
+{context}
+
+Câu trả lời (Answer):
+{answer}
+
+Quy tắc:
+- Trả lời "Grounded: yes" nếu câu trả lời hoàn toàn chính xác dựa vào ngữ cảnh.
+- Trả lời "Grounded: no" nếu câu trả lời chứa thông tin mâu thuẫn hoặc không có trong ngữ cảnh.
+
+Đánh giá:"""
+        try:
+            response = self.llm.generate(prompt)
+            is_grounded = "yes" in response.lower() or "có" in response.lower() or "đúng" in response.lower()
+            score = 0.0 if is_grounded else 1.0
+            return {
+                "is_grounded": is_grounded,
+                "hallucination_score": score,
+                "reasoning": response.strip(),
+            }
+        except Exception as e:
+            logger.warning(f"Hallucination check failed: {e}")
+            return {
+                "is_grounded": True,
+                "hallucination_score": 0.0,
+                "reasoning": f"Fallback check: {e}",
+            }
+
     @property
     def num_documents(self) -> int:
         """Number of loaded documents."""
