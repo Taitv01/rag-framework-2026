@@ -13,3 +13,16 @@ def test_env_local_overrides_env_file(tmp_path, monkeypatch):
     config = Config()
 
     assert config.get("RAG_TEST_VALUE") == "from_local"
+
+
+def test_ox_llm_config_uses_only_ox_credentials(monkeypatch):
+    monkeypatch.setenv("DEFAULT_LLM_PROVIDER", "ox")
+    monkeypatch.setenv("DEFAULT_LLM_MODEL", "stealth/ox-alpha")
+    monkeypatch.setenv("OX_API_KEY", "free-ox-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "paid-openai-key")
+
+    config = Config().get_llm_config()
+
+    assert config["provider"] == "ox"
+    assert config["model"] == "stealth/ox-alpha"
+    assert config["api_key"] == "free-ox-key"

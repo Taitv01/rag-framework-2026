@@ -19,11 +19,19 @@ OPENAI_API_KEY=your_openai_api_key_here
 # Anthropic
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
 
+# Ox Alpha via OpenRouter
+OX_API_KEY=your_openrouter_api_key_here
+OX_BASE_URL=https://openrouter.ai/api/v1
+
 # Default LLM settings
 DEFAULT_LLM_PROVIDER=openai
 DEFAULT_LLM_MODEL=gpt-4o-mini
 DEFAULT_TEMPERATURE=0.7
 ```
+
+`OX_API_KEY` can also be supplied as `OPENROUTER_API_KEY`. Keeping a dedicated
+Ox key name is recommended because it prevents an OpenAI credential from being
+used against the wrong endpoint.
 
 ### Embedding Configuration
 
@@ -197,6 +205,40 @@ llm = LLMManager(
     temperature=0.7,
 )
 ```
+
+### Ox Alpha (OpenRouter)
+
+Ox Alpha uses OpenRouter's OpenAI-compatible chat endpoint. Create a key at
+<https://openrouter.ai/settings/keys> and keep it in `.env.local`:
+
+```powershell
+py scripts/connect_ox.py
+```
+
+This uses OpenRouter's OAuth PKCE flow and never prints the generated key. For
+manual configuration, use:
+
+```dotenv
+OX_API_KEY=<your-openrouter-api-key>
+OX_BASE_URL=https://openrouter.ai/api/v1
+OX_MAX_RETRIES=5
+OX_TIMEOUT_SECONDS=180
+DEFAULT_LLM_PROVIDER=ox
+DEFAULT_LLM_MODEL=stealth/ox-alpha
+```
+
+```python
+llm = LLMManager(
+    provider="ox",
+    model="stealth/ox-alpha",
+    temperature=0.2,
+)
+```
+
+The model is currently listed as free, with a 1,048,576-token context window.
+Treat that as current provider state rather than a permanent guarantee. The
+stealth provider retains prompts and completions; avoid sending secrets or
+sensitive documents.
 
 ### Local (Ollama)
 

@@ -58,7 +58,7 @@ class NaiveRAG:
         )
         self.vector_store = VectorStoreManager(
             provider=vector_store_provider,
-            embeddings=self.embeddings.get_embeddings(),
+            embeddings=self.embeddings,
             collection_name=collection_name,
             persist_directory=persist_directory,
             url=vector_store_url,
@@ -178,32 +178,82 @@ Question: {question}"""
         force: bool = False,
         strict: bool = False,
     ) -> Dict[str, Any]:
-        indexer = MarkdownFolderIndexer(
-            document_loader=self.document_loader,
-            text_splitter=self.text_splitter,
-            vector_store=self.vector_store,
-            manifest_path=manifest_path,
+        directory = Path(directory).resolve()
+        indexer = MarkdownFolderIndexer()
+        result, current_manifest = indexer.compare(
+            directory,
+            Path(manifest_path) if manifest_path else None,
         )
-        result = indexer.refresh_directory(
-            directory=directory,
+
+        if not force and not result.changed:
+            return result.to_dict()
+
+        documents = self.document_loader.load_markdown_directory(
+            directory,
             metadata=metadata,
-            force=force,
             strict=strict,
         )
+        chunks = self.text_splitter.split_documents(documents)
+        indexer.assign_stable_chunk_ids(chunks)
 
-        self._documents = [
-            doc for doc in self._documents
-            if doc.metadata.get("source_root") != str(Path(directory).resolve())
-        ]
-        self._documents.extend(indexer.loaded_documents)
+        self._replace_source_root(str(directory), documents, chunks)
+        indexer.save_manifest(Path(result.manifest_path), current_manifest)
 
-        self._chunks = [
-            chunk for chunk in self._chunks
-            if chunk.metadata.get("source_root") != str(Path(directory).resolve())
-        ]
-        self._chunks.extend(indexer.indexed_chunks)
+        result.documents_loaded = len(documents)
+        result.chunks_indexed = len(chunks)
+        result.rebuilt = True
 
         return result.to_dict()
+
+    def _replace_source_root(
+        self,
+        source_root: str,
+        documents: List[Document],
+        chunks: List[Document],
+    ) -> None:
+        remaining_documents = [
+            doc
+            for doc in self._documents
+            if doc.metadata.get("source_root") != source_root
+        ]
+        remaining_chunks = [
+            chunk
+            for chunk in self._chunks
+            if chunk.metadata.get("source_root") != source_root
+        ]
+
+        provider = getattr(self.vector_store.config, "provider", "faiss")
+        self._documents = remaining_documents + documents
+        self._chunks = remaining_chunks + chunks
+
+        if provider == "faiss":
+            self._rebuild_vector_store_from_chunks()
+            return
+
+        self.vector_store.delete(filter={"source_root": source_root})
+        self._add_chunks_to_vector_store(chunks)
+
+    def _rebuild_vector_store_from_chunks(self) -> None:
+        config = self.vector_store.config
+        self.vector_store = VectorStoreManager(
+            provider=config.provider,
+            embeddings=self.embeddings,
+            collection_name=config.collection_name,
+            persist_directory=config.persist_directory,
+            url=config.url,
+            api_key=config.api_key,
+        )
+        self._add_chunks_to_vector_store(self._chunks)
+
+    def _add_chunks_to_vector_store(self, chunks: List[Document]) -> None:
+        if not chunks:
+            return
+
+        chunk_ids = [chunk.metadata.get("chunk_id") for chunk in chunks]
+        if all(chunk_ids):
+            self.vector_store.add_documents(chunks, ids=chunk_ids)
+        else:
+            self.vector_store.add_documents(chunks)
 
     def add_texts(
         self,
@@ -226,7 +276,7 @@ Question: {question}"""
         k: Optional[int] = None
     ) -> List[Document]:
         k = k or self.retrieval_k
-        return self.vector_store.search(query, k=k)
+        return self.vector_store.similarity_search(query, k=k)
 
     def query(
         self,

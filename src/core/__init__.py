@@ -10,7 +10,7 @@ from src.core.text_splitter import TextSplitter
 from src.core.embeddings import EmbeddingsManager
 from src.core.vector_store import VectorStoreManager
 from src.core.retriever import RetrieverManager
-from src.core.llm import LLMManager
+from src.core.llm import LLMManager, get_ox_llm
 from src.core.vietnamese_processor import VietnameseProcessor, get_vietnamese_processor
 from src.core.metadata_enhancer import MetadataEnhancer
 from src.core.graph_store import Neo4jBackend
@@ -26,6 +26,7 @@ __all__ = [
     "VectorStoreManager",
     "RetrieverManager",
     "LLMManager",
+    "get_ox_llm",
     "VietnameseProcessor",
     "get_vietnamese_processor",
     "MetadataEnhancer",

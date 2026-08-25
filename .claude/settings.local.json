@@ -26,7 +26,8 @@
       "PowerShell(& \"D:\\\\E & D Cá nhân\\\\MMO_Project_2026\\\\RAG\\\\.venv\\\\Scripts\\\\python.exe\" -m pip install fastapi uvicorn python-multipart python-docx tiktoken Pillow 2>&1)",
       "PowerShell(& \"D:\\\\E & D Cá nhân\\\\MMO_Project_2026\\\\RAG\\\\.venv\\\\Scripts\\\\python.exe\" -m pytest tests/ -v --tb=long 2>&1)",
       "PowerShell(& \"D:\\\\E & D Cá nhân\\\\MMO_Project_2026\\\\RAG\\\\.venv\\\\Scripts\\\\python.exe\" -m pytest tests/ -v --tb=short 2>&1)",
-      "PowerShell(& \"D:\\\\E & D Cá nhân\\\\MMO_Project_2026\\\\RAG\\\\.venv\\\\Scripts\\\\python.exe\" -m pip install underthesea pyvi 2>&1)"
+      "PowerShell(& \"D:\\\\E & D Cá nhân\\\\MMO_Project_2026\\\\RAG\\\\.venv\\\\Scripts\\\\python.exe\" -m pip install underthesea pyvi 2>&1)",
+      "PowerShell(& \"D:\\\\E & D Cá nhân\\\\MMO_Project_2026\\\\RAG\\\\.venv\\\\Scripts\\\\python.exe\" \"D:\\\\E & D Cá nhân\\\\MMO_Project_2026\\\\RAG\\\\examples\\\\09_vietnamese_optimized.py\" --no-api 2>&1)"
     ]
   }
 }

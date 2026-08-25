@@ -20,22 +20,12 @@ Usage:
 
 from typing import List, Optional, Dict, Any
 from pathlib import Path
-import io
 import json
 import logging
 import os
-import sys
 import shutil
 import uuid
 import asyncio
-
-# Fix encoding for Windows
-if sys.platform == "win32" and hasattr(sys.stdout, "buffer"):
-    try:
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
-    except Exception:
-        pass
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query, Request
 from fastapi.middleware.cors import CORSMiddleware

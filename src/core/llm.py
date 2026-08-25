@@ -6,6 +6,7 @@ Abstraction layer for Large Language Models supporting multiple providers.
 
 Supported providers:
 - OpenAI (GPT-4, GPT-3.5)
+- Ox Alpha (OpenRouter's OpenAI-compatible API)
 - Anthropic (Claude)
 - Local models (Ollama)
 
@@ -15,6 +16,9 @@ Usage:
 
     # Anthropic
     llm = LLMManager(provider="anthropic", model="claude-sonnet-4-20250514")
+
+    # Ox Alpha (currently free on OpenRouter)
+    llm = LLMManager(provider="ox", model="stealth/ox-alpha")
 
     # Generate
     response = llm.generate("What is Python?")
@@ -106,6 +110,13 @@ class LLMManager:
                 "context_window": 200000,
             },
         },
+        "ox": {
+            "stealth/ox-alpha": {
+                "description": "Ox Alpha reasoning model via OpenRouter",
+                "context_window": 1_048_576,
+                "max_output_tokens": 131_072,
+            },
+        },
     }
 
     def __init__(
@@ -121,13 +132,14 @@ class LLMManager:
         Initialize LLM manager.
 
         Args:
-            provider: LLM provider ('openai', 'anthropic', 'ollama')
+            provider: LLM provider ('openai', 'ox', 'anthropic', 'ollama')
             model: Model name/identifier
             api_key: API key
             temperature: Temperature for generation
             max_tokens: Maximum tokens to generate
             streaming: Enable streaming
         """
+        provider = self._normalize_provider(provider)
         self.config = LLMConfig(
             provider=provider,
             model=model or self._get_default_model(provider),
@@ -139,10 +151,19 @@ class LLMManager:
 
         self._llm = None
 
+    @staticmethod
+    def _normalize_provider(provider: str) -> str:
+        """Return the canonical provider name, including common Ox aliases."""
+        normalized = provider.strip().lower()
+        if normalized in {"oxai", "ox-ai", "ox_alpha", "ox-alpha"}:
+            return "ox"
+        return normalized
+
     def _get_default_model(self, provider: str) -> str:
         """Get default model for provider."""
         defaults = {
             "openai": "gpt-4o-mini",
+            "ox": "stealth/ox-alpha",
             "anthropic": "claude-sonnet-4-20250514",
             "ollama": "llama3",
         }
@@ -159,6 +180,8 @@ class LLMManager:
         """Create LLM instance based on provider."""
         if self.config.provider == "openai":
             return self._create_openai_llm()
+        elif self.config.provider == "ox":
+            return self._create_ox_llm()
         elif self.config.provider == "anthropic":
             return self._create_anthropic_llm()
         elif self.config.provider == "ollama":
@@ -199,6 +222,81 @@ class LLMManager:
             kwargs["max_tokens"] = self.config.max_tokens
 
         return ChatOpenAI(**kwargs)
+
+    def _create_ox_llm(self) -> BaseChatModel:
+        """Create an Ox Alpha client through OpenRouter's compatible API."""
+        try:
+            from langchain_openai import ChatOpenAI
+        except ImportError:
+            raise ImportError(
+                "langchain-openai is required for Ox Alpha. "
+                "Install it with: pip install langchain-openai"
+            )
+
+        load_environment()
+        api_key = (
+            self.config.api_key
+            or os.getenv("OX_API_KEY")
+            or os.getenv("OPENROUTER_API_KEY")
+        )
+        if not api_key:
+            raise ValueError(
+                "Ox Alpha API key is required. Set OX_API_KEY (recommended) "
+                "or OPENROUTER_API_KEY, or pass api_key directly. Create a free "
+                "OpenRouter key at https://openrouter.ai/settings/keys."
+            )
+
+        kwargs = {
+            "model": self.config.model,
+            "api_key": api_key,
+            "base_url": os.getenv("OX_BASE_URL", "https://openrouter.ai/api/v1"),
+            "temperature": self.config.temperature,
+            "streaming": self.config.streaming,
+            # The free shared pool can return short-lived 429/5xx responses.
+            # OpenAI's client applies bounded exponential backoff and does not
+            # route to a different model.
+            "max_retries": self._get_ox_max_retries(),
+            "timeout": self._get_ox_timeout(),
+        }
+
+        # OpenRouter recommends these optional attribution headers. They are
+        # omitted unless explicitly configured, so no local metadata is leaked.
+        default_headers = {}
+        if app_url := os.getenv("OX_APP_URL"):
+            default_headers["HTTP-Referer"] = app_url
+        if app_name := os.getenv("OX_APP_NAME"):
+            default_headers["X-OpenRouter-Title"] = app_name
+        if default_headers:
+            kwargs["default_headers"] = default_headers
+
+        if self.config.max_tokens:
+            kwargs["max_tokens"] = self.config.max_tokens
+
+        return ChatOpenAI(**kwargs)
+
+    @staticmethod
+    def _get_ox_max_retries() -> int:
+        """Read and validate the bounded Ox retry count."""
+        raw_value = os.getenv("OX_MAX_RETRIES", "5")
+        try:
+            value = int(raw_value)
+        except ValueError as error:
+            raise ValueError("OX_MAX_RETRIES must be an integer") from error
+        if not 0 <= value <= 10:
+            raise ValueError("OX_MAX_RETRIES must be between 0 and 10")
+        return value
+
+    @staticmethod
+    def _get_ox_timeout() -> float:
+        """Read and validate the per-request Ox timeout in seconds."""
+        raw_value = os.getenv("OX_TIMEOUT_SECONDS", "180")
+        try:
+            value = float(raw_value)
+        except ValueError as error:
+            raise ValueError("OX_TIMEOUT_SECONDS must be a number") from error
+        if not 1 <= value <= 600:
+            raise ValueError("OX_TIMEOUT_SECONDS must be between 1 and 600")
+        return value
 
     def _create_anthropic_llm(self) -> BaseChatModel:
         """Create Anthropic LLM."""
@@ -420,9 +518,15 @@ class LLMManager:
         if self.config.max_tokens:
             return self.config.max_tokens
 
+        provider_models = self.POPULAR_MODELS.get(self.config.provider, {})
+        model_info = provider_models.get(self.config.model, {})
+        if "max_output_tokens" in model_info:
+            return model_info["max_output_tokens"]
+
         # Default output token limits by provider
         provider_defaults = {
             "openai": 4096,
+            "ox": 131072,
             "anthropic": 4096,
             "ollama": 2048,
         }
@@ -486,6 +590,20 @@ def get_anthropic_llm(
     """
     return LLMManager(
         provider="anthropic",
+        model=model,
+        api_key=api_key,
+        temperature=temperature,
+    )
+
+
+def get_ox_llm(
+    model: str = "stealth/ox-alpha",
+    api_key: Optional[str] = None,
+    temperature: float = 0.7,
+) -> LLMManager:
+    """Get Ox Alpha through OpenRouter's OpenAI-compatible API."""
+    return LLMManager(
+        provider="ox",
         model=model,
         api_key=api_key,
         temperature=temperature,

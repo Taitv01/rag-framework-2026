@@ -47,6 +47,11 @@ Hệ thống được tối ưu hóa đặc biệt cho **Tiếng Việt**, hỗ 
 - **Graceful Fallback**: Tự động chuyển sang ghi log nội bộ mượt mà khi không cấu hình khóa Langfuse.
 - **Containerization**: `docker-compose.yml` sẵn sàng với 3 dịch vụ: FastAPI Server (`rag-api`), Qdrant Vector Store (`rag-qdrant`), và Redis Cache (`rag-redis`).
 
+### 7. Ox Alpha qua OpenRouter
+- Provider `ox` dùng model `stealth/ox-alpha` qua API tương thích OpenAI.
+- OAuth PKCE localhost tự tạo key và lưu kín trong `.env.local`; key không được in ra terminal.
+- Retry có giới hạn cho tuyến miễn phí khi upstream tạm thời trả về `429`/`5xx`.
+
 ---
 
 ## 🏗️ Cấu Trúc Dự Án (Project Layout)
@@ -92,9 +97,25 @@ py -m pip install -e ".[dev]"
 
 Tạo file `.env.local` tại thư mục gốc dự án (file này được Git phớt lờ để bảo vệ bí mật):
 
+Cách khuyến nghị là chạy OAuth PKCE chính thức của OpenRouter. Trình duyệt sẽ yêu cầu bạn đăng nhập/Authorize, sau đó script tự lưu key và smoke-test Ox Alpha:
+
+```powershell
+py scripts/connect_ox.py
+```
+
+Hoặc cấu hình thủ công:
+
 ```dotenv
-# API Keys
-OPENAI_API_KEY=sk-your-openai-api-key
+# Ox Alpha via OpenRouter
+OX_API_KEY=your-openrouter-api-key
+OX_BASE_URL=https://openrouter.ai/api/v1
+OX_MAX_RETRIES=5
+OX_TIMEOUT_SECONDS=180
+DEFAULT_LLM_PROVIDER=ox
+DEFAULT_LLM_MODEL=stealth/ox-alpha
+
+# Provider khác (tùy chọn)
+OPENAI_API_KEY=your-openai-api-key
 ANTHROPIC_API_KEY=your-anthropic-api-key
 
 # Tracing (Tùy chọn)
@@ -106,6 +127,13 @@ LANGFUSE_HOST=https://cloud.langfuse.com
 ENABLE_API_AUTH=false
 API_KEYS=rag_secret_key_123
 CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+```
+
+Kiểm tra adapter LangChain hoặc chạy RAG end-to-end:
+
+```powershell
+py examples/12_ox_rag.py --check
+py examples/12_ox_rag.py
 ```
 
 ---

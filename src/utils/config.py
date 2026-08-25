@@ -22,7 +22,7 @@ import os
 from typing import Any, Optional, Dict
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 
 
 def load_environment(env_file: Optional[str] = None) -> None:
@@ -36,13 +36,20 @@ def load_environment(env_file: Optional[str] = None) -> None:
         load_dotenv(env_file)
         return
 
+    # Values supplied by the parent process have highest priority. Keep track
+    # of them before loading files so `.env.local` only overrides `.env`, not
+    # shell/CI/container secrets.
+    process_environment = set(os.environ)
+
     env_path = Path.cwd() / ".env"
     if env_path.exists():
         load_dotenv(env_path)
 
     local_env_path = Path.cwd() / ".env.local"
     if local_env_path.exists():
-        load_dotenv(local_env_path, override=True)
+        for key, value in dotenv_values(local_env_path).items():
+            if key not in process_environment and value is not None:
+                os.environ[key] = value
 
 
 class Config:
@@ -241,10 +248,27 @@ class Config:
         Returns:
             Dict with LLM settings
         """
+        provider = str(self.get("DEFAULT_LLM_PROVIDER")).strip().lower()
+        api_key_names = {
+            "openai": ("OPENAI_API_KEY",),
+            "ox": ("OX_API_KEY", "OPENROUTER_API_KEY"),
+            "oxai": ("OX_API_KEY", "OPENROUTER_API_KEY"),
+            "ox-ai": ("OX_API_KEY", "OPENROUTER_API_KEY"),
+            "anthropic": ("ANTHROPIC_API_KEY",),
+        }
+        api_key = next(
+            (
+                self.get(key_name)
+                for key_name in api_key_names.get(provider, ())
+                if self.get(key_name)
+            ),
+            None,
+        )
+
         return {
-            "provider": self.get("DEFAULT_LLM_PROVIDER"),
+            "provider": provider,
             "model": self.get("DEFAULT_LLM_MODEL"),
-            "api_key": self.get("OPENAI_API_KEY") or self.get("ANTHROPIC_API_KEY"),
+            "api_key": api_key,
             "temperature": self.get_float("DEFAULT_TEMPERATURE"),
         }
 
