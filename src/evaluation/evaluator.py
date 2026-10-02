@@ -362,10 +362,18 @@ class RAGEvaluator:
             }
 
         hits = [1 if source in expected else 0 for source in retrieved]
-        hit_count = sum(hits)
+        precision = sum(hits) / max(len(retrieved), 1)
 
-        precision = hit_count / max(len(retrieved), 1)
-        recall = hit_count / len(expected)
+        # Several chunks from one source must not push recall/nDCG above 1:
+        # only the first occurrence of each expected source earns gain.
+        seen = set()
+        gains = []
+        for source in retrieved:
+            is_new = source in expected and source not in seen
+            if is_new:
+                seen.add(source)
+            gains.append(1 if is_new else 0)
+        recall = len(seen) / len(expected)
 
         mrr = 0.0
         for rank, hit in enumerate(hits, 1):
@@ -373,7 +381,7 @@ class RAGEvaluator:
                 mrr = 1.0 / rank
                 break
 
-        dcg = sum(hit / math.log2(rank + 1) for rank, hit in enumerate(hits, 1))
+        dcg = sum(gain / math.log2(rank + 1) for rank, gain in enumerate(gains, 1))
         ideal_hits = min(len(expected), k)
         idcg = sum(1.0 / math.log2(rank + 1) for rank in range(1, ideal_hits + 1))
         ndcg = dcg / idcg if idcg else 0.0

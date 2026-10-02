@@ -58,3 +58,14 @@ def test_evaluate_retrieval_accepts_dict_results():
     result = report.results[0]
     assert result.retrieved_sources == ["s1", "s2"]
     assert result.mrr == 0.5
+
+
+def test_retrieval_metrics_do_not_double_count_chunks_from_one_source():
+    """Several chunks from the same source must keep recall and nDCG <= 1."""
+    from src.evaluation import RAGEvaluator
+
+    scores = RAGEvaluator()._retrieval_scores(["a", "a", "a"], ["a"], k=3)
+
+    assert scores["precision_at_k"] == 1.0
+    assert scores["recall_at_k"] == 1.0
+    assert scores["ndcg"] == 1.0
