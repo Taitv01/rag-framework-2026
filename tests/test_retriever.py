@@ -4,7 +4,7 @@ Tests for Retriever
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
 from src.core.retriever import RetrieverManager
 from langchain_core.documents import Document
@@ -100,10 +100,7 @@ class TestRetrieverManager:
 
     def test_hybrid_search_with_bm25(self):
         """Test hybrid search with BM25."""
-        try:
-            import rank_bm25
-        except ImportError:
-            pytest.skip("rank-bm25 not installed")
+        pytest.importorskip("rank_bm25")
 
         self.mock_vector_store.similarity_search_with_score.return_value = [
             (doc, 0.9) for doc in self.sample_docs
@@ -146,7 +143,7 @@ class TestRetrieverManager:
             embeddings=self.mock_embeddings,
         )
 
-        results = retriever.multi_query_search("What is Python?", num_queries=2)
+        retriever.multi_query_search("What is Python?", num_queries=2)
 
         # Should have called similarity_search multiple times
         assert self.mock_vector_store.similarity_search.call_count > 1

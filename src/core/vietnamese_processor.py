@@ -31,7 +31,7 @@ Usage:
 
 import re
 import logging
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ class VietnameseProcessor:
         """Initialize the NLP backend."""
         if self._use_underthesea:
             try:
-                import underthesea
+                import underthesea  # noqa: F401
                 self._backend = "underthesea"
                 logger.info("Vietnamese processor initialized with underthesea")
                 return
@@ -79,7 +79,7 @@ class VietnameseProcessor:
                 logger.warning("underthesea not available, falling back to pyvi")
 
         try:
-            import pyvi
+            import pyvi  # noqa: F401
             self._backend = "pyvi"
             logger.info("Vietnamese processor initialized with pyvi")
         except ImportError:

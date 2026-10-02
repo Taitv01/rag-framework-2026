@@ -27,7 +27,6 @@ from datetime import datetime
 import json
 import uuid
 
-from langchain_core.documents import Document
 
 
 @dataclass
@@ -263,8 +262,8 @@ class DocumentManager:
             if record.status != "active":
                 continue
 
-            for field in fields:
-                value = record.metadata.get(field, "")
+            for field_name in fields:
+                value = record.metadata.get(field_name, "")
                 if isinstance(value, list):
                     value = " ".join(str(v) for v in value)
                 else:

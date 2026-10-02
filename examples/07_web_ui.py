@@ -40,7 +40,7 @@ def main():
     print("=" * 60)
 
     try:
-        import gradio as gr
+        import gradio as gr  # noqa: F401
     except ImportError:
         print("Error: gradio is required. Install with: pip install gradio")
         return

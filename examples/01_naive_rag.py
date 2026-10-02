@@ -119,7 +119,7 @@ def main():
         result = rag.query_with_sources(question)
 
         print(f"💡 Answer: {result['answer']}")
-        print(f"\n📄 Sources:")
+        print("\n📄 Sources:")
         for i, source in enumerate(result['sources'], 1):
             print(f"  [{i}] {source['content'][:100]}...")
 
@@ -146,8 +146,8 @@ def main():
     print("=" * 60)
     print(f"Documents loaded: {rag.num_documents}")
     print(f"Total chunks: {rag.num_chunks}")
-    print(f"Vector store: FAISS (in-memory)")
-    print(f"Embeddings: HuggingFace (local)")
+    print("Vector store: FAISS (in-memory)")
+    print("Embeddings: HuggingFace (local)")
     print("=" * 60)
 
 

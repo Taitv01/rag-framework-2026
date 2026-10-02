@@ -35,10 +35,8 @@ git checkout -b fix/your-bug-fix
 # Run tests
 pytest
 
-# Run linting
-black src/ tests/
-isort src/ tests/
-mypy src/
+# Run linting (same check as CI)
+ruff check src tests examples
 ```
 
 ### 5. Commit Your Changes

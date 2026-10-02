@@ -18,7 +18,6 @@ Usage:
     python examples/04_production_rag.py
 """
 
-import os
 from pathlib import Path
 
 import sys

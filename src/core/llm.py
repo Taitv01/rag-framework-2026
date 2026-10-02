@@ -22,7 +22,7 @@ Usage:
 
 import os
 import logging
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
 
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
@@ -353,7 +353,7 @@ class LLMManager:
         Returns:
             Generated text
         """
-        from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+        from langchain_core.messages import HumanMessage, SystemMessage
 
         lc_messages = []
         for msg in messages:

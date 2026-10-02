@@ -14,7 +14,7 @@ Usage:
     grades = agent.grade_documents(question, documents)
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict
 from dataclasses import dataclass
 
 from langchain_core.documents import Document

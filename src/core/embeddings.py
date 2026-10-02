@@ -23,7 +23,7 @@ Usage:
     vector = embeddings.embed_query("search query")
 """
 
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
 
 from src.utils.config import default_embedding_model, load_environment

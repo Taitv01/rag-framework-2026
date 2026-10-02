@@ -15,11 +15,10 @@ Usage:
     text, confidence = ocr.extract_text_from_image("scanned_doc.png")
 """
 
-import os
 import re
 import logging
 from pathlib import Path
-from typing import Tuple, Optional, Dict, Any, Union
+from typing import Tuple, Any, Union
 
 logger = logging.getLogger(__name__)
 

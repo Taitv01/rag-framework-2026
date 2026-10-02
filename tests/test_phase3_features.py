@@ -10,7 +10,7 @@ Tests for:
 """
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock
 from langchain_core.documents import Document
 
 
@@ -515,7 +515,7 @@ class TestWebSearch:
 
     def test_search_no_results(self):
         """Test search when provider returns no results."""
-        from src.core.web_search import SafeWebSearcher, DuckDuckGoSearchProvider
+        from src.core.web_search import SafeWebSearcher
 
         provider = Mock()
         provider.search.return_value = []

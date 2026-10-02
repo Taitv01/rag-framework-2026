@@ -26,7 +26,7 @@ Usage:
     issues = checker.check_plot_consistency()
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from dataclasses import dataclass
 
 

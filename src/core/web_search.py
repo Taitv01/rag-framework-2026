@@ -22,7 +22,6 @@ Usage:
 """
 
 import logging
-import re
 from typing import List, Optional, Dict, Any, Tuple
 from dataclasses import dataclass, field
 
@@ -90,7 +89,7 @@ class DuckDuckGoSearchProvider(WebSearchProvider):
         """Check if duckduckgo-search is installed."""
         if self._available is None:
             try:
-                from duckduckgo_search import DDGS
+                from duckduckgo_search import DDGS  # noqa: F401
                 self._available = True
             except ImportError:
                 logger.warning(
@@ -164,7 +163,7 @@ class TavilySearchProvider(WebSearchProvider):
         """Check if tavily-python is installed and API key is set."""
         if self._available is None:
             try:
-                from tavily import TavilyClient
+                from tavily import TavilyClient  # noqa: F401
                 self._available = bool(self._get_api_key())
                 if not self._available:
                     logger.warning("Tavily API key not set. Set TAVILY_API_KEY env var.")

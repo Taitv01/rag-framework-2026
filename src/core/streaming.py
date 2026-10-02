@@ -19,7 +19,6 @@ Usage:
 
 from typing import Iterator, Callable, Optional, AsyncIterator
 from dataclasses import dataclass
-import asyncio
 
 
 @dataclass

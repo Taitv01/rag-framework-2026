@@ -3,9 +3,7 @@ Tests for RAG Pipeline
 =====================
 """
 
-import pytest
-from unittest.mock import Mock, MagicMock, patch
-from pathlib import Path
+from unittest.mock import Mock
 
 from langchain_core.documents import Document
 

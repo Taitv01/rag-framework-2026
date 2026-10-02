@@ -16,7 +16,6 @@ Usage:
 """
 
 from typing import List, Optional, Tuple
-from pathlib import Path
 
 import gradio as gr
 

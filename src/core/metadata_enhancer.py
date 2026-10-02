@@ -27,8 +27,7 @@ Usage:
 
 import json
 import logging
-import re
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List
 
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field

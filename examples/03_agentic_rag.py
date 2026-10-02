@@ -17,7 +17,6 @@ Usage:
     python examples/03_agentic_rag.py
 """
 
-import os
 from pathlib import Path
 
 import sys
@@ -111,7 +110,7 @@ def main():
             print(f"💡 Answer: {result['answer']}")
 
             # Show execution trace
-            print(f"\n📍 Execution trace:")
+            print("\n📍 Execution trace:")
             for step in result['trace']:
                 print(f"   → {step['node']}")
 
@@ -154,11 +153,11 @@ def main():
     print("=" * 60)
     print(f"Documents loaded: {rag.num_documents}")
     print(f"Total chunks: {rag.num_chunks}")
-    print(f"Agent features:")
-    print(f"  - Smart retrieval decisions")
-    print(f"  - Document relevance grading")
-    print(f"  - Query rewriting")
-    print(f"  - Multi-turn conversation")
+    print("Agent features:")
+    print("  - Smart retrieval decisions")
+    print("  - Document relevance grading")
+    print("  - Query rewriting")
+    print("  - Multi-turn conversation")
     print("=" * 60)
 
 

@@ -3,10 +3,9 @@ Tests for API SSE Streaming & Langfuse Tracing
 ==============================================
 """
 
-import pytest
 
 from src import __version__
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 from fastapi.testclient import TestClient
 from langchain_core.documents import Document
 from src.api.app import create_app

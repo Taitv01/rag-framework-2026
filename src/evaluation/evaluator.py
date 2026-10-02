@@ -18,7 +18,6 @@ from typing import List, Optional, Dict, Any, Callable
 from dataclasses import dataclass, field
 import json
 import math
-from pathlib import Path
 
 from src.evaluation.metrics import RAGMetrics, RAGScores
 
@@ -444,7 +443,7 @@ class RAGEvaluator:
         for i, result in enumerate(report.results, 1):
             print(f"\n[{i}] Question: {result.question}")
             print(f"    Answer: {result.answer[:100]}...")
-            print(f"    Scores:")
+            print("    Scores:")
             print(f"      Faithfulness:      {result.scores.faithfulness:.3f}")
             print(f"      Answer Relevance:  {result.scores.answer_relevance:.3f}")
             print(f"      Context Precision: {result.scores.context_precision:.3f}")

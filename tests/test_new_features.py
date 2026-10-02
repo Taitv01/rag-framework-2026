@@ -5,10 +5,8 @@ Tests for New Features
 Comprehensive tests for all new modules.
 """
 
-import pytest
 import tempfile
 import os
-from pathlib import Path
 
 
 class TestStreamingModule:
@@ -342,6 +340,7 @@ class TestMonitoringModule:
         metrics.track_error("Error occurred", question="Q1", user_id="user_1")
 
         stats = metrics.get_analytics(period="7d")
+        assert stats.error_count == 1
 
 
 # ============================================================================
@@ -385,8 +384,7 @@ class TestSemanticCache:
         cache.put([1.0, 0.0, 0.0], "query A", "answer A")
 
         # Very similar query should hit
-        result = cache.get([0.99, 0.01, 0.0])
-        # May or may not hit depending on similarity
+        cache.get([0.99, 0.01, 0.0])  # may or may not hit depending on similarity
 
         # Dissimilar query should miss
         cache2 = SemanticCache(threshold=0.99, max_size=100)

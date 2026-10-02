@@ -5,7 +5,6 @@ Tests for Upgraded RAG Features: AgenticRAG, GraphRAG, and AdaptiveRAG
 
 import pytest
 from unittest.mock import Mock, MagicMock
-from langchain_core.documents import Document
 
 from src.rag import AgenticRAG, GraphRAG, AdaptiveRAG
 from src.rag.graph_rag import Entity, Relationship

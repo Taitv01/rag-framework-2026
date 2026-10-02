@@ -2,7 +2,6 @@
 Test for Fairy Tale Thumbnail & Master Prompt Engine
 """
 
-import pytest
 from pathlib import Path
 from src.story.thumbnail_engine import FairyTaleThumbnailEngine
 

@@ -37,11 +37,8 @@ def main():
 
     from src.story import (
         CharacterManager, Character,
-        PlotManager, PlotPoint, PlotArc, Foreshadowing,
-        WorldBuilder, Location, Lore,
-        ChapterManager, Chapter,
-        TimelineManager, TimelineEvent,
-        WritingAssistant
+        PlotManager, PlotPoint, PlotArc, WorldBuilder, Location, Lore,
+        TimelineManager, TimelineEvent
     )
 
     # =========================================================================
@@ -197,7 +194,7 @@ def main():
         characters_involved=["Nguyễn Văn A"]
     ))
 
-    print(f"   Added timeline events")
+    print("   Added timeline events")
 
     # =========================================================================
     # 5. Get Context for RAG

@@ -287,7 +287,6 @@ class SemanticSplitter:
 
         Finds natural breakpoints where semantic similarity drops below threshold.
         """
-        import numpy as np
 
         chunks = []
 

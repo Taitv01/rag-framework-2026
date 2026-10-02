@@ -11,7 +11,7 @@ Usage:
     manager.add_chapter(Chapter(number=1, title="Khởi đầu", content="..."))
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict
 from dataclasses import dataclass, field
 import json
 

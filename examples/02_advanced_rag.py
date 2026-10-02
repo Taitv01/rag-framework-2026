@@ -17,7 +17,6 @@ Usage:
     python examples/02_advanced_rag.py
 """
 
-import os
 from pathlib import Path
 
 import sys
@@ -157,8 +156,8 @@ def main():
     print("=" * 60)
     print(f"Documents loaded: {rag.num_documents}")
     print(f"Total chunks: {rag.num_chunks}")
-    print(f"Hybrid search: ✅ Enabled")
-    print(f"Re-ranking: ✅ Enabled")
+    print("Hybrid search: ✅ Enabled")
+    print("Re-ranking: ✅ Enabled")
     print("=" * 60)
 
 

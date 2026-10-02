@@ -28,9 +28,7 @@ import logging
 import re
 from typing import List, Optional, Dict, Any, Union, Literal
 from pathlib import Path
-from dataclasses import dataclass
 
-from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
@@ -248,7 +246,6 @@ class AgenticRAG:
 
     def _generate_query_or_respond(self, state: Dict) -> Dict:
         """Generate response or decide to retrieve."""
-        from langgraph.graph import MessagesState
 
         response = self.llm.bind_tools([self._retriever_tool]).invoke(
             state["messages"]

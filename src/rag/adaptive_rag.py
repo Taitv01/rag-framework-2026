@@ -33,15 +33,11 @@ Usage:
 import logging
 from typing import List, Optional, Dict, Any, Union
 from pathlib import Path
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 
 from langchain_core.documents import Document
 
-from src.core.document_loader import DocumentLoader
-from src.core.text_splitter import TextSplitter
-from src.core.embeddings import EmbeddingsManager
-from src.core.vector_store import VectorStoreManager
 from src.core.llm import LLMManager
 
 logger = logging.getLogger(__name__)
@@ -442,7 +438,7 @@ Reason"""
         self._initialize_pipelines()
 
         # Add to all pipelines
-        logger.info(f"Adding documents to all AdaptiveRAG pipelines...")
+        logger.info("Adding documents to all AdaptiveRAG pipelines...")
 
         naive_chunks = self._naive_rag.add_documents(sources, metadata=metadata)
         logger.debug(f"NaiveRAG: {naive_chunks} chunks added")

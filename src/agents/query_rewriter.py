@@ -16,7 +16,7 @@ Usage:
     queries = rewriter.generate_multiple("What is Python?")
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict
 
 
 class QueryRewriter:

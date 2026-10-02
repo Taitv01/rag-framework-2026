@@ -42,7 +42,7 @@ def main():
 
     from src.core.document_loader import DocumentLoader
 
-    loader = DocumentLoader()
+    DocumentLoader()
 
     # Create sample documents
     from langchain_core.documents import Document
@@ -101,8 +101,8 @@ def main():
 
     print(f"✅ Split into {len(chunks)} chunks")
     print(f"   Original documents: {len(documents)}")
-    print(f"   Chunk size: 200 characters")
-    print(f"   Chunk overlap: 50 characters")
+    print("   Chunk size: 200 characters")
+    print("   Chunk overlap: 50 characters")
 
     # Show sample chunks
     print("\n📄 Sample chunks:")
@@ -124,14 +124,14 @@ def main():
     )
 
     print("✅ Embedding model loaded")
-    print(f"   Model: sentence-transformers/all-MiniLM-L6-v2")
-    print(f"   Dimensions: 384")
+    print("   Model: sentence-transformers/all-MiniLM-L6-v2")
+    print("   Dimensions: 384")
 
     # Generate embeddings for sample text
     sample_texts = ["What is Python?", "Machine learning basics"]
     vectors = embeddings.embed_documents(sample_texts)
 
-    print(f"\n📊 Generated embeddings:")
+    print("\n📊 Generated embeddings:")
     print(f"   Texts: {len(sample_texts)}")
     print(f"   Vector dimensions: {len(vectors[0])}")
     print(f"   Sample vector (first 5 values): {vectors[0][:5]}")
@@ -153,7 +153,7 @@ def main():
     vector_store.add_documents(chunks)
 
     print("✅ Vector store created")
-    print(f"   Provider: FAISS (in-memory)")
+    print("   Provider: FAISS (in-memory)")
     print(f"   Documents indexed: {len(chunks)}")
 
     # =========================================================================
@@ -194,7 +194,7 @@ def main():
     )
 
     print("✅ Retriever initialized")
-    print(f"   Search modes: Similarity, Hybrid, MMR")
+    print("   Search modes: Similarity, Hybrid, MMR")
 
     # Test different search modes
     query = "artificial intelligence"
@@ -229,7 +229,7 @@ def main():
     query_cache = QueryCache(ttl=3600)
     query_cache.set("What is Python?", {"answer": "Python is a programming language"})
 
-    print(f"\n   Query cache:")
+    print("\n   Query cache:")
     print(f"   'What is Python?': {query_cache.get('What is Python?')}")
 
     # =========================================================================

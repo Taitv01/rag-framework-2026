@@ -3,13 +3,10 @@ Tests for Smart Knowledge Library & OCR Engine
 ================================================
 """
 
-import os
-import json
-import pytest
 from pathlib import Path
 from unittest.mock import Mock
 
-from src.core.ocr_engine import OCREngine, clean_vietnamese_ocr_text
+from src.core.ocr_engine import clean_vietnamese_ocr_text
 from src.core.library_manager import LibraryManager, DocumentClassifier
 
 

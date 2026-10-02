@@ -25,9 +25,8 @@ Usage:
     results = hyde.search("What is Python?", documents)
 """
 
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple
 from dataclasses import dataclass
-import json
 
 import numpy as np
 from langchain_core.documents import Document

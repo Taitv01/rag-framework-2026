@@ -19,7 +19,7 @@ Usage:
     answer = rag.query("What is the relationship between X and Y?")
 """
 
-from typing import List, Optional, Dict, Any, Tuple, Set, Union
+from typing import List, Optional, Dict, Any, Set, Union
 from pathlib import Path
 from dataclasses import dataclass, field
 import json
@@ -27,13 +27,13 @@ import logging
 
 from langchain_core.documents import Document
 
-logger = logging.getLogger(__name__)
-
 from src.core.document_loader import DocumentLoader
 from src.core.text_splitter import TextSplitter
 from src.core.embeddings import EmbeddingsManager
 from src.core.vector_store import VectorStoreManager
 from src.core.llm import LLMManager
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass

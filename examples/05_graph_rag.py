@@ -72,7 +72,7 @@ def main():
     print(f"✅ Added {num_chunks} chunks")
 
     # Show knowledge graph statistics
-    print(f"\n📊 Knowledge Graph Statistics:")
+    print("\n📊 Knowledge Graph Statistics:")
     print(f"   Entities: {rag.num_entities}")
     print(f"   Relationships: {rag.num_relationships}")
 
@@ -80,17 +80,17 @@ def main():
     kg = rag.get_knowledge_graph()
 
     # Show entities
-    print(f"\n📌 Entities:")
+    print("\n📌 Entities:")
     for entity in kg.get_all_entities()[:10]:
         print(f"   - {entity.name} ({entity.entity_type}): {entity.description[:50]}...")
 
     # Show relationships
-    print(f"\n🔗 Relationships:")
+    print("\n🔗 Relationships:")
     for rel in kg.get_all_relationships()[:10]:
         print(f"   - {rel.source} -> {rel.target}: {rel.relationship_type}")
 
     # Query with graph reasoning
-    print(f"\n🔍 Querying with graph reasoning...")
+    print("\n🔍 Querying with graph reasoning...")
 
     questions = [
         "What is the relationship between Python and TensorFlow?",

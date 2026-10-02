@@ -22,7 +22,7 @@ Usage:
 import re
 import logging
 import uuid
-from typing import List, Optional, Dict, Any, Union, Tuple
+from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -105,7 +105,6 @@ class SemanticChunker:
         Returns:
             List of semantically coherent chunks
         """
-        import numpy as np
 
         all_chunks = []
 

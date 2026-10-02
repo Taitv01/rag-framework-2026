@@ -23,7 +23,7 @@ Usage:
     results = store.similarity_search("query", k=5)
 """
 
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
 
 from langchain_core.documents import Document
@@ -118,7 +118,7 @@ class VectorStoreManager:
     def _create_faiss_store(self):
         """Create FAISS vector store."""
         try:
-            from langchain_community.vectorstores import FAISS
+            from langchain_community.vectorstores import FAISS  # noqa: F401
         except ImportError:
             raise ImportError(
                 "faiss-cpu is required for FAISS. "

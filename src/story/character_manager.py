@@ -29,7 +29,7 @@ Usage:
     manager.add_development("A", chapter=5, event="Phát hiện bí mật")
 """
 
-from typing import List, Optional, Dict, Any, Set
+from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
 from datetime import datetime
 import json
