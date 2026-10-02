@@ -18,7 +18,7 @@ Usage:
     content = assistant.write_chapter(chapter_number=5)
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 
 
 class WritingAssistant:
@@ -126,6 +126,9 @@ Nhân vật chính:
 
 Địa điểm: {location}
 {world_context}
+
+Bối cảnh cốt truyện:
+{plot_context}
 
 Plot points cần đề cập:
 {chr(10).join([f"- {p}" for p in plot_points])}
