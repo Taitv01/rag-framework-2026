@@ -28,7 +28,9 @@ source venv/bin/activate  # Linux/Mac
 # or
 venv\Scripts\activate  # Windows
 
-# Install dependencies
+# Install dependencies (core + local models + API; see README for all extras)
+pip install -e ".[api,local-models]"
+# or the full Docker/production set:
 pip install -r requirements.txt
 
 # Copy environment file

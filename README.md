@@ -65,7 +65,7 @@ D:\RAG/
 │   └── utils/           # Semantic Cache, Config loader, Logging
 ├── docs/                # Tài liệu chi tiết & hướng dẫn triển khai
 ├── examples/            # Ví dụ mã nguồn có thể chạy trực tiếp
-├── tests/               # Bộ test suite tự động (150+ test cases PASS)
+├── tests/               # Bộ test suite tự động (190+ test cases, chạy trên CI)
 ├── Dockerfile           # Docker multi-stage build definition
 ├── docker-compose.yml   # Multi-service deployment (API + Qdrant + Redis)
 ├── PHASES.md            # Lộ trình phát triển qua từng giai đoạn
@@ -86,8 +86,24 @@ py -m venv .venv
 
 # Cập nhật pip & cài đặt dependencies
 py -m pip install --upgrade pip
-py -m pip install -e ".[dev,api]"
+py -m pip install -e ".[dev,api,local-models]"
 ```
+
+Phần lõi (`pip install -e .`) chỉ gồm LangChain, FAISS, BM25, loader tài liệu và NLP tiếng Việt, **không kéo torch**. Các tính năng nặng hoặc tùy chọn cài qua extras:
+
+| Extra | Dùng cho |
+|-------|----------|
+| `local-models` | Embedding HuggingFace (mặc định `BAAI/bge-m3`) và reranker cross-encoder (kéo theo torch) |
+| `qdrant` / `chroma` | Vector store Qdrant (`qdrant-client`, `langchain-qdrant`) / ChromaDB |
+| `api` / `ui` | FastAPI server / Gradio UI |
+| `ocr` | OCR ảnh và PDF scan (pytesseract, Pillow, pdf2image) |
+| `monitoring` | Langfuse tracing |
+| `web` / `graph` | Web search fallback / Neo4j |
+| `eval` | RAGAS, DeepEval (bộ đánh giá có sẵn trong `src.evaluation` không cần) |
+| `dev` | pytest, ruff, mypy... |
+| `all` | Tất cả các extra ở trên |
+
+Docker dùng `requirements.txt` (lõi + `local-models,qdrant,chroma,monitoring,api,web,graph`).
 
 ### 2. Cấu Hình Biến Môi Trường (`.env.local`)
 
@@ -255,7 +271,12 @@ py -m compileall src tests
 
 # Chạy toàn bộ unit test suite
 py -m pytest -v
+
+# Lint (bộ rule được cố định trong pyproject.toml)
+py -m ruff check src tests examples
 ```
+
+Test không bao giờ đọc `.env` / `.env.local`: `tests/conftest.py` đặt `RAG_DISABLE_DOTENV=1` và xoá các biến môi trường giống secret. CI (`.github/workflows/ci.yml`) chạy ruff và pytest trên Python 3.11–3.13 với bản cài lõi nhẹ `.[dev,api]`.
 
 ---
 
