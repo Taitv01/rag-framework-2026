@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_core.language_models import BaseChatModel
 
-from src.utils.config import load_environment
+from src.utils.config import default_llm_model, load_environment
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 class LLMConfig:
     """Configuration for LLM."""
     provider: str = "openai"
-    model: str = "gpt-4o"
+    model: str = "gpt-4o-mini"
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     temperature: float = 0.7
@@ -145,12 +145,7 @@ class LLMManager:
 
     def _get_default_model(self, provider: str) -> str:
         """Get default model for provider."""
-        defaults = {
-            "openai": "gpt-4o-mini",
-            "anthropic": "claude-sonnet-4-20250514",
-            "ollama": "llama3",
-        }
-        return defaults.get(provider, "gpt-4o-mini")
+        return default_llm_model(provider)
 
     @property
     def llm(self) -> BaseChatModel:

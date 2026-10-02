@@ -79,10 +79,10 @@ class AgenticRAG:
     def __init__(
         self,
         llm_provider: str = "openai",
-        llm_model: str = "gpt-4o",
+        llm_model: Optional[str] = None,
         llm_api_key: Optional[str] = None,
         embedding_provider: str = "huggingface",
-        embedding_model: str = "keepitreal/vietnamese-sbert",
+        embedding_model: Optional[str] = None,
         vector_store_provider: str = "faiss",
         chunk_size: int = 500,
         chunk_overlap: int = 50,

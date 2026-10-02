@@ -34,7 +34,7 @@ class NaiveRAG:
     def __init__(
         self,
         llm_provider: str = "openai",
-        llm_model: str = "gpt-4o-mini",
+        llm_model: Optional[str] = None,
         llm_api_key: Optional[str] = None,
         embedding_provider: str = "huggingface",
         embedding_model: Optional[str] = None,

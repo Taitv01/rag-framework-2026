@@ -25,6 +25,13 @@ DEFAULT_LLM_MODEL=gpt-4o-mini
 DEFAULT_TEMPERATURE=0.7
 ```
 
+`DEFAULT_LLM_MODEL` and `DEFAULT_EMBEDDING_MODEL` are optional. When unset,
+the model is chosen per provider from one table in `src/utils/config.py`
+(`DEFAULT_LLM_MODELS` / `DEFAULT_EMBEDDING_MODELS`): `gpt-4o-mini` for OpenAI,
+`claude-sonnet-4-20250514` for Anthropic, `llama3` for Ollama, and `BAAI/bge-m3`
+for HuggingFace embeddings. Pipelines (`NaiveRAG`, `AdvancedRAG`, ...) use the
+same table when `llm_model` / `embedding_model` are not passed.
+
 ### Ox Alpha via OpenRouter
 
 Ox Alpha uses OpenRouter's OpenAI-compatible endpoint and a dedicated key so it
@@ -114,6 +121,10 @@ OPENAI_API_KEY=sk-...
 DEFAULT_LLM_MODEL=gpt-4o
 CHUNK_SIZE=500
 ```
+
+`.env` is loaded first, then `.env.local` (git-ignored) overrides it for local
+secrets. Set `RAG_DISABLE_DOTENV=1` to skip both files; the test suite does
+this in `tests/conftest.py` so real credentials never reach tests.
 
 ## Programmatic Configuration
 

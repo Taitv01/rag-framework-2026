@@ -82,10 +82,10 @@ class AdvancedRAG:
     def __init__(
         self,
         llm_provider: str = "openai",
-        llm_model: str = "gpt-4o-mini",
+        llm_model: Optional[str] = None,
         llm_api_key: Optional[str] = None,
         embedding_provider: str = "huggingface",
-        embedding_model: str = "keepitreal/vietnamese-sbert",
+        embedding_model: Optional[str] = None,
         vector_store_provider: str = "faiss",
         collection_name: str = "default",
         persist_directory: Optional[str] = None,
@@ -118,10 +118,11 @@ class AdvancedRAG:
 
         Args:
             llm_provider: LLM provider
-            llm_model: LLM model name
+            llm_model: LLM model name (default: the provider's default model)
             llm_api_key: LLM API key
             embedding_provider: Embedding provider
-            embedding_model: Embedding model name (default: Vietnamese SBERT)
+            embedding_model: Embedding model name (default: the provider's default,
+                BAAI/bge-m3 for huggingface)
             vector_store_provider: Vector store provider
             collection_name: Vector store collection/index name
             persist_directory: Directory for persistent local vector stores

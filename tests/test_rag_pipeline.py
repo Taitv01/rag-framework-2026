@@ -557,7 +557,7 @@ class TestRAGIntegration:
         # Test default values
         chunk_size = config.get_int("CHUNK_SIZE", default=500)
         assert chunk_size == 500
-        assert config.get("DEFAULT_EMBEDDING_MODEL") == "keepitreal/vietnamese-sbert"
+        assert config.get_embedding_config()["model"] == "BAAI/bge-m3"
 
     def test_cache(self):
         """Test cache functionality."""

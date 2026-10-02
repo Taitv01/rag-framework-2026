@@ -26,7 +26,7 @@ Usage:
 from typing import List, Optional, Dict, Any, Union
 from dataclasses import dataclass, field
 
-from src.utils.config import load_environment
+from src.utils.config import default_embedding_model, load_environment
 
 
 @dataclass
@@ -48,11 +48,8 @@ class EmbeddingsManager:
     Provides a unified interface for different embedding models.
 
     Example:
-        # Vietnamese embeddings (default, free, no API key)
-        embeddings = EmbeddingsManager(
-            provider="huggingface",
-            model_name="keepitreal/vietnamese-sbert"
-        )
+        # Multilingual/Vietnamese embeddings (default BAAI/bge-m3, free, no API key)
+        embeddings = EmbeddingsManager(provider="huggingface")
 
         # OpenAI embeddings
         embeddings = EmbeddingsManager(
@@ -173,12 +170,7 @@ class EmbeddingsManager:
 
     def _get_default_model(self, provider: str) -> str:
         """Get default model for provider."""
-        defaults = {
-            "huggingface": "BAAI/bge-m3",
-            "openai": "text-embedding-3-small",
-            "cohere": "embed-multilingual-v3.0",
-        }
-        return defaults.get(provider, "BAAI/bge-m3")
+        return default_embedding_model(provider)
 
     @property
     def embeddings(self):

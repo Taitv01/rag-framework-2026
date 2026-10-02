@@ -27,7 +27,7 @@ from src.utils.config import Config
 def create_ui(
     rag_type: str = "advanced",
     llm_provider: str = "openai",
-    llm_model: str = "gpt-4o-mini",
+    llm_model: Optional[str] = None,
     embedding_provider: str = "huggingface",
     **kwargs
 ) -> gr.Blocks:
@@ -123,7 +123,7 @@ def create_ui(
 - **Documents:** {rag.num_documents}
 - **Chunks:** {rag.num_chunks}
 - **RAG Type:** {rag_type}
-- **LLM:** {llm_provider}/{llm_model}
+- **LLM:** {rag.llm.config.provider}/{rag.llm.config.model}
 - **Embeddings:** {embedding_provider}
 """
 
@@ -239,7 +239,7 @@ def main():
     ui = create_ui(
         rag_type="advanced",
         llm_provider=config.get("DEFAULT_LLM_PROVIDER", "openai"),
-        llm_model=config.get("DEFAULT_LLM_MODEL", "gpt-4o-mini"),
+        llm_model=config.get("DEFAULT_LLM_MODEL"),
         embedding_provider=config.get("DEFAULT_EMBEDDING_PROVIDER", "huggingface"),
     )
 

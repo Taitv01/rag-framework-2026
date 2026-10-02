@@ -9,10 +9,38 @@ def test_env_local_overrides_env_file(tmp_path, monkeypatch):
     (tmp_path / ".env.local").write_text("RAG_TEST_VALUE=from_local\n", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("RAG_TEST_VALUE", raising=False)
+    monkeypatch.delenv("RAG_DISABLE_DOTENV", raising=False)
 
     config = Config()
 
     assert config.get("RAG_TEST_VALUE") == "from_local"
+
+
+def test_dotenv_discovery_can_be_disabled(tmp_path, monkeypatch):
+    """RAG_DISABLE_DOTENV keeps local secret files out of the environment."""
+    (tmp_path / ".env.local").write_text("RAG_TEST_VALUE=from_local\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("RAG_TEST_VALUE", raising=False)
+    monkeypatch.setenv("RAG_DISABLE_DOTENV", "1")
+
+    assert Config().get("RAG_TEST_VALUE") is None
+
+
+def test_model_defaults_follow_provider(monkeypatch):
+    """Unset model settings resolve to the configured provider's default."""
+    from src.core.embeddings import EmbeddingsManager
+    from src.core.llm import LLMManager
+
+    monkeypatch.delenv("DEFAULT_LLM_MODEL", raising=False)
+    monkeypatch.delenv("DEFAULT_EMBEDDING_MODEL", raising=False)
+    monkeypatch.setenv("DEFAULT_LLM_PROVIDER", "anthropic")
+
+    config = Config()
+
+    assert config.get_llm_config()["model"] == "claude-sonnet-4-20250514"
+    assert config.get_embedding_config()["model"] == "BAAI/bge-m3"
+    assert LLMManager(provider="anthropic").config.model == "claude-sonnet-4-20250514"
+    assert EmbeddingsManager(provider="openai").config.model_name == "text-embedding-3-small"
 
 
 def test_openrouter_llm_config_prefers_dedicated_key(monkeypatch):

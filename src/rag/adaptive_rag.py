@@ -121,10 +121,10 @@ class AdaptiveRAG:
     def __init__(
         self,
         llm_provider: str = "openai",
-        llm_model: str = "gpt-4o-mini",
+        llm_model: Optional[str] = None,
         llm_api_key: Optional[str] = None,
         embedding_provider: str = "huggingface",
-        embedding_model: str = "keepitreal/vietnamese-sbert",
+        embedding_model: Optional[str] = None,
         vector_store_provider: str = "faiss",
         chunk_size: int = 500,
         chunk_overlap: int = 50,
@@ -202,7 +202,7 @@ class AdaptiveRAG:
         self._documents: List[Document] = []
 
         logger.info(
-            f"AdaptiveRAG initialized with router LLM={llm_model}, "
+            f"AdaptiveRAG initialized with router LLM={self._router_llm.config.model}, "
             f"default_route={self._routing_config.default_route.value}"
         )
 

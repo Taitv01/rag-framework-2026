@@ -25,15 +25,54 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 
+# Single source of truth for per-provider default models. LLMManager and
+# EmbeddingsManager fall back to these when no model is given, and Config
+# uses them when DEFAULT_LLM_MODEL / DEFAULT_EMBEDDING_MODEL are unset.
+DEFAULT_LLM_MODELS = {
+    "openai": "gpt-4o-mini",
+    "anthropic": "claude-sonnet-4-20250514",
+    "ollama": "llama3",
+}
+DEFAULT_EMBEDDING_MODELS = {
+    "huggingface": "BAAI/bge-m3",
+    "openai": "text-embedding-3-small",
+    "cohere": "embed-multilingual-v3.0",
+}
+
+
+def default_llm_model(provider: Optional[str]) -> str:
+    """Return the default LLM model for a provider."""
+    return DEFAULT_LLM_MODELS.get(provider or "openai", DEFAULT_LLM_MODELS["openai"])
+
+
+def default_embedding_model(provider: Optional[str]) -> str:
+    """Return the default embedding model for a provider."""
+    return DEFAULT_EMBEDDING_MODELS.get(
+        provider or "huggingface", DEFAULT_EMBEDDING_MODELS["huggingface"]
+    )
+
+
+def dotenv_disabled() -> bool:
+    """Whether automatic `.env` / `.env.local` discovery is switched off."""
+    return os.getenv("RAG_DISABLE_DOTENV", "").strip().lower() in ("1", "true", "yes")
+
+
 def load_environment(env_file: Optional[str] = None) -> None:
     """
     Load environment files in a predictable order.
 
     `.env.local` is loaded after `.env` and can override local developer
     secrets such as OPENAI_API_KEY without changing the committed template.
+
+    Set RAG_DISABLE_DOTENV=1 to skip auto-discovery (the test suite does this
+    so local secrets never leak into tests). An explicit `env_file` is still
+    loaded.
     """
     if env_file:
         load_dotenv(env_file)
+        return
+
+    if dotenv_disabled():
         return
 
     env_path = Path.cwd() / ".env"
@@ -74,8 +113,9 @@ class Config:
     # Default configuration values
     DEFAULTS = {
         # LLM Configuration
+        # DEFAULT_LLM_MODEL / DEFAULT_EMBEDDING_MODEL are intentionally absent:
+        # when unset they resolve per provider (see DEFAULT_LLM_MODELS).
         "DEFAULT_LLM_PROVIDER": "openai",
-        "DEFAULT_LLM_MODEL": "gpt-4o-mini",
         "DEFAULT_TEMPERATURE": "0.7",
         "OPENROUTER_BASE_URL": "https://openrouter.ai/api/v1",
         "OX_MODEL": "stealth/ox-alpha",
@@ -83,7 +123,6 @@ class Config:
 
         # Embedding Configuration
         "DEFAULT_EMBEDDING_PROVIDER": "huggingface",
-        "DEFAULT_EMBEDDING_MODEL": "keepitreal/vietnamese-sbert",
         "DEFAULT_RERANKER_MODEL": "AITeamVN/Vietnamese_Reranker",
 
         # Vector Store Configuration
@@ -254,9 +293,10 @@ class Config:
             self.get("OPENROUTER_API_KEY") if is_openrouter else None
         ) or self.get("OPENAI_API_KEY") or self.get("ANTHROPIC_API_KEY")
 
+        provider = self.get("DEFAULT_LLM_PROVIDER")
         return {
-            "provider": self.get("DEFAULT_LLM_PROVIDER"),
-            "model": self.get("DEFAULT_LLM_MODEL"),
+            "provider": provider,
+            "model": self.get("DEFAULT_LLM_MODEL") or default_llm_model(provider),
             "api_key": api_key,
             "base_url": base_url,
             "temperature": self.get_float("DEFAULT_TEMPERATURE"),
@@ -269,9 +309,10 @@ class Config:
         Returns:
             Dict with embedding settings
         """
+        provider = self.get("DEFAULT_EMBEDDING_PROVIDER")
         return {
-            "provider": self.get("DEFAULT_EMBEDDING_PROVIDER"),
-            "model": self.get("DEFAULT_EMBEDDING_MODEL"),
+            "provider": provider,
+            "model": self.get("DEFAULT_EMBEDDING_MODEL") or default_embedding_model(provider),
         }
 
     def get_vector_store_config(self) -> Dict[str, Any]:

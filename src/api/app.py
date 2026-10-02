@@ -274,7 +274,7 @@ class SearchResult(BaseModel):
 def create_app(
     rag_type: str = "advanced",
     llm_provider: str = "openai",
-    llm_model: str = "gpt-4o-mini",
+    llm_model: Optional[str] = None,
     embedding_provider: str = "huggingface",
     embedding_model: Optional[str] = None,
     vector_store_provider: Optional[str] = None,
@@ -1038,9 +1038,9 @@ config = Config()
 app = create_app(
     rag_type="advanced",
     llm_provider=config.get("DEFAULT_LLM_PROVIDER", "openai"),
-    llm_model=config.get("DEFAULT_LLM_MODEL", "gpt-4o-mini"),
+    llm_model=config.get("DEFAULT_LLM_MODEL"),
     embedding_provider=config.get("DEFAULT_EMBEDDING_PROVIDER", "huggingface"),
-    embedding_model=config.get("DEFAULT_EMBEDDING_MODEL", "BAAI/bge-m3"),
+    embedding_model=config.get("DEFAULT_EMBEDDING_MODEL"),
     vector_store_provider=config.get("DEFAULT_VECTOR_STORE", "faiss"),
     collection_name=config.get("DEFAULT_COLLECTION_NAME", "default"),
     chunk_size=config.get_int("CHUNK_SIZE", default=500),
