@@ -39,6 +39,7 @@ class LLMConfig:
     provider: str = "openai"
     model: str = "gpt-4o"
     api_key: Optional[str] = None
+    base_url: Optional[str] = None
     temperature: float = 0.7
     max_tokens: Optional[int] = None
     streaming: bool = False
@@ -113,6 +114,7 @@ class LLMManager:
         provider: str = "openai",
         model: Optional[str] = None,
         api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         streaming: bool = False,
@@ -124,6 +126,7 @@ class LLMManager:
             provider: LLM provider ('openai', 'anthropic', 'ollama')
             model: Model name/identifier
             api_key: API key
+            base_url: Optional OpenAI-compatible API base URL
             temperature: Temperature for generation
             max_tokens: Maximum tokens to generate
             streaming: Enable streaming
@@ -132,6 +135,7 @@ class LLMManager:
             provider=provider,
             model=model or self._get_default_model(provider),
             api_key=api_key,
+            base_url=base_url,
             temperature=temperature,
             max_tokens=max_tokens,
             streaming=streaming,
@@ -177,11 +181,17 @@ class LLMManager:
             )
 
         load_environment()
-        api_key = self.config.api_key or os.getenv("OPENAI_API_KEY")
+        base_url = self.config.base_url or os.getenv("OPENAI_BASE_URL")
+        is_openrouter = bool(base_url and "openrouter.ai" in base_url.casefold())
+        api_key = (
+            self.config.api_key
+            or (os.getenv("OPENROUTER_API_KEY") if is_openrouter else None)
+            or os.getenv("OPENAI_API_KEY")
+        )
         if not api_key:
             raise ValueError(
-                "OpenAI API key is required. "
-                "Set OPENAI_API_KEY environment variable or pass api_key parameter."
+                "An OpenAI-compatible API key is required. Set OPENAI_API_KEY "
+                "(or OPENROUTER_API_KEY for OpenRouter) or pass api_key."
             )
 
         kwargs = {
@@ -191,7 +201,6 @@ class LLMManager:
             "streaming": self.config.streaming,
         }
 
-        base_url = os.getenv("OPENAI_BASE_URL")
         if base_url:
             kwargs["base_url"] = base_url
 
@@ -268,7 +277,71 @@ class LLMManager:
         """
         messages = self._create_messages(prompt, system_prompt)
         response = self.llm.invoke(messages, **kwargs)
-        return response.content
+        return self._content_to_text(response.content)
+
+    def generate_multimodal(
+        self,
+        prompt: str,
+        media: List[Dict[str, str]],
+        system_prompt: Optional[str] = None,
+        **kwargs,
+    ) -> str:
+        """Generate text from a prompt plus image/video URL or data-URL inputs.
+
+        Media items use the provider-neutral shape ``{"type": "image" | "video",
+        "url": "..."}``. They are translated to OpenAI-compatible
+        ``image_url`` and ``video_url`` content blocks used by OpenRouter.
+        """
+        if self.config.provider != "openai":
+            raise ValueError(
+                "Image/video input currently requires an OpenAI-compatible provider"
+            )
+        if not media:
+            raise ValueError("At least one image or video is required")
+
+        content: List[Dict[str, Any]] = [{"type": "text", "text": prompt}]
+        block_types = {
+            "image": "image_url",
+            "video": "video_url",
+        }
+
+        for item in media:
+            media_type = str(item.get("type", "")).casefold()
+            url = str(item.get("url", "")).strip()
+            block_type = block_types.get(media_type)
+            if not block_type:
+                raise ValueError(f"Unsupported media type: {media_type or '<empty>'}")
+            if not url:
+                raise ValueError("Media URL cannot be empty")
+            content.append({
+                "type": block_type,
+                block_type: {"url": url},
+            })
+
+        messages = []
+        if system_prompt:
+            messages.append(SystemMessage(content=system_prompt))
+        messages.append(HumanMessage(content=content))
+
+        response = self.llm.invoke(messages, **kwargs)
+        return self._content_to_text(response.content)
+
+    @staticmethod
+    def _content_to_text(content: Any) -> str:
+        """Normalize text returned as a string or provider content blocks."""
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts = []
+            for block in content:
+                if isinstance(block, str):
+                    parts.append(block)
+                elif isinstance(block, dict):
+                    text = block.get("text") or block.get("content")
+                    if text:
+                        parts.append(str(text))
+            return "".join(parts)
+        return str(content)
 
     def generate_with_messages(
         self,

@@ -13,7 +13,7 @@
 | Phase 2.5 | 2026 Modernization Update | ✅ Hoàn thành | 12+ files |
 | Phase 3 | Vietnamese Fairy Tale Features | ✅ Hoàn thành | 4 files |
 | Phase 4 | Production Readiness (Streaming SSE, Tracing, Containerization) | ✅ Hoàn thành | 5 files |
-| Phase 5 | Advanced Features | ⏳ Chưa bắt đầu | - |
+| Phase 5 | Advanced Features | 🟡 Đang triển khai | 7+ files |
 
 ---
 
@@ -394,4 +394,28 @@ Implemented real-time streaming, LLM/RAG tracing, and container readiness:
 - `src/monitoring/__init__.py`: Exported `LangfuseTracer`.
 - `tests/test_api_streaming.py`: Added unit and integration tests for SSE streaming and Langfuse tracer fallback.
 - `docker-compose.yml` & `Dockerfile`: Enhanced multi-container deployment orchestrating FastAPI (`rag-api`), Qdrant Vector Store (`rag-qdrant`), and Redis Cache (`rag-redis`).
+
+---
+
+## Update 2026-08-25: Reliability and Packaging Hardening
+
+- `src/rag/agentic_rag.py`: Added structured hallucination scores, strict legacy-response parsing, and fail-closed behavior when grading is unavailable.
+- `src/rag/graph_rag.py`: Implemented deterministic N-hop subgraph traversal with validated depth and context limited to reached entities and relationships.
+- `src/rag/naive_rag.py`: Repaired embedding initialization, vector retrieval, and update-safe Markdown folder refresh after component API drift.
+- `src/api/app.py`: Preserved pytest/IDE-managed output streams while keeping interactive Windows consoles UTF-8 capable.
+- `src/api/app.py` and `src/__init__.py`: Centralized the framework version at `1.1.0`.
+- `pyproject.toml`: Added explicit `api` and `ui` extras so editable installs can run the documented server and interface.
+- `tests/test_advanced_rag_features.py`: Added regression coverage for structured grading, ambiguous responses, graph depth, and invalid traversal settings.
+
+---
+
+## Update 2026-08-25: Ox Alpha Multimodal RAG API
+
+- `src/core/llm.py`: Added dedicated `OPENROUTER_API_KEY` support plus OpenRouter-compatible `image_url` and `video_url` content blocks with normalized text responses.
+- `src/rag/multimodal.py`: Added bilingual visual-grounding prompt shared by NaiveRAG and AdvancedRAG.
+- `src/rag/naive_rag.py` and `src/rag/advanced_rag.py`: Added `query_multimodal()` with optional retrieval context and citations.
+- `src/api/app.py`: Added generic multimodal routes plus dedicated `/ox/status`, `/ox/chat`, `/ox/analyze`, and `/ox/analyze/url` endpoints, MIME allowlists, bounded in-memory reads, combined-size/file-count limits, and payload-safe tracing.
+- `src/core/llm.py`: Added per-instance compatible-provider base URLs so the Ox client stays isolated from the default RAG model and OpenAI endpoint.
+- `pyproject.toml` and `src/__init__.py`: Bumped the feature release to `1.2.0`.
+- `tests/test_multimodal_rag.py`: Added mocked coverage for image/video blocks, both pipelines, multipart upload, remote URLs, invalid schemes, MIME rejection, and size limits.
 

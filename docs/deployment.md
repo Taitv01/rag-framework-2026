@@ -92,6 +92,22 @@ API_KEYS=replace_with_a_long_random_key
 OPENAI_API_KEY=sk-...
 ```
 
+For the dedicated Ox Alpha API through OpenRouter, add:
+
+```bash
+OPENROUTER_API_KEY=sk-or-v1-...
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OX_MODEL=stealth/ox-alpha
+OX_TEMPERATURE=1.0
+MAX_MULTIMODAL_FILES=4
+MAX_MULTIMODAL_TOTAL_SIZE_MB=50
+```
+
+`docker-compose.yml` forwards these values to `rag-api`. Uploads are limited by
+`MAX_UPLOAD_SIZE_MB` per file; use `/ox/analyze/url` for large videos. Check
+configuration with `GET /ox/status`; this health-style endpoint never returns
+the OpenRouter key.
+
 The non-Docker `QDRANT_URL` can stay `http://localhost:6333` for local Python
 runs. The compose stack uses `DOCKER_QDRANT_URL` internally.
 

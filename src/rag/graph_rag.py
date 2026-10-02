@@ -565,9 +565,8 @@ Question / Câu hỏi: {question}"""
 
         return self.llm.generate(prompt, **kwargs)
 
-    def _graph_retrieval(self, question: str) -> str:
-        """Retrieve relevant information from knowledge graph."""
-        # Extract entity names from question (bilingual)
+    def _extract_entity_names(self, question: str) -> List[str]:
+        """Extract candidate entity names from a question using the configured LLM."""
         prompt = f"""Extract the main entity names mentioned in this question.
 Trích xuất tên các thực thể chính trong câu hỏi này.
 
@@ -584,7 +583,11 @@ Trả về tên thực thể dưới dạng danh sách cách nhau bằng dấu p
             if response.lower().startswith(prefix.lower()):
                 response = response[len(prefix):].strip()
 
-        entity_names = [name.strip() for name in response.split(",") if name.strip()]
+        return [name.strip() for name in response.split(",") if name.strip()]
+
+    def _graph_retrieval(self, question: str) -> str:
+        """Retrieve relevant information from knowledge graph."""
+        entity_names = self._extract_entity_names(question)
 
         # Get graph information
         graph_info = []
@@ -628,19 +631,71 @@ Trả về tên thực thể dưới dạng danh sách cách nhau bằng dấu p
         Returns:
             Dict containing matched entities, sub-graph triples, and formatted context text
         """
-        graph_text = self._graph_retrieval(question)
+        if not isinstance(max_hops, int) or isinstance(max_hops, bool) or max_hops < 0:
+            raise ValueError("max_hops must be a non-negative integer")
+
         entities = list(self.knowledge_graph.entities.keys())
-        matched = [e for e in entities if e.lower() in question.lower()]
-        
-        triples = []
-        for rel in self.knowledge_graph.relationships:
-            if rel.source in matched or rel.target in matched:
-                triples.append(f"{rel.source} -[{rel.relationship_type}]-> {rel.target}")
+        folded_question = question.casefold()
+        matched = [name for name in entities if name.casefold() in folded_question]
+
+        # If a question uses an alias or an indirect reference, reuse the LLM
+        # entity extractor and map its output back to canonical graph names.
+        if not matched:
+            extracted = self._extract_entity_names(question)
+            canonical_names = {name.casefold(): name for name in entities}
+            matched = [
+                canonical_names[name.casefold()]
+                for name in extracted
+                if name.casefold() in canonical_names
+            ]
+
+        reached = set(matched)
+        frontier = set(matched)
+        selected_relationships: List[Relationship] = []
+        selected_ids: Set[int] = set()
+
+        # Traverse the in-memory graph as undirected, matching KnowledgeGraph's
+        # adjacency semantics. Each iteration adds exactly one hop.
+        for _ in range(max_hops):
+            next_frontier: Set[str] = set()
+            for index, relationship in enumerate(self.knowledge_graph.relationships):
+                if relationship.source in frontier:
+                    next_frontier.add(relationship.target)
+                elif relationship.target in frontier:
+                    next_frontier.add(relationship.source)
+                else:
+                    continue
+
+                if index not in selected_ids:
+                    selected_relationships.append(relationship)
+                    selected_ids.add(index)
+
+            next_frontier -= reached
+            if not next_frontier:
+                break
+            reached.update(next_frontier)
+            frontier = next_frontier
+
+        triples = [
+            f"{rel.source} -[{rel.relationship_type}]-> {rel.target}"
+            for rel in selected_relationships
+        ]
+
+        context_parts = []
+        for name in sorted(reached):
+            entity = self.knowledge_graph.entities.get(name)
+            if entity:
+                context_parts.append(
+                    f"Entity: {entity.name} ({entity.entity_type})\n"
+                    f"Description: {entity.description}"
+                )
+        if triples:
+            context_parts.append("Relationships:\n" + "\n".join(f"- {triple}" for triple in triples))
 
         return {
             "matched_entities": matched,
             "subgraph_triples": triples,
-            "formatted_context": graph_text,
+            "formatted_context": "\n\n".join(context_parts),
             "max_hops": max_hops,
         }
 

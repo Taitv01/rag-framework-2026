@@ -45,6 +45,7 @@ from src.core.vector_store import VectorStoreManager
 from src.core.retriever import RetrieverManager
 from src.core.llm import LLMManager
 from src.core.markdown_index import MarkdownFolderIndexer
+from src.rag.multimodal import build_multimodal_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -760,6 +761,32 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
             "total_docs_retrieved": len(docs),
             "relevant_docs_count": len(relevant_docs),
             "cache_hit": cache_hit,
+        }
+
+    def query_multimodal(
+        self,
+        question: str,
+        media: List[Dict[str, str]],
+        k: Optional[int] = None,
+        use_retrieval: bool = True,
+        llm: Optional[Any] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Analyze images/videos and enrich the answer with advanced retrieval."""
+        k = k or self.retrieval_k
+        docs = self._retrieve(question, k=k) if use_retrieval and self.num_chunks else []
+        context = self._build_context(docs) if docs else ""
+        prompt = build_multimodal_prompt(question, context)
+        model_client = llm or self.llm
+        answer = model_client.generate_multimodal(prompt, media, **kwargs)
+        sources = self._format_sources(docs)
+
+        return {
+            "answer": answer,
+            "sources": sources,
+            "citations": sources,
+            "media_count": len(media),
+            "model": model_client.config.model,
         }
 
     def _transform_query(self, question: str) -> str:

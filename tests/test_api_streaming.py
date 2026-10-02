@@ -4,6 +4,8 @@ Tests for API SSE Streaming & Langfuse Tracing
 """
 
 import pytest
+
+from src import __version__
 from unittest.mock import Mock, MagicMock
 from fastapi.testclient import TestClient
 from langchain_core.documents import Document
@@ -24,7 +26,7 @@ def test_langfuse_tracer_graceful_fallback():
 
 
 def test_api_health_endpoint():
-    """Verify health endpoint contains version 1.1.0 and tracing status."""
+    """Verify health endpoint exposes the package version and tracing status."""
     app = create_app(rag_type="naive", vector_store_provider="faiss")
     
     # Mock heavy RAG components
@@ -37,7 +39,7 @@ def test_api_health_endpoint():
     assert res.status_code == 200
     data = res.json()
     assert data["status"] == "healthy"
-    assert data["version"] == "1.1.0"
+    assert data["version"] == __version__
     assert "tracing_enabled" in data
 
 

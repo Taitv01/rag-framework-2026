@@ -1,7 +1,7 @@
 # 🚀 Ultimate RAG Framework (2026 Edition)
 
 [![Python Version](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-1.1.0-009688.svg)](https://fastapi.tiangolo.com/)
+[![Release](https://img.shields.io/badge/release-v1.2.0-009688.svg)](https://github.com/Taitv01/rag-framework-2026)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
 [![Vietnamese NLP](https://img.shields.io/badge/NLP-Vietnamese_Aware-red.svg)](https://huggingface.co/BAAI/bge-m3)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -21,7 +21,8 @@ Hệ thống được tối ưu hóa đặc biệt cho **Tiếng Việt**, hỗ 
 
 ### 2. ⚡ Real-Time SSE Streaming & Production API
 - **Server-Sent Events (SSE)**: API `/query/stream` phản hồi câu trả lời theo thời gian thực (chunk-by-chunk) cho trải nghiệm người dùng tương tác tức thì.
-- **RESTful Endpoints**: `/query`, `/query/stream`, `/documents`, `/ingest`, `/search`, `/health`, `/ready`.
+- **Ox AI API chuyên biệt**: `/ox/chat`, `/ox/analyze`, `/ox/analyze/url` luôn dùng `stealth/ox-alpha`; có thể kết hợp context và citation từ kho RAG.
+- **RESTful Endpoints**: `/query`, `/query/stream`, `/query/multimodal`, `/ox/*`, `/documents`, `/ingest`, `/search`, `/health`, `/ready`.
 - **Rate Limiting & Authentication**: Giới hạn tần suất truy cập sliding-window và xác thực API-Key.
 
 ### 3. 📂 Thư Mục Markdown Refresh Tự Động (SHA-256 Incremental Ingestion)
@@ -85,7 +86,7 @@ py -m venv .venv
 
 # Cập nhật pip & cài đặt dependencies
 py -m pip install --upgrade pip
-py -m pip install -e ".[dev]"
+py -m pip install -e ".[dev,api]"
 ```
 
 ### 2. Cấu Hình Biến Môi Trường (`.env.local`)
@@ -97,6 +98,12 @@ Tạo file `.env.local` tại thư mục gốc dự án (file này được Git 
 OPENAI_API_KEY=sk-your-openai-api-key
 ANTHROPIC_API_KEY=your-anthropic-api-key
 
+# Ox Alpha qua OpenRouter
+# OPENROUTER_API_KEY=sk-or-v1-your-openrouter-key
+# OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+# OX_MODEL=stealth/ox-alpha
+# OX_TEMPERATURE=1.0
+
 # Tracing (Tùy chọn)
 LANGFUSE_PUBLIC_KEY=pk-lf-...
 LANGFUSE_SECRET_KEY=sk-lf-...
@@ -106,6 +113,8 @@ LANGFUSE_HOST=https://cloud.langfuse.com
 ENABLE_API_AUTH=false
 API_KEYS=rag_secret_key_123
 CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+MAX_MULTIMODAL_FILES=4
+MAX_MULTIMODAL_TOTAL_SIZE_MB=50
 ```
 
 ---
@@ -161,6 +170,50 @@ print("Đường dẫn trong thư viện:", result["records"][0]["library_path"]
 docs_co_tich = rag.library_manager.get_documents_by_category("cổ_tích_kịch_bản")
 print("Thống kê danh mục thư viện:", rag.library_manager.list_library_categories())
 ```
+
+### 4. Phân Tích Ảnh/Video Với Ox Alpha + RAG
+
+Kiểm tra Ox đã được cấu hình (route này không gọi nhà cung cấp và không lộ API key):
+
+```bash
+curl "http://localhost:8000/ox/status"
+```
+
+Chat văn bản trực tiếp bằng Ox, có thể dùng context từ kho RAG:
+
+```bash
+curl -X POST "http://localhost:8000/ox/chat" \
+  -H "Content-Type: application/json" \
+  -d '{"question":"Tóm tắt số liệu doanh thu trong kho tài liệu","k":5,"use_retrieval":true}'
+```
+
+Upload file cục bộ; đặt `use_retrieval=true` để bổ sung context và citation từ tài liệu đã index:
+
+```bash
+curl -X POST "http://localhost:8000/ox/analyze" \
+  -F "question=Đối chiếu biểu đồ trong ảnh với số liệu trong kho tài liệu" \
+  -F "files=@chart.png;type=image/png" \
+  -F "files=@demo.mp4;type=video/mp4" \
+  -F "k=5" \
+  -F "use_retrieval=true"
+```
+
+Với video lớn hoặc media đã có URL công khai, dùng endpoint URL để tránh base64 upload:
+
+```bash
+curl -X POST "http://localhost:8000/ox/analyze/url" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "Tóm tắt diễn biến và đối chiếu với tài liệu liên quan",
+    "media": [{"type": "video", "url": "https://example.com/demo.mp4"}],
+    "k": 5,
+    "use_retrieval": true
+  }'
+```
+
+Định dạng upload: PNG, JPEG, WebP, GIF, MP4, MPEG, MOV và WebM. API không ghi file media xuống đĩa và không trả lại URL nhạy cảm trong response. Các endpoint tổng quát `/query/multimodal` và `/query/multimodal/url` vẫn được giữ để dùng model đa phương thức mặc định của pipeline.
+
+> **Quyền riêng tư:** media và prompt được gửi tới OpenRouter/Ox Alpha để xử lý. Ox Alpha là stealth preview; không gửi dữ liệu bí mật nếu chính sách lưu trữ của nhà cung cấp không phù hợp với yêu cầu của bạn.
 
 ---
 

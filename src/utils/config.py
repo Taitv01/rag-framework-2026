@@ -77,6 +77,9 @@ class Config:
         "DEFAULT_LLM_PROVIDER": "openai",
         "DEFAULT_LLM_MODEL": "gpt-4o-mini",
         "DEFAULT_TEMPERATURE": "0.7",
+        "OPENROUTER_BASE_URL": "https://openrouter.ai/api/v1",
+        "OX_MODEL": "stealth/ox-alpha",
+        "OX_TEMPERATURE": "1.0",
 
         # Embedding Configuration
         "DEFAULT_EMBEDDING_PROVIDER": "huggingface",
@@ -101,6 +104,8 @@ class Config:
         "API_RATE_LIMIT": "100",
         "API_RATE_LIMIT_WINDOW": "60",
         "MAX_UPLOAD_SIZE_MB": "25",
+        "MAX_MULTIMODAL_FILES": "4",
+        "MAX_MULTIMODAL_TOTAL_SIZE_MB": "50",
         "CORS_ALLOW_ORIGINS": "http://localhost:3000,http://localhost:7860,http://localhost:8000",
 
         # Cache Configuration
@@ -241,10 +246,19 @@ class Config:
         Returns:
             Dict with LLM settings
         """
+        base_url = self.get("OPENAI_BASE_URL")
+        is_openrouter = bool(
+            base_url and "openrouter.ai" in str(base_url).casefold()
+        )
+        api_key = (
+            self.get("OPENROUTER_API_KEY") if is_openrouter else None
+        ) or self.get("OPENAI_API_KEY") or self.get("ANTHROPIC_API_KEY")
+
         return {
             "provider": self.get("DEFAULT_LLM_PROVIDER"),
             "model": self.get("DEFAULT_LLM_MODEL"),
-            "api_key": self.get("OPENAI_API_KEY") or self.get("ANTHROPIC_API_KEY"),
+            "api_key": api_key,
+            "base_url": base_url,
             "temperature": self.get_float("DEFAULT_TEMPERATURE"),
         }
 

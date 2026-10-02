@@ -25,12 +25,34 @@ DEFAULT_LLM_MODEL=gpt-4o-mini
 DEFAULT_TEMPERATURE=0.7
 ```
 
+### Ox Alpha via OpenRouter
+
+Ox Alpha uses OpenRouter's OpenAI-compatible endpoint and a dedicated key so it
+does not interfere with the default RAG model or optional OpenAI embeddings:
+
+```bash
+OPENROUTER_API_KEY=sk-or-v1-your-openrouter-key
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OX_MODEL=stealth/ox-alpha
+OX_TEMPERATURE=1.0
+
+MAX_UPLOAD_SIZE_MB=25
+MAX_MULTIMODAL_FILES=4
+MAX_MULTIMODAL_TOTAL_SIZE_MB=50
+```
+
+`MAX_UPLOAD_SIZE_MB` applies per file. The dedicated routes are `GET /ox/status`,
+`POST /ox/chat`, `POST /ox/analyze`, and `POST /ox/analyze/url`. For large videos,
+prefer the URL route; the RAG API validates the URL but leaves fetching to the
+multimodal provider. Uploaded media and prompts leave this API process and are
+subject to the selected provider's retention and privacy policy.
+
 ### Embedding Configuration
 
 ```bash
 # Default embedding settings
 DEFAULT_EMBEDDING_PROVIDER=huggingface
-DEFAULT_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+DEFAULT_EMBEDDING_MODEL=BAAI/bge-m3
 ```
 
 ### Vector Store Configuration
@@ -151,7 +173,7 @@ rag = NaiveRAG(
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `embedding_provider` | str | "huggingface" | Embedding provider |
-| `embedding_model` | str | "all-MiniLM-L6-v2" | Model name |
+| `embedding_model` | str | "BAAI/bge-m3" | Model name |
 | `batch_size` | int | 32 | Batch size for embedding |
 
 ### Vector Store Options

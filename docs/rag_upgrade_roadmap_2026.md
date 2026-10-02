@@ -41,7 +41,13 @@ basic RAG to advanced and agentic RAG workflows.
 ## Current Status
 
 - Phase 1, Phase 2, and Phase 2.5 are implemented.
-- Phase 3 has started with deterministic fairy tale utilities:
-  `CrossStoryRAG` and `FairyTaleDatasetBuilder`.
-- Phase 4 should focus on production hardening, CI quality gates, secrets
-  hygiene, and deployment docs.
+- Phase 3's deterministic fairy-tale foundation is implemented with
+  `CrossStoryRAG`, `FairyTaleDatasetBuilder`, Smart Library, and Vietnamese OCR.
+- Phase 4 streaming SSE, Langfuse tracing, Docker Compose, API authentication,
+  rate limiting, and deployment documentation are implemented.
+- The current hardening pass adds structured, fail-closed hallucination grading,
+  true N-hop subgraph extraction, repaired NaiveRAG embedding/retrieval/Markdown
+  refresh contracts, import-safe Windows console handling, centralized version
+  metadata, and installable API/UI dependency extras.
+- Phase 5 multimodal retrieval, richer LangGraph workflows, bilingual output,
+  fine-tuning, and the interactive storytelling application remain planned.

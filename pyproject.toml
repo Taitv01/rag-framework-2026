@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ultimate-rag"
-version = "1.1.0"
+version = "1.2.0"
 description = "Ultimate RAG Framework - Comprehensive Retrieval-Augmented Generation for AI Models (2026)"
 readme = "README.md"
 license = { text = "MIT" }
@@ -85,6 +85,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+api = [
+    "fastapi>=0.110.0",
+    "uvicorn>=0.29.0",
+    "python-multipart>=0.0.9",
+]
+ui = [
+    "gradio>=4.25.0",
+]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
@@ -101,7 +109,7 @@ graph = [
     "neo4j>=5.20.0",
 ]
 all = [
-    "ultimate-rag[web,graph]",
+    "ultimate-rag[api,ui,web,graph]",
 ]
 
 [project.urls]

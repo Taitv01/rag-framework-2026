@@ -23,6 +23,7 @@ from src.core.vector_store import VectorStoreManager
 from src.core.llm import LLMManager
 from src.core.markdown_index import MarkdownFolderIndexer
 from src.core.library_manager import LibraryManager
+from src.rag.multimodal import build_multimodal_prompt
 
 
 class NaiveRAG:
@@ -36,7 +37,7 @@ class NaiveRAG:
         llm_model: str = "gpt-4o-mini",
         llm_api_key: Optional[str] = None,
         embedding_provider: str = "huggingface",
-        embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
+        embedding_model: Optional[str] = None,
         vector_store_provider: str = "faiss",
         collection_name: str = "default",
         persist_directory: Optional[str] = None,
@@ -58,7 +59,7 @@ class NaiveRAG:
         )
         self.vector_store = VectorStoreManager(
             provider=vector_store_provider,
-            embeddings=self.embeddings.get_embeddings(),
+            embeddings=self.embeddings,
             collection_name=collection_name,
             persist_directory=persist_directory,
             url=vector_store_url,
@@ -178,32 +179,84 @@ Question: {question}"""
         force: bool = False,
         strict: bool = False,
     ) -> Dict[str, Any]:
-        indexer = MarkdownFolderIndexer(
-            document_loader=self.document_loader,
-            text_splitter=self.text_splitter,
-            vector_store=self.vector_store,
-            manifest_path=manifest_path,
+        """Replace changed Markdown-folder content using a SHA-256 manifest."""
+        directory = Path(directory).resolve()
+        indexer = MarkdownFolderIndexer()
+        result, current_manifest = indexer.compare(
+            directory,
+            Path(manifest_path) if manifest_path else None,
         )
-        result = indexer.refresh_directory(
-            directory=directory,
+
+        if not force and not result.changed:
+            return result.to_dict()
+
+        docs = self.document_loader.load_markdown_directory(
+            directory,
             metadata=metadata,
-            force=force,
             strict=strict,
         )
+        chunks = self.text_splitter.split_documents(docs)
+        indexer.assign_stable_chunk_ids(chunks)
 
-        self._documents = [
-            doc for doc in self._documents
-            if doc.metadata.get("source_root") != str(Path(directory).resolve())
-        ]
-        self._documents.extend(indexer.loaded_documents)
+        self._replace_source_root(str(directory), docs, chunks)
+        indexer.save_manifest(Path(result.manifest_path), current_manifest)
 
-        self._chunks = [
-            chunk for chunk in self._chunks
-            if chunk.metadata.get("source_root") != str(Path(directory).resolve())
-        ]
-        self._chunks.extend(indexer.indexed_chunks)
-
+        result.documents_loaded = len(docs)
+        result.chunks_indexed = len(chunks)
+        result.rebuilt = True
         return result.to_dict()
+
+    def _replace_source_root(
+        self,
+        source_root: str,
+        docs: List[Document],
+        chunks: List[Document],
+    ) -> None:
+        """Replace all in-memory and vector chunks belonging to one folder."""
+        remaining_docs = [
+            doc for doc in self._documents
+            if (doc.metadata or {}).get("source_root") != source_root
+        ]
+        remaining_chunks = [
+            chunk for chunk in self._chunks
+            if (chunk.metadata or {}).get("source_root") != source_root
+        ]
+
+        provider = getattr(self.vector_store.config, "provider", "faiss")
+        if provider == "faiss":
+            self._documents = remaining_docs + docs
+            self._chunks = remaining_chunks + chunks
+            self._rebuild_vector_store_from_chunks()
+            return
+
+        self.vector_store.delete(filter={"source_root": source_root})
+        self._documents = remaining_docs + docs
+        self._chunks = remaining_chunks + chunks
+        self._add_chunks_to_vector_store(chunks)
+
+    def _rebuild_vector_store_from_chunks(self) -> None:
+        """Recreate a FAISS store after source-level replacement."""
+        config = self.vector_store.config
+        self.vector_store = VectorStoreManager(
+            provider=config.provider,
+            embeddings=self.embeddings,
+            collection_name=config.collection_name,
+            persist_directory=config.persist_directory,
+            url=config.url,
+            api_key=config.api_key,
+        )
+        self._add_chunks_to_vector_store(self._chunks)
+
+    def _add_chunks_to_vector_store(self, chunks: List[Document]) -> None:
+        """Add chunks while preserving deterministic IDs when available."""
+        if not chunks:
+            return
+
+        ids = [chunk.metadata.get("chunk_id") for chunk in chunks]
+        if all(ids):
+            self.vector_store.add_documents(chunks, ids=ids)
+        else:
+            self.vector_store.add_documents(chunks)
 
     def add_texts(
         self,
@@ -226,7 +279,7 @@ Question: {question}"""
         k: Optional[int] = None
     ) -> List[Document]:
         k = k or self.retrieval_k
-        return self.vector_store.search(query, k=k)
+        return self.vector_store.similarity_search(query, k=k)
 
     def query(
         self,
@@ -253,6 +306,49 @@ Question: {question}"""
             for doc in docs
         ]
         return {"answer": answer, "sources": sources}
+
+    def query_multimodal(
+        self,
+        question: str,
+        media: List[Dict[str, str]],
+        k: Optional[int] = None,
+        use_retrieval: bool = True,
+        llm: Optional[Any] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Answer a question about attached images/videos with optional retrieval."""
+        docs = []
+        if use_retrieval and self.num_chunks:
+            docs = self.retrieve(question, k=k)
+
+        context_parts = []
+        sources = []
+        for index, doc in enumerate(docs, 1):
+            metadata = doc.metadata or {}
+            source = (
+                metadata.get("source")
+                or metadata.get("file_name")
+                or metadata.get("url")
+                or f"Document {index}"
+            )
+            context_parts.append(f"[S{index}] Source: {source}\n{doc.page_content}")
+            sources.append({
+                "source_id": f"S{index}",
+                "source": source,
+                "content": doc.page_content,
+                "metadata": metadata,
+            })
+
+        prompt = build_multimodal_prompt(question, "\n\n".join(context_parts))
+        model_client = llm or self.llm
+        answer = model_client.generate_multimodal(prompt, media, **kwargs)
+        return {
+            "answer": answer,
+            "sources": sources,
+            "citations": sources,
+            "media_count": len(media),
+            "model": model_client.config.model,
+        }
 
     def clear(self) -> None:
         self.vector_store.clear()

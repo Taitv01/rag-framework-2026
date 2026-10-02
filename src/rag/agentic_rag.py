@@ -23,7 +23,9 @@ Usage:
     answer = rag.query("Thạch Sanh là ai?")
 """
 
+import json
 import logging
+import re
 from typing import List, Optional, Dict, Any, Union, Literal
 from pathlib import Path
 from dataclasses import dataclass
@@ -467,6 +469,13 @@ Question / Câu hỏi: {question}"""
         Returns:
             Dict containing is_grounded boolean, hallucination_score (0.0 to 1.0), and reasoning
         """
+        if not context.strip() and answer.strip():
+            return {
+                "is_grounded": False,
+                "hallucination_score": 1.0,
+                "reasoning": "Cannot ground a non-empty answer without context.",
+            }
+
         prompt = f"""Bạn là chuyên gia kiểm tra ảo giác dữ liệu (Hallucination Checker).
 Nhiệm vụ: Đánh giá xem câu trả lời có được căn cứ HOÀN TOÀN vào ngữ cảnh cung cấp hay không (không tự bịa ra thông tin mới).
 
@@ -477,26 +486,61 @@ Câu trả lời (Answer):
 {answer}
 
 Quy tắc:
-- Trả lời "Grounded: yes" nếu câu trả lời hoàn toàn chính xác dựa vào ngữ cảnh.
-- Trả lời "Grounded: no" nếu câu trả lời chứa thông tin mâu thuẫn hoặc không có trong ngữ cảnh.
+- grounded=true nếu câu trả lời hoàn toàn chính xác dựa vào ngữ cảnh.
+- grounded=false nếu câu trả lời chứa thông tin mâu thuẫn hoặc không có trong ngữ cảnh.
+- hallucination_score nằm trong khoảng 0.0 (hoàn toàn có căn cứ) đến 1.0 (hoàn toàn không có căn cứ).
+- Chỉ trả về JSON hợp lệ theo đúng schema sau, không thêm markdown:
+  {{"grounded": true, "hallucination_score": 0.0, "reasoning": "lý do ngắn gọn"}}
 
 Đánh giá:"""
         try:
-            response = self.llm.generate(prompt)
-            is_grounded = "yes" in response.lower() or "có" in response.lower() or "đúng" in response.lower()
-            score = 0.0 if is_grounded else 1.0
+            response = str(self.llm.generate(prompt)).strip()
+            is_grounded, score, reasoning = self._parse_grounding_response(response)
             return {
                 "is_grounded": is_grounded,
                 "hallucination_score": score,
-                "reasoning": response.strip(),
+                "reasoning": reasoning,
             }
         except Exception as e:
             logger.warning(f"Hallucination check failed: {e}")
             return {
-                "is_grounded": True,
-                "hallucination_score": 0.0,
-                "reasoning": f"Fallback check: {e}",
+                "is_grounded": False,
+                "hallucination_score": 1.0,
+                "reasoning": f"Grounding check unavailable: {e}",
             }
+
+    @staticmethod
+    def _parse_grounding_response(response: str) -> tuple[bool, float, str]:
+        """Parse a structured grounding grade with a strict legacy-text fallback."""
+        if not response:
+            raise ValueError("Empty grounding response")
+
+        json_match = re.search(r"\{.*\}", response, flags=re.DOTALL)
+        if json_match:
+            payload = json.loads(json_match.group(0))
+            grounded = payload.get("grounded")
+            if not isinstance(grounded, bool):
+                raise ValueError("'grounded' must be a JSON boolean")
+
+            raw_score = payload.get("hallucination_score", 0.0 if grounded else 1.0)
+            if isinstance(raw_score, bool) or not isinstance(raw_score, (int, float)):
+                raise ValueError("'hallucination_score' must be a number")
+
+            score = max(0.0, min(1.0, float(raw_score)))
+            reasoning = str(payload.get("reasoning") or response).strip()
+            return grounded, score, reasoning
+
+        # Backward compatibility for existing prompts/providers. Anchoring the
+        # label avoids false positives such as "Grounded: no, not yes".
+        label_match = re.search(
+            r"(?im)^\s*grounded\s*:\s*(yes|no|có|không|đúng|sai)\b",
+            response,
+        )
+        if not label_match:
+            raise ValueError("Unrecognized grounding response format")
+
+        grounded = label_match.group(1).casefold() in {"yes", "có", "đúng"}
+        return grounded, 0.0 if grounded else 1.0, response
 
     @property
     def num_documents(self) -> int:

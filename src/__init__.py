@@ -17,7 +17,7 @@ Usage:
     from src.core import DocumentLoader, TextSplitter, Embeddings
 """
 
-__version__ = "1.0.0"
+__version__ = "1.2.0"
 __author__ = "RAG Framework Contributors"
 
 from src.core.document_loader import DocumentLoader

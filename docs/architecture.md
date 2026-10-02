@@ -116,25 +116,33 @@ Knowledge graph integration for structured reasoning.
 
 ### 5. Multimodal RAG
 
-Support for multiple data formats (text, images, etc.).
+Image/video understanding through an OpenAI-compatible multimodal model such as
+Ox Alpha, optionally grounded with text retrieved from the knowledge base.
 
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Multi-     │────▶│   Multi-    │────▶│   Multi-    │
-│  modal       │     │  modal      │     │  modal      │
-│  Loader      │     │  Embeddings │     │  Retriever  │
-└─────────────┘     └─────────────┘     └─────────────┘
+┌─────────────┐                         ┌─────────────┐
+│ Image/Video │────────────────────────▶│ Ox Alpha   │
+│ URL/Upload  │                         │ Multimodal │
+└─────────────┘                         └──────▲──────┘
+                                               │
+┌─────────────┐     ┌─────────────┐             │
+│ Text Query  │────▶│ RAG         │─────────────┘
+│             │     │ Retrieval   │  context + citations
+└─────────────┘     └─────────────┘
 ```
 
 **Components:**
-- Multi-modal Loader: Handle text, images, audio, video
-- Multi-modal Embeddings: CLIP, ImageBind
-- Multi-modal Retriever: Cross-modal search
+- Upload/URL validation for supported image and video formats
+- OpenRouter-compatible `image_url` and `video_url` content blocks
+- Optional Naive/Advanced text retrieval with stable citations
+- Dedicated Ox client isolated from the default text RAG model
+- API endpoints: `/ox/chat`, `/ox/analyze`, `/ox/analyze/url`, and `/ox/status`
+- Provider-neutral aliases: `/query/multimodal` and `/query/multimodal/url`
 
 **Use Cases:**
-- Medical imaging
-- Video search
-- Document understanding
+- Chart and screenshot analysis grounded in reports
+- Video summarization enriched with knowledge-base context
+- Visual document understanding
 
 ## Core Components
 
