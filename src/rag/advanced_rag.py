@@ -15,16 +15,16 @@ Features:
 - Multi-query with RRF (Reciprocal Rank Fusion)
 - Streaming responses
 
-Pipeline:
+Pipeline (one path for query, query_detailed and stream):
 1. Load and chunk documents (optionally with contextual headers)
 2. Create vector + BM25 indices
 3. Check semantic cache
-4. Transform query for better retrieval (optionally HyDE)
-5. Hybrid retrieval (vector + keyword, optionally multi-query RRF)
-6. Re-rank candidates
-7. Grade document relevance
-8. Generate answer with LLM
-9. Cache the result
+4. Rewrite the query (by default only when typed without diacritics)
+5. Hybrid retrieval of child chunks, reranked as parent passages
+6. Optional relevance grading (one batched LLM call, or a reranker cut-off)
+7. No relevant context: answer "not enough information" (or web fallback)
+8. Generate the answer with the LLM (usually the only LLM call)
+9. Keep only the sources the answer cites; cache the result
 
 Usage:
     rag = AdvancedRAG(use_cache=True, use_contextual_chunking=True)
@@ -34,6 +34,8 @@ Usage:
 
 import hashlib
 import logging
+import re
+from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any, Union, Generator
 from pathlib import Path
 
@@ -43,12 +45,35 @@ from src.core.document_loader import DocumentLoader
 from src.core.text_splitter import TextSplitter
 from src.core.embeddings import EmbeddingsManager
 from src.core.vector_store import VectorStoreManager
-from src.core.retriever import RetrieverManager
+from src.core.retriever import RetrieverManager, has_diacritics
 from src.core.llm import LLMManager
 from src.core.markdown_index import MarkdownFolderIndexer
 from src.rag.multimodal import build_multimodal_prompt
 
 logger = logging.getLogger(__name__)
+
+# Answer given without calling the LLM when no relevant context was found.
+NO_CONTEXT_ANSWER = (
+    "Tôi không có đủ thông tin trong tài liệu để trả lời câu hỏi này. / "
+    "I don't have enough information in the documents to answer this question."
+)
+
+QUERY_REWRITE_MODES = ("auto", "always", "never")
+GRADING_MODES = ("none", "llm", "reranker")
+
+
+@dataclass
+class PreparedQuery:
+    """Everything decided before generation; shared by query, query_detailed and stream."""
+    question: str
+    search_query: str
+    retrieved: List[Document] = field(default_factory=list)
+    docs: List[Document] = field(default_factory=list)
+    web_docs: List[Document] = field(default_factory=list)
+    prompt: Optional[str] = None
+    answer: Optional[str] = None  # set when no LLM call is needed (cache hit, no context)
+    cache_hit: bool = False
+    abstained: bool = False
 
 
 class AdvancedRAG:
@@ -83,6 +108,14 @@ class AdvancedRAG:
     # Defaults for instances built without __init__ (tests, subclasses).
     use_parent_context = True
     parent_fanout = 3
+    query_rewrite = "auto"
+    grading = "none"
+    min_relevance_score = None
+    _cache = None
+    _web_searcher = None
+    _hallucination_grader = None
+    use_hyde = False
+    use_multi_query_rrf = False
 
     def __init__(
         self,
@@ -106,6 +139,9 @@ class AdvancedRAG:
         parent_fanout: int = 3,
         reranker=None,
         reranker_model: Optional[str] = None,
+        query_rewrite: str = "auto",
+        grading: str = "none",
+        min_relevance_score: Optional[float] = None,
         system_prompt: Optional[str] = None,
         # Phase 2 options
         use_cache: bool = False,
@@ -150,6 +186,12 @@ class AdvancedRAG:
             reranker: An already loaded cross-encoder to use (e.g. shared
                 between pipelines) instead of loading one
             reranker_model: Name of that cross-encoder
+            query_rewrite: LLM query rewrite before retrieval: "auto" (only for
+                queries typed without diacritics), "always" or "never"
+            grading: Relevance grading of retrieved documents: "none" (the
+                generator ignores off-topic passages), "llm" (one batched call)
+                or "reranker" (drop scores below min_relevance_score)
+            min_relevance_score: Reranker score cut-off for grading="reranker"
             system_prompt: Custom system prompt
             use_cache: Enable semantic caching
             cache_ttl: Cache time-to-live in seconds
@@ -197,6 +239,13 @@ class AdvancedRAG:
         self.parent_fanout = max(1, parent_fanout)
         self._shared_reranker = reranker
         self._shared_reranker_model = reranker_model
+        if query_rewrite not in QUERY_REWRITE_MODES:
+            raise ValueError(f"query_rewrite must be one of {QUERY_REWRITE_MODES}")
+        if grading not in GRADING_MODES:
+            raise ValueError(f"grading must be one of {GRADING_MODES}")
+        self.query_rewrite = query_rewrite
+        self.grading = grading
+        self.min_relevance_score = min_relevance_score
         self.system_prompt = system_prompt or self._get_default_system_prompt()
 
         # Context window validation
@@ -330,18 +379,18 @@ Chuyển đổi thành truy vấn rõ ràng hơn, cụ thể hơn.
 Return ONLY the transformed query, nothing else."""
 
     def _get_grading_prompt(self) -> str:
-        """Get document grading prompt (bilingual)."""
+        """Batched document grading prompt (bilingual): one call for all documents."""
         return """You are a document relevance grader / Bạn là người đánh giá tài liệu.
-Determine if the document is relevant to the question.
-Xác định tài liệu có liên quan đến câu hỏi không.
+Decide which documents help answer the question.
+Xác định những tài liệu nào giúp trả lời câu hỏi.
 
 Question / Câu hỏi: {question}
 
-Document / Tài liệu:
-{document}
+Documents / Tài liệu:
+{documents}
 
-Is this document relevant? Answer only 'yes' or 'no'.
-Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
+Reply with the IDs of the helpful documents separated by commas (e.g. S1, S3), or NONE.
+Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy (ví dụ S1, S3), hoặc NONE."""
 
     def add_documents(
         self,
@@ -588,6 +637,10 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
             self._retriever = None
             return
 
+        # Cached answers describe the old corpus.
+        if self._cache:
+            self._cache.clear()
+
         previous = self._retriever
         self._retriever = RetrieverManager(
             vector_store=self.vector_store,
@@ -649,92 +702,84 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
         self,
         question: str,
         k: Optional[int] = None,
-        transform_query: bool = True,
-        grade_documents: bool = True,
+        transform_query: Optional[bool] = None,
+        grade_documents: Optional[bool] = None,
         **kwargs
     ) -> str:
         """
-        Query with advanced retrieval.
+        Answer a question from the knowledge base.
 
-        Pipeline:
-        1. Check semantic cache (if enabled)
-        2. Transform query (optionally HyDE)
-        3. Retrieve (optionally multi-query RRF)
-        4. Grade documents
-        5. Web search fallback (if retrieval quality poor and enabled)
-        6. Generate answer
-        7. Hallucination check (if enabled)
-        8. Cache result
+        Pipeline: cache -> query rewrite -> retrieve -> optional grading ->
+        "not enough information" or web fallback when nothing relevant was
+        found -> generate -> optional hallucination check -> cache.
 
         Args:
             question: Question to ask
             k: Number of documents
-            transform_query: Whether to transform query
-            grade_documents: Whether to grade document relevance
+            transform_query: Rewrite the query (None: follow ``query_rewrite``)
+            grade_documents: Grade relevance (None: follow ``grading``;
+                True with grading="none" means one batched LLM call)
 
         Returns:
             Answer string
         """
+        prepared = self._prepare(question, k, transform_query, grade_documents)
+        if prepared.answer is not None:
+            return prepared.answer
+        answer = self.llm.generate(prepared.prompt, **kwargs)
+        return self._finish(prepared, answer)
+
+    def _prepare(
+        self,
+        question: str,
+        k: Optional[int] = None,
+        transform_query: Optional[bool] = None,
+        grade_documents: Optional[bool] = None,
+    ) -> PreparedQuery:
+        """Everything before generation; sets ``answer`` when no LLM call is needed."""
         k = k or self.retrieval_k
 
-        # Step 1: Check semantic cache
-        if self._cache:
-            try:
-                query_embedding = self.embeddings.embed_query(question)
-                cached = self._cache.get(query_embedding)
-                if cached is not None:
-                    logger.debug("Semantic cache hit")
-                    return cached
-            except Exception as e:
-                logger.debug(f"Cache lookup failed: {e}")
+        cached = self._cache_get(question)
+        if cached is not None:
+            return PreparedQuery(question, question, answer=cached, cache_hit=True)
 
-        # Step 2: Transform query
-        search_query = question
-        if transform_query:
-            search_query = self._transform_query(question)
+        search_query = self._rewrite_for_search(question, transform_query)
+        retrieved = self._retrieve(search_query, k=k)
+        docs = self._grade(question, retrieved, grade_documents)
+        prepared = PreparedQuery(question, search_query, retrieved=retrieved, docs=docs)
 
-        # Step 3: Retrieve documents
-        docs = self._retrieve(search_query, k=k)
-
-        # Step 4: Grade documents (optional)
-        if grade_documents:
-            docs = self._grade_documents(question, docs)
-
-        # Step 5: Web search fallback if retrieval quality is poor
-        web_docs = []
         if self._web_searcher and self._is_retrieval_quality_poor(docs, question):
             logger.info("Retrieval quality poor, falling back to web search")
             try:
                 web_results = self._web_searcher.search(search_query, num_results=3)
-                web_docs = self._web_searcher.to_documents(web_results)
-                logger.info(f"Web search returned {len(web_docs)} results")
+                prepared.web_docs = self._web_searcher.to_documents(web_results)
+                logger.info(f"Web search returned {len(prepared.web_docs)} results")
             except Exception as e:
                 logger.warning(f"Web search fallback failed: {e}")
 
-        # Step 6: Generate answer
-        if web_docs and self._web_searcher:
-            # Use special prompt that labels web sources
-            prompt = self._web_searcher.create_web_answer_prompt(
+        if prepared.web_docs:
+            prepared.prompt = self._web_searcher.create_web_answer_prompt(
                 question=question,
-                web_docs=web_docs,
+                web_docs=prepared.web_docs,
                 local_docs=docs,
             )
-        else:
-            context = self._build_context(docs)
-            prompt = self.system_prompt.format(
-                context=context,
+        elif docs:
+            prepared.prompt = self.system_prompt.format(
+                context=self._build_context(docs),
                 question=question,
             )
+        else:
+            # Nothing relevant: say so instead of letting the LLM guess.
+            prepared.answer = NO_CONTEXT_ANSWER
+            prepared.abstained = True
+        return prepared
 
-        answer = self.llm.generate(prompt, **kwargs)
-
-        # Step 7: Hallucination check (optional)
-        if self._hallucination_grader and docs:
-            all_docs = docs + web_docs
-            grade = self._hallucination_grader.grade(
-                answer=answer,
-                context=self._build_context(all_docs),
-            )
+    def _finish(self, prepared: PreparedQuery, answer: str, verify: bool = True) -> str:
+        """Hallucination check (if enabled) and caching of a generated answer."""
+        all_docs = prepared.docs + prepared.web_docs
+        if verify and self._hallucination_grader and all_docs:
+            context = self._build_context(all_docs)
+            grade = self._hallucination_grader.grade(answer=answer, context=context)
             if not grade.is_grounded and grade.grounded_score < self._hallucination_grader.grounded_threshold:
                 logger.warning(
                     f"Hallucination detected (score={grade.grounded_score:.2f}), "
@@ -742,20 +787,69 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
                 )
                 # Regenerate with stricter prompt
                 answer, _ = self._hallucination_grader.safe_generate(
-                    question=question,
-                    context=self._build_context(all_docs),
+                    question=prepared.question,
+                    context=context,
                     max_retries=1,
                 )
 
-        # Step 8: Cache the result (only if no web search used — web results change frequently)
-        if self._cache and not web_docs:
-            try:
-                query_embedding = self.embeddings.embed_query(question)
-                self._cache.put(query_embedding, question, answer)
-            except Exception as e:
-                logger.debug(f"Cache store failed: {e}")
-
+        # Web results change quickly: do not cache answers built on them.
+        if not prepared.web_docs:
+            self._cache_put(prepared.question, answer)
         return answer
+
+    def _cache_get(self, question: str) -> Optional[str]:
+        if not self._cache:
+            return None
+        try:
+            cached = self._cache.get(self.embeddings.embed_query(question))
+        except Exception as e:
+            logger.debug(f"Cache lookup failed: {e}")
+            return None
+        if cached is not None:
+            logger.debug("Semantic cache hit")
+        return cached
+
+    def _cache_put(self, question: str, answer: str) -> None:
+        if not self._cache:
+            return
+        try:
+            self._cache.put(self.embeddings.embed_query(question), question, answer)
+        except Exception as e:
+            logger.debug(f"Cache store failed: {e}")
+
+    def _rewrite_for_search(self, question: str, transform_query: Optional[bool] = None) -> str:
+        """LLM query rewrite per ``query_rewrite``; "auto" only for diacritic-free queries.
+
+        Measured on the fairy-tale set, rewriting every query lowered evidence
+        recall with reranking (0.941 -> 0.929) but restored queries typed
+        without diacritics (0.80 -> 1.00).
+        """
+        if transform_query is None:
+            mode = self.query_rewrite
+            transform_query = mode == "always" or (mode == "auto" and not has_diacritics(question))
+        return self._transform_query(question) if transform_query else question
+
+    def _grade(
+        self,
+        question: str,
+        docs: List[Document],
+        grade_documents: Optional[bool] = None,
+    ) -> List[Document]:
+        """Drop documents that do not help, per ``grading``; may return an empty list."""
+        if grade_documents is False or not docs:
+            return docs
+        mode = self.grading
+        if grade_documents and mode == "none":
+            mode = "llm"
+        if mode == "llm":
+            return self._grade_documents(question, docs)
+        if mode == "reranker" and self.min_relevance_score is not None:
+            return [
+                doc for doc in docs
+                if (doc.metadata or {}).get("relevance_score", self.min_relevance_score)
+                >= self.min_relevance_score
+            ]
+        return docs
 
     def _is_retrieval_quality_poor(self, docs: List[Document], question: str) -> bool:
         """
@@ -830,88 +924,60 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
         self,
         question: str,
         k: Optional[int] = None,
-        transform_query: bool = True,
-        grade_documents: bool = True,
+        transform_query: Optional[bool] = None,
+        grade_documents: Optional[bool] = None,
         **kwargs
     ) -> Dict[str, Any]:
         """
-        Query with detailed results.
+        Answer a question and report how: same pipeline as query().
 
         Args:
             question: Question to ask
             k: Number of documents
-            transform_query: Whether to transform query
-            grade_documents: Whether to grade document relevance
+            transform_query: Rewrite the query (None: follow ``query_rewrite``)
+            grade_documents: Grade relevance (None: follow ``grading``)
 
         Returns:
-            Dict with answer, transformed query, and sources
+            Dict with the answer, the search query, ``relevant_docs`` (every
+            source given to the LLM) and ``citations`` (the sources the answer
+            actually cites; all of them when it cites none)
         """
-        k = k or self.retrieval_k
+        prepared = self._prepare(question, k, transform_query, grade_documents)
+        if prepared.answer is None:
+            answer = self._finish(prepared, self.llm.generate(prepared.prompt, **kwargs))
+        else:
+            answer = prepared.answer
+        return self._detailed_result(prepared, answer)
 
-        # Check cache
-        cache_hit = False
-        if self._cache:
-            try:
-                query_embedding = self.embeddings.embed_query(question)
-                cached = self._cache.get(query_embedding)
-                if cached is not None:
-                    cache_hit = True
-                    return {
-                        "answer": cached,
-                        "original_query": question,
-                        "transformed_query": None,
-                        "relevant_docs": [],
-                        "citations": [],
-                        "total_docs_retrieved": 0,
-                        "relevant_docs_count": 0,
-                        "cache_hit": True,
-                    }
-            except Exception:
-                pass
-
-        # Transform query
-        transformed_query = question
-        if transform_query:
-            transformed_query = self._transform_query(question)
-
-        # Retrieve documents
-        docs = self._retrieve(transformed_query, k=k)
-
-        # Grade documents
-        relevant_docs = docs
-        if grade_documents:
-            relevant_docs = self._grade_documents(question, docs)
-
-        # Generate answer
-        context = self._build_context(relevant_docs)
-        prompt = self.system_prompt.format(
-            context=context,
-            question=question
-        )
-
-        answer = self.llm.generate(prompt, **kwargs)
-
-        # Cache the result
-        if self._cache:
-            try:
-                query_embedding = self.embeddings.embed_query(question)
-                self._cache.put(query_embedding, question, answer)
-            except Exception:
-                pass
-
-        # Format sources and citations
-        sources = self._format_sources(relevant_docs)
-
+    def _detailed_result(self, prepared: PreparedQuery, answer: str) -> Dict[str, Any]:
+        sources = self._format_sources(prepared.web_docs or prepared.docs)
+        cited, invalid = self._cited_sources(answer, sources)
         return {
             "answer": answer,
-            "original_query": question,
-            "transformed_query": transformed_query,
+            "original_query": prepared.question,
+            "transformed_query": None if prepared.cache_hit else prepared.search_query,
             "relevant_docs": sources,
-            "citations": sources,
-            "total_docs_retrieved": len(docs),
-            "relevant_docs_count": len(relevant_docs),
-            "cache_hit": cache_hit,
+            "citations": cited,
+            "invalid_citations": invalid,
+            "total_docs_retrieved": len(prepared.retrieved),
+            "relevant_docs_count": len(prepared.docs),
+            "abstained": prepared.abstained,
+            "cache_hit": prepared.cache_hit,
         }
+
+    @staticmethod
+    def _cited_sources(answer: str, sources: List[Dict[str, Any]]):
+        """Sources the answer cites as [S#], and cited ids that do not exist.
+
+        An answer without any [S#] marker keeps every source, as before.
+        """
+        cited_ids = re.findall(r"\[(S\d+)\]", answer or "")
+        if not cited_ids:
+            return sources, []
+        known = {source["source_id"] for source in sources}
+        cited = [source for source in sources if source["source_id"] in set(cited_ids)]
+        invalid = sorted(set(cited_ids) - known, key=lambda sid: int(sid[1:]))
+        return cited, invalid
 
     def query_multimodal(
         self,
@@ -954,25 +1020,25 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
         question: str,
         docs: List[Document]
     ) -> List[Document]:
-        """Grade documents for relevance."""
-        relevant_docs = []
+        """Grade all documents for relevance in one LLM call; may return an empty list."""
+        listing = "\n\n".join(
+            f"[S{i}] {doc.page_content[:500]}" for i, doc in enumerate(docs, 1)
+        )
+        try:
+            reply = self.llm.generate(
+                self._get_grading_prompt().format(question=question, documents=listing)
+            )
+        except Exception as e:
+            logger.warning(f"Document grading failed, keeping all documents: {e}")
+            return docs
 
-        for doc in docs:
-            try:
-                prompt = self._get_grading_prompt().format(
-                    question=question,
-                    document=doc.page_content[:500]
-                )
-                grade = self.llm.generate(prompt).strip().lower()
-
-                if grade in ("yes", "có", "đúng"):
-                    relevant_docs.append(doc)
-            except Exception as e:
-                logger.warning(f"Document grading failed, including doc: {e}")
-                relevant_docs.append(doc)
-
-        # Return at least one document
-        return relevant_docs if relevant_docs else docs[:1]
+        ids = {int(n) for n in re.findall(r"S\s*(\d+)", reply.upper())}
+        if not ids:
+            if "NONE" in reply.upper() or "KHÔNG" in reply.upper():
+                return []
+            logger.warning(f"Unreadable grading reply, keeping all documents: {reply[:80]!r}")
+            return docs
+        return [doc for i, doc in enumerate(docs, 1) if i in ids]
 
     def _build_context(self, docs: List[Document]) -> str:
         """Build context from documents with context window validation."""
@@ -1108,70 +1174,37 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
         self,
         question: str,
         k: Optional[int] = None,
-        transform_query: bool = True,
-        grade_documents: bool = True,
+        transform_query: Optional[bool] = None,
+        grade_documents: Optional[bool] = None,
         **kwargs
     ) -> Generator[str, None, None]:
         """
         Stream response tokens.
 
-        Same pipeline as query() but yields tokens as they arrive.
-        Used by ConversationalRAG.stream().
+        Same pipeline as query(); a cached or "not enough information" answer
+        is yielded whole. Used by ConversationalRAG.stream().
 
         Args:
             question: Question to ask
             k: Number of documents
-            transform_query: Whether to transform query
-            grade_documents: Whether to grade document relevance
+            transform_query: Rewrite the query (None: follow ``query_rewrite``)
+            grade_documents: Grade relevance (None: follow ``grading``)
 
         Yields:
             Response tokens
         """
-        k = k or self.retrieval_k
+        prepared = self._prepare(question, k, transform_query, grade_documents)
+        if prepared.answer is not None:
+            yield prepared.answer
+            return
 
-        # Check cache (return full answer if cached)
-        if self._cache:
-            try:
-                query_embedding = self.embeddings.embed_query(question)
-                cached = self._cache.get(query_embedding)
-                if cached is not None:
-                    yield cached
-                    return
-            except Exception:
-                pass
-
-        # Transform query
-        search_query = question
-        if transform_query:
-            search_query = self._transform_query(question)
-
-        # Retrieve
-        docs = self._retrieve(search_query, k=k)
-
-        # Grade
-        if grade_documents:
-            docs = self._grade_documents(question, docs)
-
-        # Build context
-        context = self._build_context(docs)
-        prompt = self.system_prompt.format(
-            context=context,
-            question=question
-        )
-
-        # Stream response
         full_response = []
-        for token in self.llm.stream(prompt, **kwargs):
+        for token in self.llm.stream(prepared.prompt, **kwargs):
             full_response.append(token)
             yield token
 
-        # Cache the full response
-        if self._cache:
-            try:
-                query_embedding = self.embeddings.embed_query(question)
-                self._cache.put(query_embedding, question, "".join(full_response))
-            except Exception:
-                pass
+        # Tokens are already sent: no hallucination rewrite, only caching.
+        self._finish(prepared, "".join(full_response), verify=False)
 
     @property
     def cache_stats(self) -> Optional[Dict[str, Any]]:

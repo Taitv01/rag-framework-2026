@@ -72,6 +72,9 @@ def parse_args(argv=None) -> argparse.Namespace:
     add_pipeline_options(retrieval)
     retrieval.add_argument("--configs", default=",".join(RETRIEVAL_CONFIGS),
                            help=f"Comma-separated subset of: {', '.join(RETRIEVAL_CONFIGS)}")
+    retrieval.add_argument("--query-rewrite", choices=["never", "auto", "always"], default="never",
+                           help="Search with AdvancedRAG's LLM query rewrite (auto: only queries "
+                                "without diacritics), answered by the calling model")
 
     answer = commands.add_parser("answer", help="End-to-end answer benchmark (uses an LLM)")
     add_pipeline_options(answer)
@@ -89,8 +92,12 @@ def parse_args(argv=None) -> argparse.Namespace:
     answer.add_argument("--temperature", type=float, default=0.0)
     answer.add_argument("--judge", action="store_true",
                         help="Also score faithfulness, judged by the same model as the pipeline")
-    answer.add_argument("--no-transform", action="store_true", help="Skip LLM query rewriting")
-    answer.add_argument("--no-grade", action="store_true", help="Skip LLM document grading")
+    answer.add_argument("--query-rewrite", choices=["auto", "always", "never"], default="auto",
+                        help="LLM query rewrite (pipeline default: auto)")
+    answer.add_argument("--grading", choices=["none", "llm", "reranker"], default="none",
+                        help="Relevance grading (pipeline default: none)")
+    answer.add_argument("--min-relevance-score", type=float, default=None,
+                        help="Reranker cut-off for --grading reranker")
     answer.add_argument("--limit", type=int, default=None, help="Only the first N questions")
     answer.add_argument("--ids", default=None, help="Comma-separated question ids")
 
@@ -258,19 +265,33 @@ def cmd_retrieval(args) -> int:
     needs_rerank = any(RETRIEVAL_CONFIGS[name]["use_reranking"] for name in names)
     rag, index_seconds = build_rag(args, use_hybrid=True, use_reranking=needs_rerank)
 
+    rewrite = None
+    if args.query_rewrite != "never":
+        agent = attach_agent(rag, args)
+        rag.query_rewrite = args.query_rewrite
+
+        def rewrite(question):
+            agent.start_chain()
+            return rag._rewrite_for_search(question)
+
     # Warm up lazy model loading and CUDA kernels so latencies are comparable.
     rag.retrieve(cases[0].question, k=args.k, use_hybrid=True, use_reranking=needs_rerank)
 
     configs = {}
     for name in names:
         options = RETRIEVAL_CONFIGS[name]
-        configs[name] = run_retrieval_benchmark(
-            lambda question, k, options=options: rag.retrieve(question, k=k, **options),
-            cases,
-            k=args.k,
-        )
 
-    report = {**run_metadata("retrieval"), "settings": pipeline_settings(args, rag, index_seconds), "configs": configs}
+        def retrieve(question, k, options=options):
+            query = rewrite(question) if rewrite else question
+            return rag.retrieve(query, k=k, **options)
+
+        configs[name] = run_retrieval_benchmark(retrieve, cases, k=args.k)
+
+    if rewrite and not agent.complete:
+        return request_agent_answers(agent)
+
+    settings = {**pipeline_settings(args, rag, index_seconds), "query_rewrite": args.query_rewrite}
+    report = {**run_metadata("retrieval"), "settings": settings, "configs": configs}
     path = write_report(report, args.out, args.eval_dir)
 
     print_table(
@@ -291,8 +312,31 @@ AGENT_SYSTEM_PROMPT = (
 )
 
 
-def cmd_answer(args) -> int:
+def attach_agent(rag, args):
+    """Make the calling model answer the RAG's LLM prompts (AgentLLM)."""
     from src.core.agent_llm import AgentChatModel, AgentLLM
+
+    answers_path = getattr(args, "answers", None) or args.eval_dir / "agent_answers.json"
+    requests_path = getattr(args, "requests", None) or args.eval_dir / "runs" / "agent_requests.json"
+    agent = AgentLLM(answers_path, requests_path, system_prompt=AGENT_SYSTEM_PROMPT)
+    rag.llm._llm = AgentChatModel(agent)
+    rag.llm.config.provider = "agent"
+    rag.llm.config.model = agent.answered_by or "agent"
+    return agent
+
+
+def request_agent_answers(agent) -> int:
+    """Save the prompts the calling model still has to answer; exit code 3."""
+    path = agent.write_requests()
+    print(
+        f"\n{len(agent.pending)} prompts wait for the calling model "
+        f"({agent.deferred} more depend on them).\n"
+        f"Requests: {path}\nAnswer them in {agent.answers_path}, then run the same command again."
+    )
+    return 3
+
+
+def cmd_answer(args) -> int:
     from src.core.llm import LLMManager
     from src.evaluation.benchmark import (
         LLMCallCounter,
@@ -316,12 +360,7 @@ def cmd_answer(args) -> int:
     agent = None
     if args.llm == "agent":
         # Whichever model runs this command answers every prompt; no API is called.
-        answers_path = args.answers or args.eval_dir / "agent_answers.json"
-        requests_path = args.requests or args.eval_dir / "runs" / "agent_requests.json"
-        agent = AgentLLM(answers_path, requests_path, system_prompt=AGENT_SYSTEM_PROMPT)
-        rag.llm._llm = AgentChatModel(agent)
-        rag.llm.config.provider = "agent"
-        rag.llm.config.model = agent.answered_by or "agent"
+        agent = attach_agent(rag, args)
         judge_llm = agent
 
         # The grading prompts of one question do not depend on each other: ask them in one run.
@@ -342,34 +381,38 @@ def cmd_answer(args) -> int:
             base_url=args.base_url, temperature=0.0,
         )
 
+    rag.query_rewrite = args.query_rewrite
+    rag.grading = args.grading
+    rag.min_relevance_score = args.min_relevance_score
+
     counter = LLMCallCounter()
     counter.attach(rag.llm)
     judge = make_faithfulness_judge(judge_llm) if args.judge else None
+
+    # Keep the full passages the LLM saw: query_detailed shortens source text for display.
+    prepare, prepared = rag._prepare, {}
+
+    def capture_prepare(*prepare_args, **prepare_kwargs):
+        prepared["last"] = prepare(*prepare_args, **prepare_kwargs)
+        return prepared["last"]
+
+    rag._prepare = capture_prepare
 
     def answer_fn(question):
         if agent:
             # Later prompts of a question depend on earlier answers (rewrite -> grade -> answer).
             agent.start_chain()
-        result = rag.query_detailed(
-            question,
-            transform_query=not args.no_transform,
-            grade_documents=not args.no_grade,
-        )
+        result = rag.query_detailed(question)
+        last = prepared["last"]
         return {
             "answer": result["answer"],
-            "contexts": [source["content"] for source in result["relevant_docs"]],
+            "contexts": [doc.page_content for doc in last.web_docs or last.docs],
         }
 
     run = run_answer_benchmark(answer_fn, cases, counter=counter, judge=judge)
 
     if agent and not agent.complete:
-        path = agent.write_requests()
-        print(
-            f"\n{len(agent.pending)} prompts wait for the calling model "
-            f"({agent.deferred} more depend on them).\n"
-            f"Requests: {path}\nAnswer them in {agent.answers_path}, then run the same command again."
-        )
-        return 3
+        return request_agent_answers(agent)
 
     settings = {
         **pipeline_settings(args, rag, index_seconds),
@@ -379,8 +422,9 @@ def cmd_answer(args) -> int:
         "temperature": args.temperature if not agent else None,
         "agent_answers": display_path(agent.answers_path) if agent else None,
         "judge": "same model as the pipeline" if args.judge else None,
-        "transform_query": not args.no_transform,
-        "grade_documents": not args.no_grade,
+        "query_rewrite": args.query_rewrite,
+        "grading": args.grading,
+        "min_relevance_score": args.min_relevance_score,
     }
     if agent:
         settings["note"] = "Agent answers are replayed: latency excludes LLM generation."
