@@ -96,3 +96,42 @@ def test_parent_context_returns_whole_parents_once(monkeypatch, tmp_path):
                if c.metadata["parent_id"] == p.metadata["parent_id"])
     assert all("parent_text" not in p.metadata for p in parents)
     assert all("parent_text" not in s["metadata"] for s in rag._format_sources(children))
+
+
+@pytest.mark.parametrize("provider", PROVIDERS)
+def test_refresh_embeds_only_changed_files(monkeypatch, tmp_path, provider):
+    corpus = write_corpus(tmp_path / "docs")
+    manifest = tmp_path / "manifest.json"
+    rag = make_rag(monkeypatch, tmp_path, provider)
+    rag.refresh_markdown_directory(corpus, manifest_path=manifest)
+    embeddings = rag.vector_store.embeddings.embeddings
+    thach_sanh_chunks = [c for c in rag._chunks if c.metadata["relative_source"] == "thach_sanh.md"]
+
+    (corpus / "tam_cam.md").write_text(STORIES["tam_cam.md"] + " Tấm hóa thành chim vàng anh.", encoding="utf-8")
+    before = embeddings.documents_embedded
+    result = rag.refresh_markdown_directory(corpus, manifest_path=manifest)
+    tam_cam_chunks = [c for c in rag._chunks if c.metadata["relative_source"] == "tam_cam.md"]
+
+    assert result["updated"] == ["tam_cam.md"] and result["documents_loaded"] == 1
+    assert embeddings.documents_embedded - before == len(tam_cam_chunks)
+    assert [c for c in rag._chunks if c.metadata["relative_source"] == "thach_sanh.md"] == thach_sanh_chunks
+    assert len(rag.vector_store.get_all_documents()) == rag.num_chunks
+    assert any("chim vàng anh" in c.page_content for c in tam_cam_chunks)
+    rag.vector_store.close()
+
+
+def test_unchanged_folder_is_indexed_when_the_store_is_empty(monkeypatch, tmp_path):
+    corpus = write_corpus(tmp_path / "docs")
+    manifest = tmp_path / "manifest.json"
+    first = make_rag(monkeypatch, tmp_path, "faiss")
+    first.refresh_markdown_directory(corpus, manifest_path=manifest)
+
+    # A new process on an in-memory store: the manifest says "unchanged", the index is empty.
+    monkeypatch.setattr("src.rag.advanced_rag.EmbeddingsManager", lambda **_: fake_embeddings_manager())
+    from src.rag.advanced_rag import AdvancedRAG
+
+    fresh = AdvancedRAG(vector_store_provider="faiss", chunk_size=160, chunk_overlap=20, use_reranking=False)
+    result = fresh.refresh_markdown_directory(corpus, manifest_path=manifest)
+
+    assert result["unchanged"] == ["tam_cam.md", "thach_sanh.md"]
+    assert fresh.num_documents == 2 and fresh.num_chunks == first.num_chunks

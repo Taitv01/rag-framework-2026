@@ -13,6 +13,7 @@ class HashEmbeddings(Embeddings):
 
     def __init__(self, dim: int = 256):
         self.dim = dim
+        self.documents_embedded = 0
 
     def _vector(self, text: str):
         vector = [0.0] * self.dim
@@ -22,6 +23,7 @@ class HashEmbeddings(Embeddings):
         return [x / norm for x in vector]
 
     def embed_documents(self, texts):
+        self.documents_embedded += len(texts)
         return [self._vector(text) for text in texts]
 
     def embed_query(self, text):

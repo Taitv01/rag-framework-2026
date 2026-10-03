@@ -283,7 +283,7 @@ class AdvancedRAG:
             if key and key not in documents:
                 kept = {
                     name: metadata[name]
-                    for name in ("source", "file_name", "document_id", "source_root")
+                    for name in ("source", "file_name", "document_id", "source_root", "relative_source")
                     if name in metadata
                 }
                 documents[key] = Document(page_content="", metadata={**kept, "restored": True})
@@ -381,26 +381,42 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
         """
         Refresh the knowledge base from a Markdown folder.
 
-        The folder is compared against a content-hash manifest. When files are
-        added, updated, or removed, chunks from this folder are replaced instead
-        of appended, preventing stale facts and duplicate chunks.
+        The folder is compared against a content-hash manifest. Only what
+        changed is touched: chunks of updated and removed files are deleted,
+        and added or updated files (plus unchanged files the index does not
+        hold, e.g. after a restart on an in-memory store) are embedded again.
+        ``force`` rebuilds the whole folder.
         """
         directory = Path(directory).resolve()
+        root = str(directory)
         indexer = MarkdownFolderIndexer()
         result, current_manifest = indexer.compare(
             directory,
             Path(manifest_path) if manifest_path else None,
         )
 
-        if not force and not result.changed:
+        indexed = {
+            (chunk.metadata or {}).get("relative_source")
+            for chunk in self._chunks
+            if (chunk.metadata or {}).get("source_root") == root
+        }
+        missing = [name for name in result.unchanged if name not in indexed]
+        if not force and not result.changed and not missing:
             return result.to_dict()
 
-        docs = self.document_loader.load_markdown_directory(
-            directory,
-            metadata=metadata,
-            strict=strict,
-        )
-        self._drop_source_root(str(directory))
+        if force or not indexed:
+            docs = self.document_loader.load_markdown_directory(
+                directory,
+                metadata=metadata,
+                strict=strict,
+            )
+            self._drop_source_root(root)
+        else:
+            for name in result.updated + result.removed:
+                self._drop_source_file(root, name)
+            docs = self._load_folder_files(
+                directory, result.added + result.updated + missing, metadata, strict
+            )
         chunks_indexed = self._index_loaded_documents(docs)
         indexer.save_manifest(Path(result.manifest_path), current_manifest)
 
@@ -408,6 +424,45 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
         result.chunks_indexed = chunks_indexed
         result.rebuilt = True
         return result.to_dict()
+
+    def _load_folder_files(
+        self,
+        directory: Path,
+        names: List[str],
+        metadata: Optional[Dict[str, Any]],
+        strict: bool,
+    ) -> List[Document]:
+        """Load some files of a folder with the metadata load_directory would give them."""
+        docs = []
+        for name in names:
+            try:
+                loaded = self.document_loader.load(directory / name, metadata=metadata)
+            except Exception as e:
+                if strict:
+                    raise
+                logger.warning(f"Failed to load {directory / name}: {e}")
+                continue
+            for doc in loaded:
+                doc.metadata["source_root"] = str(directory)
+                doc.metadata["relative_source"] = name
+            docs.extend(loaded)
+        return docs
+
+    def _drop_source_file(self, source_root: str, relative_source: str) -> None:
+        """Remove one file of a source folder from memory and the vector store."""
+        def keep(doc: Document) -> bool:
+            metadata = doc.metadata or {}
+            return not (
+                metadata.get("source_root") == source_root
+                and metadata.get("relative_source") == relative_source
+            )
+
+        self._documents = [doc for doc in self._documents if keep(doc)]
+        self._chunks = [chunk for chunk in self._chunks if keep(chunk)]
+        self.vector_store.delete(
+            filter={"source_root": source_root, "relative_source": relative_source}
+        )
+        self.vector_store.persist()
 
     def _index_loaded_documents(self, all_docs: List[Document]) -> int:
         """Split, index, and register already-loaded documents."""
