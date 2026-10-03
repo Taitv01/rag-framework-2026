@@ -58,8 +58,8 @@ def parse_args(argv=None) -> argparse.Namespace:
         sub.add_argument("--device", default=None, help="Embedding device: cpu or cuda")
         sub.add_argument("--vector-store", choices=["faiss", "qdrant"], default="faiss",
                          help="qdrant runs in memory, no server needed")
-        sub.add_argument("--parent-context", action="store_true",
-                         help="Search child chunks, return their parent chunks")
+        sub.add_argument("--parent-context", action=argparse.BooleanOptionalAction, default=True,
+                         help="Search child chunks, return their parent chunks (pipeline default)")
         sub.add_argument("--parent-fanout", type=int, default=3,
                          help="Child chunks searched per parent returned")
         sub.add_argument("--cache-dir", type=Path, default=None, help="HuggingFace cache (HF_HOME)")

@@ -139,6 +139,8 @@ class Config:
         # Feature Flags
         "ENABLE_HYBRID_SEARCH": "true",
         "ENABLE_RERANKING": "true",
+        # Search small chunks, give the LLM their surrounding parent passage.
+        "ENABLE_PARENT_CONTEXT": "true",
         "ENABLE_CACHE": "true",
         "ENABLE_API_AUTH": "false",
         "API_KEYS": "",

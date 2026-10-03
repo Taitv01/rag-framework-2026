@@ -81,7 +81,7 @@ class AdvancedRAG:
     """
 
     # Defaults for instances built without __init__ (tests, subclasses).
-    use_parent_context = False
+    use_parent_context = True
     parent_fanout = 3
 
     def __init__(
@@ -102,7 +102,7 @@ class AdvancedRAG:
         retrieval_k: int = 5,
         use_hybrid: bool = True,
         use_reranking: bool = True,
-        use_parent_context: bool = False,
+        use_parent_context: bool = True,
         parent_fanout: int = 3,
         system_prompt: Optional[str] = None,
         # Phase 2 options

@@ -1039,6 +1039,7 @@ app = create_app(
     retrieval_k=config.get_int("RETRIEVAL_K", default=5),
     use_hybrid=config.get_bool("ENABLE_HYBRID_SEARCH", default=True),
     use_reranking=config.get_bool("ENABLE_RERANKING", default=True),
+    use_parent_context=config.get_bool("ENABLE_PARENT_CONTEXT", default=True),
     use_cache=config.get_bool("ENABLE_CACHE", default=False),
     cache_ttl=config.get_int("CACHE_TTL", default=3600),
 )
