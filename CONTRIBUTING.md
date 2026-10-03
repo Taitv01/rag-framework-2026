@@ -36,7 +36,7 @@ git checkout -b fix/your-bug-fix
 pytest
 
 # Run linting (same check as CI)
-ruff check src tests examples
+ruff check src tests examples scripts
 ```
 
 ### 5. Commit Your Changes

@@ -111,3 +111,6 @@ tmp/
 temp/
 *.tmp
 .env.local
+
+# Ad-hoc evaluation runs (baselines live in evals/*/baselines/)
+evals/*/runs/

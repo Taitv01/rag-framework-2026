@@ -19,7 +19,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install "ruff>=0.4.0"
-      - run: ruff check src tests examples
+      - run: ruff check src tests examples scripts
 
   test:
     # Same-repo PRs are already covered by the push run; only fork PRs need their own.
@@ -41,5 +41,5 @@ jobs:
           cache-dependency-path: pyproject.toml
       # Lightweight core only: tests mock models, so torch is not installed.
       - run: pip install -e ".[dev,api]"
-      - run: python -m compileall -q src tests examples
+      - run: python -m compileall -q src tests examples scripts
       - run: python -m pytest -q

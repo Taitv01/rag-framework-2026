@@ -1,0 +1,64 @@
+# Bộ đánh giá truyện cổ tích
+
+Bộ dữ liệu chuẩn dùng để đo mọi thay đổi của pipeline RAG trên trường hợp dùng
+ưu tiên: truyện cổ tích và kịch bản sáng tác tiếng Việt.
+
+| Thành phần | Nội dung |
+|------------|----------|
+| `corpus/` | 9 truyện cổ tích kể lại bằng lời mới và kịch bản *Sự tích Hồ Gươm* (10 tài liệu, khoảng 46 KB) |
+| `golden.jsonl` | 95 câu hỏi: 87 câu có đáp án và 8 câu corpus không trả lời được |
+| `baselines/` | Báo cáo baseline đã commit; mọi lần chạy sau đều so với các file này |
+| `runs/` | Các lần chạy thử (bị Git bỏ qua) |
+
+Mỗi dòng của `golden.jsonl` có dạng:
+
+```json
+{"id": "q001", "question": "...", "answer": "...", "sources": ["thach_sanh"],
+ "evidence": ["lưỡi búa của cha để lại"], "tags": ["fact"]}
+```
+
+- `sources`: tên file trong `corpus/` (không có đuôi). Danh sách rỗng nghĩa là
+  câu hỏi không có đáp án trong corpus.
+- `evidence`: các cụm từ trích nguyên văn từ nguồn. `tests/test_fairy_tale_golden_set.py`
+  kiểm tra mọi cụm đều có thật trong corpus.
+- `tags`: `fact`, `sequence`, `character`, `motif`, `moral`, `multi_source`,
+  `multi_hop`, `paraphrase`, `no_diacritics`, `creative`, `unanswerable`.
+
+## Chạy đánh giá
+
+```powershell
+# Retrieval, không cần LLM: vector, vector+rerank, hybrid, hybrid+rerank
+py scripts/eval.py retrieval --cache-dir .cache/huggingface --device cpu `
+    --baseline evals/fairy_tales/baselines/retrieval.json
+
+# Câu trả lời end-to-end qua AdvancedRAG.query_detailed (tốn credit LLM)
+py scripts/eval.py answer --base-url https://openrouter.ai/api/v1 `
+    --llm-model openai/gpt-4o-mini --limit 20
+
+# So sánh hai báo cáo bất kỳ
+py scripts/eval.py compare evals/fairy_tales/baselines/retrieval.json evals/fairy_tales/runs/<file>.json
+```
+
+Lần chạy đầu sẽ tải `BAAI/bge-m3` và `AITeamVN/Vietnamese_Reranker` (khoảng 4,5 GB).
+`--cache-dir` chuyển cache HuggingFace sang ổ còn trống. Reranker cần
+`sentencepiece` (đã có trong extra `local-models`).
+
+## Chỉ số
+
+**Retrieval** (chỉ tính 87 câu có đáp án, cắt ở `k`):
+
+- `recall_at_k`, `mrr`, `ndcg`, `precision_at_k`: tính theo truyện nguồn. Corpus
+  chỉ có 10 truyện nên các chỉ số này dễ đạt mức cao.
+- `evidence_recall`: tỉ lệ cụm bằng chứng nằm nguyên vẹn trong một chunk được
+  truy xuất. Chỉ số này cho biết chunk lấy về có chứa đáp án hay không, nên
+  phân biệt các cấu hình rõ hơn.
+- `latency_p50_ms`, `latency_p95_ms`: phụ thuộc phần cứng, chỉ nên so trên cùng một máy.
+
+**Câu trả lời**:
+
+- `answer_recall`: tỉ lệ từ của đáp án chuẩn xuất hiện trong câu trả lời. Đây là
+  chỉ số thay thế rẻ, không cần LLM.
+- `faithfulness`: chấm bằng LLM khi có `--judge-model`.
+- `abstention_accuracy`: tỉ lệ câu không có đáp án mà pipeline trả lời "không có thông tin".
+- `false_abstention_rate`: tỉ lệ câu có đáp án mà pipeline lại từ chối.
+- `citation_rate`, `llm_calls_per_query`, token và độ trễ.

@@ -22,6 +22,56 @@ import math
 from src.evaluation.metrics import RAGMetrics, RAGScores
 
 
+def retrieval_scores(
+    retrieved_sources: List[str],
+    expected_sources: List[str],
+    k: int,
+) -> Dict[str, float]:
+    """Binary-relevance precision@k, recall@k, MRR and nDCG for one query."""
+    expected = set(expected_sources)
+    retrieved = retrieved_sources[:k]
+
+    if not expected:
+        return {
+            "precision_at_k": 0.0,
+            "recall_at_k": 0.0,
+            "mrr": 0.0,
+            "ndcg": 0.0,
+        }
+
+    hits = [1 if source in expected else 0 for source in retrieved]
+    precision = sum(hits) / max(len(retrieved), 1)
+
+    # Several chunks from one source must not push recall/nDCG above 1:
+    # only the first occurrence of each expected source earns gain.
+    seen = set()
+    gains = []
+    for source in retrieved:
+        is_new = source in expected and source not in seen
+        if is_new:
+            seen.add(source)
+        gains.append(1 if is_new else 0)
+    recall = len(seen) / len(expected)
+
+    mrr = 0.0
+    for rank, hit in enumerate(hits, 1):
+        if hit:
+            mrr = 1.0 / rank
+            break
+
+    dcg = sum(gain / math.log2(rank + 1) for rank, gain in enumerate(gains, 1))
+    ideal_hits = min(len(expected), k)
+    idcg = sum(1.0 / math.log2(rank + 1) for rank in range(1, ideal_hits + 1))
+    ndcg = dcg / idcg if idcg else 0.0
+
+    return {
+        "precision_at_k": precision,
+        "recall_at_k": recall,
+        "mrr": mrr,
+        "ndcg": ndcg,
+    }
+
+
 @dataclass
 class EvaluationResult:
     """Result of a single evaluation."""
@@ -350,48 +400,7 @@ class RAGEvaluator:
         k: int,
     ) -> Dict[str, float]:
         """Compute binary relevance retrieval metrics."""
-        expected = set(expected_sources)
-        retrieved = retrieved_sources[:k]
-
-        if not expected:
-            return {
-                "precision_at_k": 0.0,
-                "recall_at_k": 0.0,
-                "mrr": 0.0,
-                "ndcg": 0.0,
-            }
-
-        hits = [1 if source in expected else 0 for source in retrieved]
-        precision = sum(hits) / max(len(retrieved), 1)
-
-        # Several chunks from one source must not push recall/nDCG above 1:
-        # only the first occurrence of each expected source earns gain.
-        seen = set()
-        gains = []
-        for source in retrieved:
-            is_new = source in expected and source not in seen
-            if is_new:
-                seen.add(source)
-            gains.append(1 if is_new else 0)
-        recall = len(seen) / len(expected)
-
-        mrr = 0.0
-        for rank, hit in enumerate(hits, 1):
-            if hit:
-                mrr = 1.0 / rank
-                break
-
-        dcg = sum(gain / math.log2(rank + 1) for rank, gain in enumerate(gains, 1))
-        ideal_hits = min(len(expected), k)
-        idcg = sum(1.0 / math.log2(rank + 1) for rank in range(1, ideal_hits + 1))
-        ndcg = dcg / idcg if idcg else 0.0
-
-        return {
-            "precision_at_k": precision,
-            "recall_at_k": recall,
-            "mrr": mrr,
-            "ndcg": ndcg,
-        }
+        return retrieval_scores(retrieved_sources, expected_sources, k)
 
     def export_report(
         self,

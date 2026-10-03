@@ -273,7 +273,7 @@ py -m compileall src tests
 py -m pytest -v
 
 # Lint (bộ rule được cố định trong pyproject.toml)
-py -m ruff check src tests examples
+py -m ruff check src tests examples scripts
 ```
 
 Test không bao giờ đọc `.env` / `.env.local`: `tests/conftest.py` đặt `RAG_DISABLE_DOTENV=1` và xoá các biến môi trường giống secret. CI (`.github/workflows/ci.yml`) chạy ruff và pytest trên Python 3.11–3.13 với bản cài lõi nhẹ `.[dev,api]`.
