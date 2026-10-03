@@ -264,6 +264,7 @@ class LLMCallCounter:
         self.calls = 0
         self.input_tokens = 0
         self.output_tokens = 0
+        self.usage_reported = False  # stays False for backends without usage (AgentLLM)
 
     def attach(self, llm_manager) -> None:
         """Start counting calls made through ``llm_manager``."""
@@ -278,6 +279,8 @@ class LLMCallCounter:
 
     def record_usage(self, message: Any) -> None:
         usage = getattr(message, "usage_metadata", None) or {}
+        if usage:
+            self.usage_reported = True
         self.input_tokens += int(usage.get("input_tokens") or 0)
         self.output_tokens += int(usage.get("output_tokens") or 0)
 
@@ -398,6 +401,10 @@ def run_answer_benchmark(
                 else None
             )
         rows.append(row)
+
+    if not counter.usage_reported:
+        for row in rows:
+            row["input_tokens"] = row["output_tokens"] = None
 
     answerable = [row for row in rows if row["answerable"]]
     unanswerable = [row for row in rows if not row["answerable"]]

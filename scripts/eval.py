@@ -4,8 +4,14 @@ Golden-set evaluation CLI.
 Retrieval (no LLM, compares vector / vector+rerank / hybrid / hybrid+rerank):
     py scripts/eval.py retrieval --out evals/fairy_tales/baselines/retrieval.json
 
-End-to-end answers through AdvancedRAG.query_detailed (spends LLM credit):
-    py scripts/eval.py answer --base-url https://openrouter.ai/api/v1 \
+End-to-end answers through AdvancedRAG.query_detailed. By default the AI
+model running this command answers RAG's prompts (AgentLLM): each run writes
+the prompts it still needs to <eval-dir>/runs/agent_requests.json and exits
+with code 3; answer them in <eval-dir>/agent_answers.json and run again.
+    py scripts/eval.py answer --judge
+
+Or call an OpenAI-compatible API instead (spends credit):
+    py scripts/eval.py answer --llm api --base-url https://openrouter.ai/api/v1 \
         --llm-model openai/gpt-4o-mini --limit 20
 
 Compare a new run with a stored baseline:
@@ -62,12 +68,19 @@ def parse_args(argv=None) -> argparse.Namespace:
     answer = commands.add_parser("answer", help="End-to-end answer benchmark (uses an LLM)")
     add_pipeline_options(answer)
     answer.add_argument("--config", choices=list(RETRIEVAL_CONFIGS), default="hybrid_rerank")
+    answer.add_argument("--llm", choices=["agent", "api"], default="agent",
+                        help="agent (default): the AI model running this command answers RAG's "
+                             "prompts via AgentLLM, over several runs; api: --llm-provider/--llm-model")
+    answer.add_argument("--answers", type=Path, default=None,
+                        help="Agent answers file (default: <eval-dir>/agent_answers.json)")
+    answer.add_argument("--requests", type=Path, default=None,
+                        help="Agent requests file (default: <eval-dir>/runs/agent_requests.json)")
     answer.add_argument("--llm-provider", default="openai")
     answer.add_argument("--llm-model", default=None)
     answer.add_argument("--base-url", default=None, help="OpenAI-compatible endpoint, e.g. OpenRouter")
     answer.add_argument("--temperature", type=float, default=0.0)
-    answer.add_argument("--judge-model", default=None,
-                        help="Also score faithfulness with this model (same provider/base URL)")
+    answer.add_argument("--judge", action="store_true",
+                        help="Also score faithfulness, judged by the same model as the pipeline")
     answer.add_argument("--no-transform", action="store_true", help="Skip LLM query rewriting")
     answer.add_argument("--no-grade", action="store_true", help="Skip LLM document grading")
     answer.add_argument("--limit", type=int, default=None, help="Only the first N questions")
@@ -223,7 +236,15 @@ def cmd_retrieval(args) -> int:
     return 0
 
 
+AGENT_SYSTEM_PROMPT = (
+    "Bạn là LLM bên trong một pipeline RAG đang được đo đánh giá. Làm đúng yêu cầu của "
+    "từng prompt (định dạng, ngôn ngữ, độ dài). Khi prompt yêu cầu chỉ dựa vào ngữ cảnh "
+    "hoặc tài liệu đi kèm, tuyệt đối không bổ sung hiểu biết riêng về các truyện."
+)
+
+
 def cmd_answer(args) -> int:
+    from src.core.agent_llm import AgentChatModel, AgentLLM
     from src.core.llm import LLMManager
     from src.evaluation.benchmark import (
         LLMCallCounter,
@@ -243,22 +264,44 @@ def cmd_answer(args) -> int:
     rag, index_seconds = build_rag(
         args, llm_provider=args.llm_provider, llm_model=args.llm_model, **options,
     )
-    # The chat client is created lazily, so these still apply.
-    rag.llm.config.temperature = args.temperature
-    if args.base_url:
-        rag.llm.config.base_url = args.base_url
+
+    agent = None
+    if args.llm == "agent":
+        # Whichever model runs this command answers every prompt; no API is called.
+        answers_path = args.answers or args.eval_dir / "agent_answers.json"
+        requests_path = args.requests or args.eval_dir / "runs" / "agent_requests.json"
+        agent = AgentLLM(answers_path, requests_path, system_prompt=AGENT_SYSTEM_PROMPT)
+        rag.llm._llm = AgentChatModel(agent)
+        rag.llm.config.provider = "agent"
+        rag.llm.config.model = agent.answered_by or "agent"
+        judge_llm = agent
+
+        # The grading prompts of one question do not depend on each other: ask them in one run.
+        grade_documents = rag._grade_documents
+
+        def grade_independently(question, docs):
+            with agent.independent():
+                return grade_documents(question, docs)
+
+        rag._grade_documents = grade_independently
+    else:
+        # The chat client is created lazily, so these still apply.
+        rag.llm.config.temperature = args.temperature
+        if args.base_url:
+            rag.llm.config.base_url = args.base_url
+        judge_llm = LLMManager(
+            provider=args.llm_provider, model=rag.llm.config.model,
+            base_url=args.base_url, temperature=0.0,
+        )
 
     counter = LLMCallCounter()
     counter.attach(rag.llm)
-
-    judge = None
-    if args.judge_model:
-        judge = make_faithfulness_judge(LLMManager(
-            provider=args.llm_provider, model=args.judge_model,
-            base_url=args.base_url, temperature=0.0,
-        ))
+    judge = make_faithfulness_judge(judge_llm) if args.judge else None
 
     def answer_fn(question):
+        if agent:
+            # Later prompts of a question depend on earlier answers (rewrite -> grade -> answer).
+            agent.start_chain()
         result = rag.query_detailed(
             question,
             transform_query=not args.no_transform,
@@ -270,16 +313,29 @@ def cmd_answer(args) -> int:
         }
 
     run = run_answer_benchmark(answer_fn, cases, counter=counter, judge=judge)
+
+    if agent and not agent.complete:
+        path = agent.write_requests()
+        print(
+            f"\n{len(agent.pending)} prompts wait for the calling model "
+            f"({agent.deferred} more depend on them).\n"
+            f"Requests: {path}\nAnswer them in {agent.answers_path}, then run the same command again."
+        )
+        return 3
+
     settings = {
         **pipeline_settings(args, rag, index_seconds),
         "llm_provider": rag.llm.config.provider,
         "llm_model": rag.llm.config.model,
-        "base_url": args.base_url,
-        "temperature": args.temperature,
-        "judge_model": args.judge_model,
+        "base_url": args.base_url if not agent else None,
+        "temperature": args.temperature if not agent else None,
+        "agent_answers": str(agent.answers_path) if agent else None,
+        "judge": "same model as the pipeline" if args.judge else None,
         "transform_query": not args.no_transform,
         "grade_documents": not args.no_grade,
     }
+    if agent:
+        settings["note"] = "Agent answers are replayed: latency excludes LLM generation."
     report = {**run_metadata("answer"), "settings": settings, "configs": {args.config: run}}
     path = write_report(report, args.out, args.eval_dir)
 
@@ -287,7 +343,7 @@ def cmd_answer(args) -> int:
         f"Answers on {run['summary']['cases']} questions ({rag.llm.config.model})",
         report["configs"],
         ["answer_recall", "faithfulness", "abstention_accuracy", "false_abstention_rate",
-         "llm_calls_per_query", "latency_p50_ms"],
+         "citation_rate", "llm_calls_per_query"],
     )
     if args.baseline:
         print_comparison(json.loads(args.baseline.read_text(encoding="utf-8")), report)

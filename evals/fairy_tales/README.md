@@ -8,6 +8,7 @@ Bộ dữ liệu chuẩn dùng để đo mọi thay đổi của pipeline RAG tr
 | `corpus/` | 9 truyện cổ tích kể lại bằng lời mới và kịch bản *Sự tích Hồ Gươm* (10 tài liệu, khoảng 46 KB) |
 | `golden.jsonl` | 95 câu hỏi: 87 câu có đáp án và 8 câu corpus không trả lời được |
 | `baselines/` | Báo cáo baseline đã commit; mọi lần chạy sau đều so với các file này |
+| `agent_answers.json` | Câu trả lời của model gọi RAG cho từng prompt (theo SHA-256), để chạy lại được |
 | `runs/` | Các lần chạy thử (bị Git bỏ qua) |
 
 Mỗi dòng của `golden.jsonl` có dạng:
@@ -31,8 +32,14 @@ Mỗi dòng của `golden.jsonl` có dạng:
 py scripts/eval.py retrieval --cache-dir .cache/huggingface --device cpu `
     --baseline evals/fairy_tales/baselines/retrieval.json
 
-# Câu trả lời end-to-end qua AdvancedRAG.query_detailed (tốn credit LLM)
-py scripts/eval.py answer --base-url https://openrouter.ai/api/v1 `
+# Câu trả lời end-to-end qua AdvancedRAG.query_detailed, do chính model AI đang
+# chạy lệnh (Claude, Codex, ...) trả lời qua AgentLLM, không gọi API nào.
+# Mỗi lần chạy ghi các prompt còn thiếu vào runs/agent_requests.json và thoát mã 3;
+# model trả lời vào agent_answers.json rồi chạy lại, cho tới khi in báo cáo.
+py scripts/eval.py answer --judge --device cpu
+
+# Hoặc gọi một API OpenAI-compatible (tốn credit)
+py scripts/eval.py answer --llm api --base-url https://openrouter.ai/api/v1 `
     --llm-model openai/gpt-4o-mini --limit 20
 
 # So sánh hai báo cáo bất kỳ
@@ -58,7 +65,7 @@ Lần chạy đầu sẽ tải `BAAI/bge-m3` và `AITeamVN/Vietnamese_Reranker` 
 
 - `answer_recall`: tỉ lệ từ của đáp án chuẩn xuất hiện trong câu trả lời. Đây là
   chỉ số thay thế rẻ, không cần LLM.
-- `faithfulness`: chấm bằng LLM khi có `--judge-model`.
+- `faithfulness`: chấm bằng chính model của pipeline khi có `--judge`.
 - `abstention_accuracy`: tỉ lệ câu không có đáp án mà pipeline trả lời "không có thông tin".
 - `false_abstention_rate`: tỉ lệ câu có đáp án mà pipeline lại từ chối.
 - `citation_rate`, `llm_calls_per_query`, token và độ trễ.
