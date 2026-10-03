@@ -56,6 +56,12 @@ def parse_args(argv=None) -> argparse.Namespace:
         sub.add_argument("--chunk-overlap", type=int, default=50)
         sub.add_argument("--embedding-model", default=None, help="Default: BAAI/bge-m3")
         sub.add_argument("--device", default=None, help="Embedding device: cpu or cuda")
+        sub.add_argument("--vector-store", choices=["faiss", "qdrant"], default="faiss",
+                         help="qdrant runs in memory, no server needed")
+        sub.add_argument("--parent-context", action="store_true",
+                         help="Search child chunks, return their parent chunks")
+        sub.add_argument("--parent-fanout", type=int, default=3,
+                         help="Child chunks searched per parent returned")
         sub.add_argument("--cache-dir", type=Path, default=None, help="HuggingFace cache (HF_HOME)")
         sub.add_argument("--out", type=Path, default=None, help="Report path (default: <eval-dir>/runs/)")
         sub.add_argument("--baseline", type=Path, default=None, help="Report to compare against")
@@ -116,15 +122,17 @@ def build_rag(args, use_hybrid: bool, use_reranking: bool, llm_provider="openai"
         llm_provider=llm_provider,
         llm_model=llm_model,
         embedding_model=args.embedding_model,
+        embedding_device=args.device,
+        vector_store_provider=args.vector_store,
+        vector_store_url=":memory:" if args.vector_store == "qdrant" else None,
         chunk_size=args.chunk_size,
         chunk_overlap=args.chunk_overlap,
         retrieval_k=args.k,
         use_hybrid=use_hybrid,
         use_reranking=use_reranking,
+        use_parent_context=args.parent_context,
+        parent_fanout=args.parent_fanout,
     )
-    if args.device:
-        # Embeddings load lazily, so the device can still be chosen here.
-        rag.embeddings.config.device = args.device
 
     start = time.perf_counter()
     rag.add_documents(args.eval_dir / "corpus")
@@ -146,6 +154,9 @@ def pipeline_settings(args, rag, index_seconds: float) -> dict:
         "chunk_overlap": args.chunk_overlap,
         "embedding_model": rag.embeddings.config.model_name,
         "embedding_device": args.device or "auto",
+        "vector_store": args.vector_store,
+        "parent_context": args.parent_context,
+        "parent_fanout": args.parent_fanout if args.parent_context else None,
         "reranker_model": retriever.active_reranker_model if retriever else None,
         "documents": rag.num_documents,
         "retrieval_chunks": rag.num_chunks,
@@ -234,7 +245,7 @@ def cmd_retrieval(args) -> int:
     print_table(
         f"Retrieval @k={args.k} on {configs[names[0]]['summary']['cases']} answerable questions",
         configs,
-        ["recall_at_k", "mrr", "ndcg", "evidence_recall", "latency_p50_ms", "latency_p95_ms"],
+        ["recall_at_k", "mrr", "ndcg", "evidence_recall", "context_chars", "latency_p50_ms"],
     )
     if args.baseline:
         print_comparison(json.loads(args.baseline.read_text(encoding="utf-8")), report)

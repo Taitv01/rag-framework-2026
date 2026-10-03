@@ -91,6 +91,7 @@ class AdvancedRAG:
         llm_api_key: Optional[str] = None,
         embedding_provider: str = "huggingface",
         embedding_model: Optional[str] = None,
+        embedding_device: Optional[str] = None,
         vector_store_provider: str = "faiss",
         collection_name: str = "default",
         persist_directory: Optional[str] = None,
@@ -130,6 +131,7 @@ class AdvancedRAG:
             embedding_provider: Embedding provider
             embedding_model: Embedding model name (default: the provider's default,
                 BAAI/bge-m3 for huggingface)
+            embedding_device: Device for local embedding models ('cpu', 'cuda')
             vector_store_provider: Vector store provider
             collection_name: Vector store collection/index name
             persist_directory: Directory for persistent local vector stores
@@ -167,6 +169,7 @@ class AdvancedRAG:
         self.embeddings = EmbeddingsManager(
             provider=embedding_provider,
             model_name=embedding_model,
+            device=embedding_device,
         )
         self.vector_store = VectorStoreManager(
             provider=vector_store_provider,

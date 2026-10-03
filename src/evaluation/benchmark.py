@@ -37,6 +37,7 @@ RETRIEVAL_METRICS = ("precision_at_k", "recall_at_k", "mrr", "ndcg", "evidence_r
 
 # Metrics where a smaller number is an improvement (used by compare_reports).
 LOWER_IS_BETTER = {
+    "context_chars",
     "latency_p50_ms",
     "latency_p95_ms",
     "llm_calls_per_query",
@@ -236,6 +237,8 @@ def run_retrieval_benchmark(
             "retrieved_sources": retrieved,
             **retrieval_scores(retrieved, case.sources, k),
             "evidence_recall": evidence_recall(case.evidence, docs),
+            # What the LLM would read: more text can raise recall without better ranking.
+            "context_chars": sum(len(document_text(doc)) for doc in docs),
             "latency_ms": round(latency_ms, 2),
             "error": error,
         })
@@ -244,6 +247,7 @@ def run_retrieval_benchmark(
     summary: Dict[str, Any] = {"cases": len(rows), "k": k}
     for metric in RETRIEVAL_METRICS:
         summary[metric] = _mean([row[metric] for row in rows])
+    summary["context_chars"] = _mean([row["context_chars"] for row in rows])
     summary["latency_p50_ms"] = percentile(latencies, 50)
     summary["latency_p95_ms"] = percentile(latencies, 95)
     summary["errors"] = sum(1 for row in rows if row["error"])
