@@ -214,28 +214,34 @@ class RetrieverManager:
         query: str,
         k: Optional[int] = None,
         filter: Optional[Dict[str, Any]] = None,
+        use_hybrid: Optional[bool] = None,
+        use_reranking: Optional[bool] = None,
         **kwargs
     ) -> List[Document]:
         """
-        Basic similarity search.
+        Search with the configured strategy.
 
         Args:
             query: Search query
             k: Number of results (overrides config)
             filter: Metadata filter
+            use_hybrid: Override config.use_hybrid for this call
+            use_reranking: Override config.use_reranking for this call
 
         Returns:
             List of relevant Document objects
         """
         k = k or self.config.k
+        hybrid = self.config.use_hybrid if use_hybrid is None else use_hybrid
+        reranking = self.config.use_reranking if use_reranking is None else use_reranking
 
-        if self.config.use_hybrid and self.config.use_reranking:
+        if hybrid and reranking:
             initial_k = kwargs.pop("initial_k", k * 4)
             candidates = self.hybrid_search(query, k=initial_k, filter=filter)
             return self._rerank_documents(query, candidates, k=k, filter=filter)
-        elif self.config.use_hybrid:
+        elif hybrid:
             return self.hybrid_search(query, k=k, filter=filter)
-        elif self.config.use_reranking:
+        elif reranking:
             return self.search_with_reranking(query, k=k, filter=filter)
         else:
             return self.vector_store.similarity_search(
@@ -383,6 +389,10 @@ class RetrieverManager:
         )
 
         return self._rerank_documents(query, candidates, k=k, filter=filter)
+
+    def rerank(self, query: str, documents: List[Document], k: Optional[int] = None) -> List[Document]:
+        """Order documents by cross-encoder relevance and keep the top k."""
+        return self._rerank_documents(query, documents, k=k)
 
     def _rerank_documents(
         self,

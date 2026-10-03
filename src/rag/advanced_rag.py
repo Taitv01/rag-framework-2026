@@ -32,6 +32,7 @@ Usage:
     answer = rag.query("Thạch Sanh là ai?")
 """
 
+import hashlib
 import logging
 from typing import List, Optional, Dict, Any, Union, Generator
 from pathlib import Path
@@ -79,6 +80,10 @@ class AdvancedRAG:
         print(result["relevant_docs"])
     """
 
+    # Defaults for instances built without __init__ (tests, subclasses).
+    use_parent_context = False
+    parent_fanout = 3
+
     def __init__(
         self,
         llm_provider: str = "openai",
@@ -96,6 +101,8 @@ class AdvancedRAG:
         retrieval_k: int = 5,
         use_hybrid: bool = True,
         use_reranking: bool = True,
+        use_parent_context: bool = False,
+        parent_fanout: int = 3,
         system_prompt: Optional[str] = None,
         # Phase 2 options
         use_cache: bool = False,
@@ -133,6 +140,9 @@ class AdvancedRAG:
             retrieval_k: Number of documents to retrieve
             use_hybrid: Enable hybrid search
             use_reranking: Enable re-ranking
+            use_parent_context: Search small child chunks but return their
+                parent chunks, so the LLM sees the surrounding passage
+            parent_fanout: Child chunks searched per requested parent
             system_prompt: Custom system prompt
             use_cache: Enable semantic caching
             cache_ttl: Cache time-to-live in seconds
@@ -175,6 +185,8 @@ class AdvancedRAG:
         self.retrieval_k = retrieval_k
         self.use_hybrid = use_hybrid
         self.use_reranking = use_reranking
+        self.use_parent_context = use_parent_context
+        self.parent_fanout = max(1, parent_fanout)
         self.system_prompt = system_prompt or self._get_default_system_prompt()
 
         # Context window validation
@@ -241,10 +253,42 @@ class AdvancedRAG:
         # Track documents
         self._documents = []
         self._chunks = []
-        self._parent_chunks = []  # For parent-child retrieval
 
         # Initialize retriever (will be created after documents are added)
         self._retriever = None
+
+        # Persistent stores keep their chunks across restarts: reload them so
+        # BM25, counts and parent lookups work without re-indexing.
+        if persist_directory or vector_store_provider in ("qdrant", "chroma"):
+            self._restore_from_vector_store()
+
+    def _restore_from_vector_store(self) -> None:
+        """Load the chunks a persistent vector store already holds."""
+        try:
+            chunks = self.vector_store.get_all_documents()
+        except Exception as e:
+            logger.warning(f"Could not load existing chunks from the vector store: {e}")
+            return
+        if not chunks:
+            return
+
+        # One placeholder per source document, so counts and source-root drops work.
+        documents = {}
+        for chunk in chunks:
+            metadata = chunk.metadata or {}
+            key = metadata.get("document_id") or metadata.get("source") or metadata.get("file_name")
+            if key and key not in documents:
+                kept = {
+                    name: metadata[name]
+                    for name in ("source", "file_name", "document_id", "source_root")
+                    if name in metadata
+                }
+                documents[key] = Document(page_content="", metadata={**kept, "restored": True})
+
+        self._chunks = chunks
+        self._documents = list(documents.values())
+        self._refresh_retriever()
+        logger.info(f"Restored {len(chunks)} chunks from {len(documents)} documents")
 
     def _get_default_system_prompt(self) -> str:
         """Get default system prompt (bilingual Vietnamese/English)."""
@@ -382,30 +426,40 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
             logger.info(f"Enhancing metadata for {len(chunks)} chunks")
             chunks = self._metadata_enhancer.enhance(chunks)
 
-        # Store parent chunks for parent-child retrieval
-        parent_start_idx = len(self._parent_chunks)
-        self._parent_chunks.extend(chunks)
-
-        # Create smaller child chunks for retrieval, linking to parents
+        # Small child chunks are what gets searched. Each one carries its parent
+        # chunk (stable id + text), so use_parent_context can hand the LLM the
+        # surrounding passage, and no positional index can go stale.
         child_splitter = TextSplitter(
             chunk_size=max(1, self.text_splitter.chunk_size // 2),
             chunk_overlap=self.text_splitter.chunk_overlap,
         )
         child_chunks = []
-        for parent_idx, parent_chunk in enumerate(chunks, start=parent_start_idx):
-            sub_chunks = child_splitter.split_documents([parent_chunk])
-            for child in sub_chunks:
-                child.metadata = {**child.metadata, "_parent_idx": parent_idx}
-            child_chunks.extend(sub_chunks)
+        for parent in chunks:
+            parent_id = self._parent_id(parent)
+            for child in child_splitter.split_documents([parent]):
+                child.metadata = {
+                    **child.metadata,
+                    "parent_id": parent_id,
+                    "parent_text": parent.page_content,
+                }
+                child_chunks.append(child)
 
         # Use child chunks for retrieval if any were created,
         # otherwise fall back to the parent chunks themselves
         retrieval_chunks = child_chunks if child_chunks else chunks
         MarkdownFolderIndexer().assign_stable_chunk_ids(retrieval_chunks)
+
+        # The store overwrites chunks by id; keep the in-memory list in step.
+        new_ids = {chunk.metadata.get("chunk_id") for chunk in retrieval_chunks}
+        self._chunks = [
+            chunk for chunk in self._chunks
+            if (chunk.metadata or {}).get("chunk_id") not in new_ids
+        ]
         self._chunks.extend(retrieval_chunks)
 
         # Add to vector store
         self._add_chunks_to_vector_store(retrieval_chunks)
+        self.vector_store.persist()
 
         # Initialize retriever
         self._refresh_retriever()
@@ -422,29 +476,35 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
             chunk for chunk in self._chunks
             if (chunk.metadata or {}).get("source_root") != source_root
         ]
-        self._parent_chunks = [
-            chunk for chunk in self._parent_chunks
-            if (chunk.metadata or {}).get("source_root") != source_root
-        ]
+        self.vector_store.delete(filter={"source_root": source_root})
+        self.vector_store.persist()
 
-        provider = getattr(self.vector_store.config, "provider", "faiss")
-        if provider == "faiss":
-            self._rebuild_vector_store_from_chunks()
-        else:
-            self.vector_store.delete(filter={"source_root": source_root})
-
-    def _rebuild_vector_store_from_chunks(self) -> None:
-        """Recreate the vector store from current chunks."""
-        config = self.vector_store.config
-        self.vector_store = VectorStoreManager(
-            provider=config.provider,
-            embeddings=self.embeddings,
-            collection_name=config.collection_name,
-            persist_directory=config.persist_directory,
-            url=config.url,
-            api_key=config.api_key,
+    @staticmethod
+    def _parent_id(parent: Document) -> str:
+        """Stable id of a parent chunk: its source, position and text."""
+        metadata = parent.metadata or {}
+        key = "|".join(
+            str(metadata.get(name, ""))
+            for name in ("source", "source_sha256", "page", "start_index")
         )
-        self._add_chunks_to_vector_store(self._chunks)
+        return hashlib.sha1(f"{key}|{parent.page_content}".encode("utf-8")).hexdigest()[:20]
+
+    @staticmethod
+    def _expand_to_parents(docs: List[Document]) -> List[Document]:
+        """Replace child chunks by their parents, in rank order, without repeats."""
+        parents, seen = [], set()
+        for doc in docs:
+            metadata = doc.metadata or {}
+            parent_id, parent_text = metadata.get("parent_id"), metadata.get("parent_text")
+            if not parent_id or not parent_text:
+                parents.append(doc)
+                continue
+            if parent_id in seen:
+                continue
+            seen.add(parent_id)
+            kept = {name: value for name, value in metadata.items() if name != "parent_text"}
+            parents.append(Document(page_content=parent_text, metadata=kept))
+        return parents
 
     def _add_chunks_to_vector_store(self, chunks: List[Document]) -> None:
         """Add chunks with stable IDs when available."""
@@ -506,16 +566,10 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
 
         # Add to vector store
         self.vector_store.add_documents(chunks)
+        self.vector_store.persist()
 
         # Initialize retriever
-        self._retriever = RetrieverManager(
-            vector_store=self.vector_store,
-            embeddings=self.embeddings,
-            documents=self._chunks,
-            k=self.retrieval_k,
-            use_hybrid=self.use_hybrid,
-            use_reranking=self.use_reranking,
-        )
+        self._refresh_retriever()
 
         return len(chunks)
 
@@ -663,7 +717,7 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
         if self.use_hyde:
             docs = self._retriever.hyde_search(query, k=k, llm=self.llm)
             if docs:
-                return docs
+                return self._expand_to_parents(docs)[:k] if self.use_parent_context else docs
 
         # Multi-query RRF: generate variations, fuse with RRF
         if self.use_multi_query_rrf:
@@ -672,10 +726,33 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
                 num_queries=self.num_query_variations,
             )
             if docs:
-                return docs
+                return self._expand_to_parents(docs)[:k] if self.use_parent_context else docs
 
         # Standard search (hybrid + reranking)
-        return self._retriever.search(query, k=k)
+        return self._search(query, k=k)
+
+    def _search(
+        self,
+        query: str,
+        k: int,
+        use_hybrid: Optional[bool] = None,
+        use_reranking: Optional[bool] = None,
+    ) -> List[Document]:
+        """Hybrid/rerank search; with parent context, children are searched and parents returned."""
+        if not self.use_parent_context:
+            return self._retriever.search(
+                query, k=k, use_hybrid=use_hybrid, use_reranking=use_reranking
+            )
+
+        reranking = self._retriever.config.use_reranking if use_reranking is None else use_reranking
+        children = self._retriever.search(
+            query, k=k * self.parent_fanout, use_hybrid=use_hybrid, use_reranking=False
+        )
+        parents = self._expand_to_parents(children)
+        if reranking:
+            # Rerank the passages the LLM will actually read.
+            return self._retriever.rerank(query, parents, k=k)
+        return parents[:k]
 
     def query_detailed(
         self,
@@ -866,7 +943,11 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
         sources = []
 
         for i, doc in enumerate(docs, 1):
-            metadata = doc.metadata or {}
+            # parent_text duplicates a passage the client does not need.
+            metadata = {
+                name: value for name, value in (doc.metadata or {}).items()
+                if name != "parent_text"
+            }
             content = doc.page_content
             source = (
                 metadata.get("source")
@@ -908,23 +989,7 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
         if self._retriever is None:
             return self.vector_store.similarity_search(query, k=k)
 
-        # Temporarily override settings if needed
-        original_hybrid = self._retriever.config.use_hybrid
-        original_reranking = self._retriever.config.use_reranking
-
-        if use_hybrid is not None:
-            self._retriever.config.use_hybrid = use_hybrid
-        if use_reranking is not None:
-            self._retriever.config.use_reranking = use_reranking
-
-        try:
-            results = self._retriever.search(query, k=k)
-        finally:
-            # Restore original settings
-            self._retriever.config.use_hybrid = original_hybrid
-            self._retriever.config.use_reranking = original_reranking
-
-        return results
+        return self._search(query, k=k, use_hybrid=use_hybrid, use_reranking=use_reranking)
 
     @property
     def num_documents(self) -> int:
