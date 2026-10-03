@@ -17,6 +17,31 @@ The agent cannot be called back in the middle of a Python run, so a check takes 
 Prompts are keyed by SHA-256 (of the system prompt plus the prompt), so an edited story
 asks only the changed prompts again, and answers to prompts that no longer occur are ignored.
 
+### Pipelines with dependent prompts
+
+A RAG query asks prompts that depend on earlier answers: rewrite the question, grade
+what the rewrite retrieved, then answer from the documents that passed. A placeholder
+early in that chain would make every later prompt worthless, so:
+
+- `llm.start_chain()` begins one unit of work (one question). After the chain's first
+  unanswered prompt, later prompts are not requested (`llm.deferred` counts them);
+  `complete` stays False until none are deferred.
+- `with llm.independent():` marks prompts that do not depend on each other (grading
+  the retrieved documents), so they are all requested in the same run.
+
+Each run therefore asks one more layer. `scripts/eval.py answer` needs four runs for the
+default AdvancedRAG pipeline: rewrite, grades, answer, then the faithfulness judge.
+
+### Inside LLMManager
+
+`AgentChatModel` stands in for the LangChain chat model of an `LLMManager`, so whole
+pipelines (AdvancedRAG, graders sharing its LLM) run on the calling model unchanged:
+
+```python
+rag = AdvancedRAG(...)
+rag.llm._llm = AgentChatModel(AgentLLM("answers.json", "requests.json"))
+```
+
 ## Files
 
 Requests (written by RAG):

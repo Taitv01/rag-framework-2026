@@ -20,6 +20,17 @@ again and answers to prompts that no longer occur are ignored. Only the
 standard library is used: callers such as story pipelines can load this file
 by path without importing the ``src`` package and its embedding stack.
 
+Pipelines whose prompts depend on earlier answers (rewrite the query, then
+grade what it retrieved, then answer) run each unit of work as a chain:
+``start_chain()`` before it, and after the chain's first unanswered prompt
+the later ones are not requested, because they would be built on a
+placeholder. Each run then asks one more layer, until ``complete``. Prompts
+that do not depend on each other (grading several documents) can be asked in
+the same run inside ``with llm.independent():``.
+
+``AgentChatModel`` plugs an AgentLLM into ``LLMManager`` in place of a
+LangChain chat model.
+
 Usage:
     llm = AgentLLM("rag_answers.json", "rag_requests.json")
     issues = ConsistencyChecker(llm).check_chapter(text, 1)
@@ -31,6 +42,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -69,6 +81,11 @@ class AgentLLM:
         self._answers: dict[str, str] = {}
         self._pending: dict[str, str] = {}
         self._used = 0
+        self._deferred = 0
+        self._in_chain = False  # gating applies only after start_chain()
+        self._chain_blocked = False
+        self._in_group = False
+        self._group_missing = False
         self._load_answers()
 
     def _load_answers(self) -> None:
@@ -83,12 +100,43 @@ class AgentLLM:
         model = data.get("model")
         self.answered_by = model.strip() if isinstance(model, str) and model.strip() else None
 
+    def start_chain(self) -> None:
+        """Begin a unit of work whose later prompts may depend on earlier answers."""
+        self._in_chain = True
+        self._chain_blocked = False
+
+    @contextmanager
+    def independent(self):
+        """Prompts asked inside do not depend on each other's answers.
+
+        All of them are requested in the same run; the chain blocks only after
+        the group, if any of them had no answer.
+        """
+        if not self._in_chain or self._chain_blocked or self._in_group:
+            yield
+            return
+        self._in_group, self._group_missing = True, False
+        try:
+            yield
+        finally:
+            self._in_group = False
+            if self._group_missing:
+                self._chain_blocked = True
+
     def generate(self, prompt: str) -> str:
         key = prompt_id(prompt, self.system_prompt)
         if key in self._answers:
             self._used += 1
             return self._answers[key]
-        self._pending.setdefault(key, prompt)
+        if self._chain_blocked:
+            # Built after a placeholder in this chain: ask it once the earlier answer exists.
+            self._deferred += 1
+        else:
+            self._pending.setdefault(key, prompt)
+            if self._in_group:
+                self._group_missing = True
+            else:
+                self._chain_blocked = self._in_chain
         return self.placeholder
 
     @property
@@ -99,7 +147,12 @@ class AgentLLM:
     @property
     def complete(self) -> bool:
         """Every prompt of this run had an answer, and the answers name their model."""
-        return not self._pending and self.answered_by is not None
+        return not self._pending and not self._deferred and self.answered_by is not None
+
+    @property
+    def deferred(self) -> int:
+        """Prompts skipped because an earlier prompt of their chain had no answer yet."""
+        return self._deferred
 
     @property
     def answers_used(self) -> int:
@@ -126,3 +179,43 @@ class AgentLLM:
             json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
         return self.requests_path
+
+
+class AgentReply:
+    """Minimal chat-model response: ``LLMManager`` only reads ``content``."""
+
+    def __init__(self, content: str):
+        self.content = content
+
+
+class AgentChatModel:
+    """
+    Chat-model stand-in backed by an AgentLLM, for ``LLMManager``:
+
+        manager = LLMManager()
+        manager._llm = AgentChatModel(AgentLLM("answers.json", "requests.json"))
+        manager.config.provider, manager.config.model = "agent", "agent"
+    """
+
+    def __init__(self, agent_llm: AgentLLM):
+        self.agent_llm = agent_llm
+
+    def invoke(self, messages, **_kwargs) -> AgentReply:
+        return AgentReply(self.agent_llm.generate(messages_to_prompt(messages)))
+
+    def stream(self, messages, **kwargs):
+        yield self.invoke(messages, **kwargs)
+
+
+def messages_to_prompt(messages) -> str:
+    """Flatten chat messages into one prompt; a lone user message stays as is."""
+    if isinstance(messages, str):
+        return messages
+    items = list(messages)
+    if len(items) == 1:
+        return str(getattr(items[0], "content", items[0]))
+    parts = []
+    for message in items:
+        role = getattr(message, "type", None) or type(message).__name__
+        parts.append(f"[{role}]\n{getattr(message, 'content', message)}")
+    return "\n\n".join(parts)

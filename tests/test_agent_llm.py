@@ -84,3 +84,66 @@ def test_malformed_answers_file_is_rejected(tmp_path):
     answers.write_text(json.dumps({"answers": ["OK"]}), encoding="utf-8")
     with pytest.raises(ValueError, match="answers"):
         agent_llm.AgentLLM(answers, tmp_path / "requests.json")
+
+
+def test_chain_requests_only_prompts_built_on_real_answers(tmp_path):
+    answers, requests = tmp_path / "answers.json", tmp_path / "requests.json"
+
+    def pipeline(llm, question):
+        llm.start_chain()
+        query = llm.generate(f"rewrite: {question}")
+        return [llm.generate(f"grade {query} doc{i}") for i in range(2)]
+
+    llm = agent_llm.AgentLLM(answers, requests)
+    pipeline(llm, "q1")
+    pipeline(llm, "q2")
+    assert sorted(llm.pending.values()) == ["rewrite: q1", "rewrite: q2"]
+    assert llm.deferred == 4 and not llm.complete
+
+    write_answers(answers, {agent_llm.prompt_id("rewrite: q1"): "Q1", agent_llm.prompt_id("rewrite: q2"): "Q2"})
+    llm = agent_llm.AgentLLM(answers, requests)
+    pipeline(llm, "q1")
+    pipeline(llm, "q2")
+    # One new layer per run: the first grade of each chain, built on the real rewrite.
+    assert sorted(llm.pending.values()) == ["grade Q1 doc0", "grade Q2 doc0"]
+    assert llm.deferred == 2
+
+
+def test_prompts_outside_a_chain_are_all_requested(tmp_path):
+    llm = agent_llm.AgentLLM(tmp_path / "answers.json", tmp_path / "requests.json")
+    llm.generate("a")
+    llm.generate("b")
+    assert len(llm.pending) == 2 and llm.deferred == 0
+
+
+def test_agent_chat_model_flattens_messages(tmp_path):
+    from types import SimpleNamespace
+
+    answers = tmp_path / "answers.json"
+    system = SimpleNamespace(type="system", content="Be brief.")
+    user = SimpleNamespace(type="human", content="Hỏi?")
+    write_answers(answers, {
+        agent_llm.prompt_id("Hỏi?"): "Đáp.",
+        agent_llm.prompt_id("[system]\nBe brief.\n\n[human]\nHỏi?"): "Ngắn.",
+    })
+    chat = agent_llm.AgentChatModel(agent_llm.AgentLLM(answers, tmp_path / "requests.json"))
+
+    assert chat.invoke([user]).content == "Đáp."
+    assert chat.invoke([system, user]).content == "Ngắn."
+    assert [chunk.content for chunk in chat.stream([user])] == ["Đáp."]
+
+
+def test_independent_prompts_are_asked_together(tmp_path):
+    answers, requests = tmp_path / "answers.json", tmp_path / "requests.json"
+    write_answers(answers, {agent_llm.prompt_id("rewrite"): "Q"})
+
+    llm = agent_llm.AgentLLM(answers, requests)
+    llm.start_chain()
+    query = llm.generate("rewrite")
+    with llm.independent():
+        grades = [llm.generate(f"grade {query} doc{i}") for i in range(3)]
+    llm.generate(f"answer from {grades}")
+
+    assert sorted(llm.pending.values()) == ["grade Q doc0", "grade Q doc1", "grade Q doc2"]
+    assert llm.deferred == 1  # the answer waits for all three grades
+
