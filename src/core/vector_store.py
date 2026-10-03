@@ -5,28 +5,60 @@ Vector Store Manager
 Abstraction layer for vector databases supporting multiple backends.
 
 Supported backends:
-- FAISS (in-memory, prototyping)
+- FAISS (local; saved to ``persist_directory`` when one is given)
 - ChromaDB (persistent, local)
-- Qdrant (production, scalable)
+- Qdrant (production): a server (``url``), an embedded on-disk store
+  (``persist_directory``) or an in-memory store (``url=":memory:"``)
 
 Usage:
     # FAISS (in-memory)
     store = VectorStoreManager(provider="faiss", embeddings=embeddings)
 
-    # ChromaDB (persistent)
-    store = VectorStoreManager(provider="chroma", persist_directory="./chroma_db")
+    # Qdrant without a server, kept on disk
+    store = VectorStoreManager(provider="qdrant", embeddings=embeddings,
+                               persist_directory="./qdrant_data")
 
     # Add documents
-    store.add_documents(documents)
+    store.add_documents(documents, ids=chunk_ids)
 
     # Search
-    results = store.similarity_search("query", k=5)
+    results = store.similarity_search("query", k=5, filter={"source_root": "..."})
 """
 
+import os
+import uuid
+from pathlib import Path
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
 
 from langchain_core.documents import Document
+
+# Namespace for mapping arbitrary document ids to the UUIDs Qdrant requires.
+QDRANT_ID_NAMESPACE = uuid.UUID("6f1d3c1e-7a51-4c55-9b0a-2f4d1b9e8c11")
+
+
+def qdrant_point_id(doc_id: Any):
+    """Qdrant accepts only UUIDs and unsigned ints; map other ids to a stable UUID."""
+    if isinstance(doc_id, int) and doc_id >= 0:
+        return doc_id
+    text = str(doc_id)
+    try:
+        return str(uuid.UUID(text))
+    except ValueError:
+        return str(uuid.uuid5(QDRANT_ID_NAMESPACE, text))
+
+
+def metadata_matches(metadata: Dict[str, Any], filter: Dict[str, Any]) -> bool:
+    """Equality filter on metadata; a list value matches any of its items."""
+    metadata = metadata or {}
+    for key, expected in filter.items():
+        value = metadata.get(key)
+        if isinstance(expected, (list, tuple, set)):
+            if value not in expected:
+                return False
+        elif value != expected:
+            return False
+    return True
 
 
 @dataclass
@@ -44,7 +76,8 @@ class VectorStoreManager:
     """
     Vector store manager with multi-backend support.
 
-    Provides a unified interface for different vector databases.
+    Provides a unified interface for different vector databases. Metadata
+    filters are plain dicts (``{"source_root": "/docs"}``) for every backend.
 
     Example:
         from src.core import EmbeddingsManager, VectorStoreManager
@@ -54,9 +87,9 @@ class VectorStoreManager:
 
         # Create vector store
         store = VectorStoreManager(
-            provider="chroma",
+            provider="qdrant",
             embeddings=embeddings,
-            persist_directory="./chroma_db"
+            persist_directory="./qdrant_data"
         )
 
         # Add documents
@@ -82,8 +115,9 @@ class VectorStoreManager:
             provider: Vector store backend ('faiss', 'chroma', 'qdrant')
             embeddings: Embeddings instance
             collection_name: Name of the collection/index
-            persist_directory: Directory for persistent storage
-            url: URL for remote vector stores
+            persist_directory: Directory for persistent storage (Qdrant: embedded
+                on-disk mode when no url is given)
+            url: URL for remote vector stores (Qdrant: ":memory:" for in-memory)
             api_key: API key for remote vector stores
         """
         self.config = VectorStoreConfig(
@@ -115,18 +149,33 @@ class VectorStoreManager:
         else:
             raise ValueError(f"Unknown provider: {self.config.provider}")
 
+    def _faiss_index_file(self) -> Optional[Path]:
+        if not self.config.persist_directory:
+            return None
+        return Path(self.config.persist_directory) / f"{self.config.collection_name}.faiss"
+
     def _create_faiss_store(self):
-        """Create FAISS vector store."""
+        """Load a saved FAISS index, or return None until documents are added."""
         try:
-            from langchain_community.vectorstores import FAISS  # noqa: F401
+            from langchain_community.vectorstores import FAISS
         except ImportError:
             raise ImportError(
                 "faiss-cpu is required for FAISS. "
                 "Install it with: pip install faiss-cpu"
             )
 
-        # Return empty store - will be populated with add_documents
-        return None
+        index_file = self._faiss_index_file()
+        if index_file is None or not index_file.is_file():
+            return None
+
+        # The pickle beside the index is the docstore this class saved; only
+        # configured persist directories are loaded.
+        return FAISS.load_local(
+            self.config.persist_directory,
+            self.embeddings.embeddings,
+            index_name=self.config.collection_name,
+            allow_dangerous_deserialization=True,
+        )
 
     def _create_chroma_store(self):
         """Create ChromaDB vector store."""
@@ -144,27 +193,62 @@ class VectorStoreManager:
             persist_directory=self.config.persist_directory,
         )
 
-    def _create_qdrant_store(self):
-        """Create Qdrant vector store."""
-        try:
-            from langchain_community.vectorstores import Qdrant
-        except ImportError:
-            raise ImportError(
-                "qdrant-client is required for Qdrant. "
-                "Install it with: pip install qdrant-client"
-            )
+    def _qdrant_client(self):
+        """Client for the configured Qdrant mode: memory, server or embedded on disk."""
+        from qdrant_client import QdrantClient
 
-        import os
-
-        url = self.config.url or os.getenv("QDRANT_URL", "http://localhost:6333")
-        api_key = self.config.api_key or os.getenv("QDRANT_API_KEY")
-
-        return Qdrant(
-            collection_name=self.config.collection_name,
-            embeddings=self.embeddings.embeddings,
-            url=url,
+        api_key = self.config.api_key or os.getenv("QDRANT_API_KEY") or None
+        if self.config.url == ":memory:":
+            return QdrantClient(location=":memory:")
+        if self.config.url:
+            return QdrantClient(url=self.config.url, api_key=api_key)
+        if self.config.persist_directory:
+            Path(self.config.persist_directory).mkdir(parents=True, exist_ok=True)
+            return QdrantClient(path=self.config.persist_directory)
+        return QdrantClient(
+            url=os.getenv("QDRANT_URL", "http://localhost:6333"),
             api_key=api_key,
         )
+
+    def _create_qdrant_store(self):
+        """Create a Qdrant vector store, creating the collection on first use."""
+        try:
+            from langchain_qdrant import QdrantVectorStore
+            from qdrant_client import models
+        except ImportError:
+            raise ImportError(
+                "qdrant-client and langchain-qdrant are required for Qdrant. "
+                "Install them with: pip install -e \".[qdrant]\""
+            )
+
+        client = self._qdrant_client()
+        embeddings = self.embeddings.embeddings
+        name = self.config.collection_name
+        if not client.collection_exists(name):
+            size = len(embeddings.embed_query("dimension probe"))
+            client.create_collection(
+                collection_name=name,
+                vectors_config=models.VectorParams(size=size, distance=models.Distance.COSINE),
+            )
+
+        return QdrantVectorStore(client=client, collection_name=name, embedding=embeddings)
+
+    def _native_filter(self, filter: Optional[Dict[str, Any]]):
+        """Translate a metadata dict into the backend's filter type."""
+        if not filter or self.config.provider != "qdrant" or not isinstance(filter, dict):
+            return filter
+
+        from qdrant_client import models
+
+        conditions = []
+        for key, value in filter.items():
+            match = (
+                models.MatchAny(any=list(value))
+                if isinstance(value, (list, tuple, set))
+                else models.MatchValue(value=value)
+            )
+            conditions.append(models.FieldCondition(key=f"metadata.{key}", match=match))
+        return models.Filter(must=conditions)
 
     def add_documents(
         self,
@@ -172,41 +256,42 @@ class VectorStoreManager:
         ids: Optional[List[str]] = None
     ) -> List[str]:
         """
-        Add documents to vector store.
+        Add (or replace) documents in the vector store.
 
         Args:
             documents: List of Document objects
-            ids: Optional list of document IDs
+            ids: Optional list of document IDs; an existing ID is overwritten
 
         Returns:
             List of document IDs
         """
+        if not documents:
+            return []
         if self.config.provider == "faiss":
             return self._add_to_faiss(documents, ids)
-        else:
-            return self.store.add_documents(documents, ids=ids)
+        if self.config.provider == "qdrant":
+            point_ids = [qdrant_point_id(i) for i in ids] if ids else None
+            self.store.add_documents(documents, ids=point_ids)
+            return ids or point_ids
+        return self.store.add_documents(documents, ids=ids)
 
     def _add_to_faiss(
         self,
         documents: List[Document],
         ids: Optional[List[str]] = None
     ) -> List[str]:
-        """Add documents to FAISS store."""
+        """Add documents to FAISS, overwriting documents that reuse an ID."""
         from langchain_community.vectorstores import FAISS
 
-        if self._store is None:
-            self._store = FAISS.from_documents(
-                documents,
-                self.embeddings.embeddings
-            )
+        ids = list(ids) if ids else [str(uuid.uuid4()) for _ in documents]
+        if self.store is None:
+            self._store = FAISS.from_documents(documents, self.embeddings.embeddings, ids=ids)
         else:
-            self._store.add_documents(documents)
-
-        # Generate unique IDs if not provided
-        if ids is None:
-            import uuid
-            ids = [str(uuid.uuid4()) for _ in range(len(documents))]
-
+            existing = set(self._store.index_to_docstore_id.values())
+            replaced = [doc_id for doc_id in ids if doc_id in existing]
+            if replaced:
+                self._store.delete(replaced)
+            self._store.add_documents(documents, ids=ids)
         return ids
 
     def similarity_search(
@@ -231,7 +316,7 @@ class VectorStoreManager:
         return self.store.similarity_search(
             query,
             k=k,
-            filter=filter,
+            filter=self._native_filter(filter),
             **kwargs
         )
 
@@ -243,7 +328,10 @@ class VectorStoreManager:
         **kwargs
     ) -> List[tuple]:
         """
-        Search for similar documents with relevance scores.
+        Search for similar documents with scores.
+
+        FAISS and Chroma return distances (lower is better), Qdrant returns
+        cosine similarity (higher is better).
 
         Args:
             query: Search query
@@ -256,7 +344,7 @@ class VectorStoreManager:
         return self.store.similarity_search_with_score(
             query,
             k=k,
-            filter=filter,
+            filter=self._native_filter(filter),
             **kwargs
         )
 
@@ -269,20 +357,106 @@ class VectorStoreManager:
         Delete documents from vector store.
 
         Args:
-            ids: Document IDs to delete
+            ids: Document IDs to delete (unknown IDs are ignored)
             filter: Metadata filter for deletion
         """
         if self.config.provider == "faiss":
-            raise NotImplementedError(
-                "FAISS does not support deletion. "
-                "Workaround: rebuild the index without the documents you want to remove. "
-                "Or use ChromaDB/Qdrant for full CRUD support."
+            store = self.store
+            if store is None:
+                return
+            existing = set(store.index_to_docstore_id.values())
+            if filter:
+                ids = [
+                    doc_id for doc_id in existing
+                    if metadata_matches(store.docstore.search(doc_id).metadata, filter)
+                ]
+            ids = [doc_id for doc_id in ids or [] if doc_id in existing]
+            if ids:
+                store.delete(ids)
+            return
+
+        if self.config.provider == "qdrant":
+            from qdrant_client import models
+
+            if ids:
+                selector = models.PointIdsList(points=[qdrant_point_id(i) for i in ids])
+            elif filter:
+                selector = models.FilterSelector(filter=self._native_filter(filter))
+            else:
+                return
+            self.store.client.delete(
+                collection_name=self.config.collection_name,
+                points_selector=selector,
             )
+            return
 
         if ids:
             self.store.delete(ids)
         elif filter:
             self.store.delete(filter=filter)
+
+    def get_all_documents(self) -> List[Document]:
+        """Every stored document with its metadata, e.g. to rebuild BM25 after a restart."""
+        provider = self.config.provider
+        if provider == "faiss":
+            store = self.store
+            if store is None:
+                return []
+            return [
+                store.docstore.search(doc_id)
+                for doc_id in store.index_to_docstore_id.values()
+            ]
+
+        if provider == "qdrant":
+            store = self.store
+            documents, offset = [], None
+            while True:
+                points, offset = store.client.scroll(
+                    collection_name=self.config.collection_name,
+                    limit=256,
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=False,
+                )
+                for point in points:
+                    payload = point.payload or {}
+                    documents.append(Document(
+                        page_content=payload.get(store.content_payload_key, ""),
+                        metadata=payload.get(store.metadata_payload_key) or {},
+                    ))
+                if offset is None:
+                    return documents
+
+        data = self.store.get(include=["documents", "metadatas"])
+        return [
+            Document(page_content=text, metadata=metadata or {})
+            for text, metadata in zip(data["documents"], data["metadatas"])
+        ]
+
+    def count(self) -> int:
+        """Number of stored documents."""
+        if self.config.provider == "faiss":
+            return self.store.index.ntotal if self.store is not None else 0
+        if self.config.provider == "qdrant":
+            return self.store.client.count(
+                collection_name=self.config.collection_name, exact=True
+            ).count
+        return len(self.get_all_documents())
+
+    def health(self) -> Dict[str, Any]:
+        """Whether the backend answers; raises when it does not."""
+        info: Dict[str, Any] = {"provider": self.config.provider}
+        if self.config.provider == "qdrant":
+            info["collection"] = self.config.collection_name
+            info["points"] = self.count()
+        return info
+
+    def close(self) -> None:
+        """Release the backend (an embedded Qdrant store locks its directory)."""
+        client = getattr(self._store, "client", None)
+        if client is not None and hasattr(client, "close"):
+            client.close()
+        self._store = None
 
     def get_retriever(
         self,
@@ -307,13 +481,13 @@ class VectorStoreManager:
         )
 
     def persist(self) -> None:
-        """Persist vector store to disk (if supported)."""
-        if self.config.provider == "chroma":
-            # ChromaDB auto-persists
-            pass
-        elif self.config.provider == "faiss":
-            if self._store and self.config.persist_directory:
-                self._store.save_local(self.config.persist_directory)
+        """Save the store to disk where the backend does not do it itself (FAISS)."""
+        if self.config.provider == "faiss" and self._store and self.config.persist_directory:
+            Path(self.config.persist_directory).mkdir(parents=True, exist_ok=True)
+            self._store.save_local(
+                self.config.persist_directory,
+                index_name=self.config.collection_name,
+            )
 
     @classmethod
     def from_existing(

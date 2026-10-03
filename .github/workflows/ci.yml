@@ -29,9 +29,21 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
+    services:
+      # Server-mode Qdrant, as in docker-compose; the image has no curl, so probe the port.
+      qdrant:
+        image: qdrant/qdrant:latest
+        ports:
+          - 6333:6333
+        options: >-
+          --health-cmd "bash -c ':> /dev/tcp/127.0.0.1/6333'"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
     env:
       # Never pick up .env files; tests/conftest.py also strips secrets.
       RAG_DISABLE_DOTENV: "1"
+      QDRANT_TEST_URL: http://localhost:6333
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -39,7 +51,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
           cache-dependency-path: pyproject.toml
-      # Lightweight core only: tests mock models, so torch is not installed.
-      - run: pip install -e ".[dev,api]"
+      # Lightweight core + Qdrant client: tests mock models, so torch is not installed.
+      - run: pip install -e ".[dev,api,qdrant]"
       - run: python -m compileall -q src tests examples scripts
       - run: python -m pytest -q

@@ -507,19 +507,10 @@ def create_app(
 
         if vector_provider == "qdrant":
             try:
-                from qdrant_client import QdrantClient
-
-                client = QdrantClient(
-                    url=getattr(vector_config, "url", None) or os.getenv("QDRANT_URL"),
-                    api_key=(
-                        getattr(vector_config, "api_key", None)
-                        or os.getenv("QDRANT_API_KEY")
-                        or None
-                    ),
-                    timeout=3,
-                )
-                client.get_collections()
+                # Same client the RAG uses: server, embedded on-disk or in-memory.
+                health = app.state.rag.vector_store.health()
                 checks["qdrant"] = "ready"
+                checks["qdrant_points"] = health.get("points")
             except Exception as e:
                 checks["qdrant"] = "unavailable"
                 return JSONResponse(

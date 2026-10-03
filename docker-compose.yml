@@ -71,11 +71,8 @@ services:
     volumes:
       - qdrant_storage:/qdrant/storage
     healthcheck:
-      test:
-        - CMD
-        - curl
-        - -fsS
-        - http://127.0.0.1:6333/readyz
+      # The qdrant image ships without curl/wget: probe the HTTP port with bash.
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 6
