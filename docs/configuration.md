@@ -65,13 +65,15 @@ DEFAULT_EMBEDDING_MODEL=BAAI/bge-m3
 ### Vector Store Configuration
 
 ```bash
-# Default vector store
-DEFAULT_VECTOR_STORE=faiss
+# Default vector store: qdrant (default) or faiss
+DEFAULT_VECTOR_STORE=qdrant
 DEFAULT_COLLECTION_NAME=default
+# Embedded Qdrant (no server) and saved FAISS indexes live here
+PERSIST_DIRECTORY=data/vector_store
 
-# Qdrant (production)
-QDRANT_URL=http://localhost:6333
-QDRANT_API_KEY=your_qdrant_api_key_here
+# Qdrant server: set only when one is running (docker-compose uses http://qdrant:6333)
+# QDRANT_URL=http://localhost:6333
+# QDRANT_API_KEY=your_qdrant_api_key_here
 
 # Weaviate (production)
 WEAVIATE_URL=http://localhost:8080

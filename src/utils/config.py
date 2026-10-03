@@ -126,8 +126,10 @@ class Config:
         "DEFAULT_RERANKER_MODEL": "AITeamVN/Vietnamese_Reranker",
 
         # Vector Store Configuration
-        "DEFAULT_VECTOR_STORE": "faiss",
+        # Qdrant runs embedded in PERSIST_DIRECTORY unless QDRANT_URL names a server.
+        "DEFAULT_VECTOR_STORE": "qdrant",
         "DEFAULT_COLLECTION_NAME": "default",
+        "PERSIST_DIRECTORY": "data/vector_store",
 
         # RAG Configuration
         "CHUNK_SIZE": "500",

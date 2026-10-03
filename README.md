@@ -91,12 +91,12 @@ py -m pip install --upgrade pip
 py -m pip install -e ".[dev,api,local-models]"
 ```
 
-Phần lõi (`pip install -e .`) chỉ gồm LangChain, FAISS, BM25, loader tài liệu và NLP tiếng Việt, **không kéo torch**. Các tính năng nặng hoặc tùy chọn cài qua extras:
+Phần lõi (`pip install -e .`) gồm LangChain, Qdrant client, FAISS, BM25, loader tài liệu và NLP tiếng Việt, **không kéo torch**. Vector store mặc định là **Qdrant**: không có `QDRANT_URL` thì Qdrant chạy nhúng và lưu dữ liệu trong `PERSIST_DIRECTORY` (mặc định `data/vector_store`), nên khởi động lại không mất index. Các tính năng nặng hoặc tùy chọn cài qua extras:
 
 | Extra | Dùng cho |
 |-------|----------|
 | `local-models` | Embedding HuggingFace (mặc định `BAAI/bge-m3`) và reranker cross-encoder (kéo theo torch) |
-| `qdrant` / `chroma` | Vector store Qdrant (`qdrant-client`, `langchain-qdrant`) / ChromaDB |
+| `chroma` | Vector store ChromaDB (`qdrant` vẫn nhận nhưng Qdrant đã nằm trong phần lõi) |
 | `api` / `ui` | FastAPI server / Gradio UI |
 | `ocr` | OCR ảnh và PDF scan (pytesseract, Pillow, pdf2image) |
 | `monitoring` | Langfuse tracing |

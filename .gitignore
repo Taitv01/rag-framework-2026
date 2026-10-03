@@ -86,6 +86,7 @@ Desktop.ini
 *.sqlite3
 
 # Vector store data
+data/vector_store/
 chroma_db/
 qdrant_data/
 neo4j_data/
