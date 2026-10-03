@@ -25,12 +25,31 @@ Usage:
 
 import hashlib
 import logging
+import re
+import unicodedata
 from typing import List, Optional, Dict, Any, Tuple
 from dataclasses import dataclass, field
 
 from langchain_core.documents import Document
 
 logger = logging.getLogger(__name__)
+
+
+def fold_vietnamese(text: str) -> str:
+    """Lowercase and strip Vietnamese diacritics: "Thạch Sanh" -> "thach sanh"."""
+    decomposed = unicodedata.normalize("NFD", text.casefold().replace("đ", "d"))
+    return "".join(ch for ch in decomposed if unicodedata.category(ch) != "Mn")
+
+
+def has_diacritics(text: str) -> bool:
+    """True when the text carries Vietnamese tone or vowel marks (or đ)."""
+    return fold_vietnamese(text) != unicodedata.normalize("NFC", text).casefold()
+
+
+def _metadata_matches(metadata: Dict[str, Any], filter: Dict[str, Any]) -> bool:
+    from src.core.vector_store import metadata_matches
+
+    return metadata_matches(metadata, filter)
 
 
 @dataclass
@@ -109,6 +128,8 @@ class RetrieverManager:
         k: int = 4,
         use_hybrid: bool = False,
         use_reranking: bool = False,
+        reranker=None,
+        reranker_model: Optional[str] = None,
     ):
         """
         Initialize retriever manager.
@@ -120,6 +141,8 @@ class RetrieverManager:
             k: Number of results to return
             use_hybrid: Enable hybrid search by default
             use_reranking: Enable re-ranking by default
+            reranker: An already loaded cross-encoder to reuse (skips loading)
+            reranker_model: Name of that cross-encoder, or of the one to load
         """
         self.vector_store = vector_store
         self.embeddings = embeddings
@@ -130,17 +153,20 @@ class RetrieverManager:
             use_hybrid=use_hybrid,
             use_reranking=use_reranking,
         )
+        if reranker_model:
+            self.config.reranker_model = reranker_model
 
         # Initialize BM25 for hybrid search
         self._bm25 = None
+        self._bm25_folded = None
         if use_hybrid and documents:
             self._init_bm25(documents)
 
-        # Initialize re-ranker
-        self._reranker = None
-        # Model actually loaded; differs from config.reranker_model after a fallback.
-        self.active_reranker_model: Optional[str] = None
-        if use_reranking:
+        # Initialize re-ranker (loading a cross-encoder takes seconds and GBs: reuse one)
+        self._reranker = reranker
+        # Model actually loaded (None when reranking could not be enabled).
+        self.active_reranker_model: Optional[str] = self.config.reranker_model if reranker else None
+        if use_reranking and reranker is None:
             self._init_reranker()
 
     def _tokenize_for_bm25(self, text: str) -> List[str]:
@@ -167,6 +193,17 @@ class RetrieverManager:
         # Fallback: basic regex
         return re.findall(r'\w+', text)
 
+    @staticmethod
+    def _tokenize_folded(text: str) -> List[str]:
+        """Syllables without diacritics, for matching queries typed without them."""
+        return re.findall(r"[a-z0-9]+", fold_vietnamese(text))
+
+    def _bm25_scores(self, query: str):
+        """BM25 scores; queries typed without diacritics use the folded index."""
+        if self._bm25_folded is not None and not has_diacritics(query):
+            return self._bm25_folded.get_scores(self._tokenize_folded(query))
+        return self._bm25.get_scores(self._tokenize_for_bm25(query))
+
     def _init_bm25(self, documents: List[Document]):
         """Initialize BM25 retriever with Vietnamese-aware tokenization."""
         try:
@@ -180,34 +217,48 @@ class RetrieverManager:
 
             self._bm25 = BM25Okapi(tokenized_docs)
             self._bm25_docs = documents
+            # Second index without diacritics, for queries typed without them.
+            self._bm25_folded = BM25Okapi([
+                self._tokenize_folded(doc.page_content) for doc in documents
+            ])
             logger.info(f"BM25 initialized with {len(documents)} documents")
         except ImportError:
             logger.warning("rank-bm25 not installed. Hybrid search disabled.")
 
     def _init_reranker(self):
-        """Initialize cross-encoder re-ranker with Vietnamese model support."""
+        """Load the configured cross-encoder; on a full GPU, load it on the CPU instead."""
         try:
             from sentence_transformers import CrossEncoder
-
-            model_name = self.config.reranker_model
-            try:
-                self._reranker = CrossEncoder(model_name)
-                self.active_reranker_model = model_name
-                logger.info(f"Reranker initialized: {model_name}")
-            except Exception as e:
-                # Fallback to a multilingual model if Vietnamese reranker unavailable
-                fallback = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-                logger.warning(
-                    f"Failed to load reranker '{model_name}': {e}. "
-                    f"Falling back to '{fallback}'"
-                )
-                try:
-                    self._reranker = CrossEncoder(fallback)
-                    self.active_reranker_model = fallback
-                except Exception:
-                    logger.error("Failed to load fallback reranker")
         except ImportError:
-            logger.warning("sentence-transformers not installed. Re-ranking disabled.")
+            logger.error(
+                "sentence-transformers not installed: re-ranking disabled. "
+                "Install it with: pip install -e \".[local-models]\""
+            )
+            return
+
+        model_name = self.config.reranker_model
+        try:
+            self._reranker = CrossEncoder(model_name)
+        except Exception as e:
+            if "out of memory" not in str(e).lower():
+                # No silent switch to another (English-only) model: say what is wrong.
+                logger.error(
+                    f"Failed to load reranker '{model_name}': {e}. Re-ranking disabled. "
+                    "The default Vietnamese reranker needs sentencepiece (local-models extra)."
+                )
+                return
+            logger.warning(f"GPU out of memory loading reranker '{model_name}'; loading it on the CPU")
+            try:
+                import torch
+
+                torch.cuda.empty_cache()
+                self._reranker = CrossEncoder(model_name, device="cpu")
+            except Exception as cpu_error:
+                logger.error(f"Failed to load reranker '{model_name}' on the CPU: {cpu_error}")
+                return
+
+        self.active_reranker_model = model_name
+        logger.info(f"Reranker initialized: {model_name}")
 
     def search(
         self,
@@ -302,16 +353,17 @@ class RetrieverManager:
 
         import numpy as np
 
-        # BM25 search with Vietnamese-aware tokenization
-        tokenized_query = self._tokenize_for_bm25(query)
-        bm25_scores = self._bm25.get_scores(tokenized_query)
-
-        # Get top BM25 results
-        top_bm25_indices = np.argsort(bm25_scores)[::-1][:k * 2]
-        bm25_results = [
-            (self._bm25_docs[i], bm25_scores[i])
-            for i in top_bm25_indices
-        ]
+        # BM25 search with Vietnamese-aware tokenization; the metadata filter
+        # applies here too, not only to the vector side.
+        bm25_scores = self._bm25_scores(query)
+        bm25_results = []
+        for i in np.argsort(bm25_scores)[::-1]:
+            doc = self._bm25_docs[i]
+            if filter and not _metadata_matches(doc.metadata, filter):
+                continue
+            bm25_results.append((doc, bm25_scores[i]))
+            if len(bm25_results) == k * 2:
+                break
 
         # Vector search
         vector_results = self.vector_store.similarity_search_with_score(
@@ -423,7 +475,7 @@ class RetrieverManager:
             return []
 
         pairs = [(query, doc.page_content) for doc in candidates]
-        scores = self._reranker.predict(pairs)
+        scores = self._reranker.predict(pairs, batch_size=32, show_progress_bar=False)
 
         scored_candidates = list(zip(candidates, scores))
         scored_candidates.sort(key=lambda x: x[1], reverse=True)
