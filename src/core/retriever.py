@@ -637,27 +637,31 @@ Mỗi dòng một truy vấn, không thêm gì khác."""
         k: Optional[int] = None,
         llm=None,
         rrf_k: int = 60,
+        filter: Optional[Dict[str, Any]] = None,
     ) -> List[Document]:
         """
         Multi-query search with Reciprocal Rank Fusion (RRF).
 
         Generates multiple query variations (LLM or template-based),
-        retrieves for each, and fuses results using RRF for superior
-        recall compared to simple deduplication.
+        retrieves for each with the configured hybrid/vector search and
+        filter, fuses the lists with RRF, then reranks against the
+        original query when reranking is enabled.
 
         RRF score = sum(1 / (rrf_k + rank_i)) for each result list.
 
         Args:
             query: Original query
             num_queries: Number of query variations
-            k: Number of results per query
+            k: Number of final results
             llm: LLMManager for generating variations (optional)
             rrf_k: RRF constant (default 60, standard value)
+            filter: Metadata filter
 
         Returns:
-            List of Document objects ranked by RRF score
+            List of Document objects ranked by RRF score (or reranker)
         """
         k = k or self.config.k
+        pool = k * 4 if self.config.use_reranking else k
 
         # Generate query variations
         if llm:
@@ -665,18 +669,19 @@ Mỗi dòng một truy vấn, không thêm gì khác."""
         else:
             queries = self._generate_query_variations(query, num_queries)
 
-        # Retrieve for each query
-        result_lists = []
-        for q in queries:
-            results = self.vector_store.similarity_search_with_score(q, k=k)
-            result_lists.append(results)
-
-        # RRF fusion
-        return self._rrf_fusion(result_lists, k=k, rrf_k=rrf_k)
+        # Retrieve for each query (reranking happens once, on the fused list)
+        result_lists = [
+            self.search(q, k=pool, filter=filter, use_reranking=False)
+            for q in queries
+        ]
+        fused = self._rrf_fusion(result_lists, k=pool, rrf_k=rrf_k)
+        if self.config.use_reranking:
+            return self._rerank_documents(query, fused, k=k, filter=filter)
+        return fused[:k]
 
     def _rrf_fusion(
         self,
-        result_lists: List[List[Tuple[Document, float]]],
+        result_lists: List[List[Any]],
         k: int = 5,
         rrf_k: int = 60,
     ) -> List[Document]:
@@ -687,20 +692,21 @@ Mỗi dòng một truy vấn, không thêm gì khác."""
         score(d) = sum(1 / (k + rank_i)) for each list where d appears.
 
         Args:
-            result_lists: List of (Document, score) lists from different queries
+            result_lists: Ranked lists of Documents (or (Document, score) tuples)
             k: Number of final results
             rrf_k: RRF constant (higher = less weight on rank position)
 
         Returns:
             List of Document objects ranked by RRF score
         """
-        # Track RRF scores per document (by content hash)
-        rrf_scores: Dict[int, float] = {}
-        doc_map: Dict[int, Document] = {}
+        # Track RRF scores per document (stable key: source, position, content)
+        rrf_scores: Dict[str, float] = {}
+        doc_map: Dict[str, Document] = {}
 
         for result_list in result_lists:
-            for rank, (doc, _score) in enumerate(result_list):
-                doc_key = hash(doc.page_content[:200])
+            for rank, item in enumerate(result_list):
+                doc = item[0] if isinstance(item, tuple) else item
+                doc_key = self._document_key(doc)
                 rrf_score = 1.0 / (rrf_k + rank + 1)
 
                 if doc_key in rrf_scores:
@@ -719,19 +725,21 @@ Mỗi dòng một truy vấn, không thêm gì khác."""
         query: str,
         k: Optional[int] = None,
         llm=None,
+        filter: Optional[Dict[str, Any]] = None,
     ) -> List[Document]:
         """
         HyDE (Hypothetical Document Embeddings) search.
 
         Instead of embedding the query directly, generates a hypothetical
-        answer using the LLM, then embeds that answer for retrieval.
-        This bridges the embedding gap between short queries and
-        longer document passages.
+        answer using the LLM and searches with it (hybrid when enabled,
+        honouring the filter). Reranking scores candidates against the
+        original question, not the hypothetical passage.
 
         Args:
             query: Search query
             k: Number of results
             llm: LLMManager for generating hypothetical answer
+            filter: Metadata filter
 
         Returns:
             List of relevant Document objects
@@ -740,7 +748,7 @@ Mỗi dòng một truy vấn, không thêm gì khác."""
 
         if llm is None:
             logger.warning("HyDE requires an LLM. Falling back to standard search.")
-            return self.search(query, k=k)
+            return self.search(query, k=k, filter=filter)
 
         try:
             # Generate hypothetical answer
@@ -751,12 +759,15 @@ Question / Câu hỏi: {query}
 
 Passage / Đoạn văn:"""
             hypothetical = llm.generate(prompt).strip()
-
-            # Search using the hypothetical answer as the query
-            return self.vector_store.similarity_search(hypothetical, k=k)
         except Exception as e:
             logger.warning(f"HyDE generation failed, falling back to standard search: {e}")
-            return self.search(query, k=k)
+            return self.search(query, k=k, filter=filter)
+
+        # Search using the hypothetical answer as the query
+        if self.config.use_reranking:
+            candidates = self.search(hypothetical, k=k * 4, filter=filter, use_reranking=False)
+            return self._rerank_documents(query, candidates, k=k, filter=filter)
+        return self.search(hypothetical, k=k, filter=filter)
 
     def parent_child_search(
         self,

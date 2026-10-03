@@ -77,3 +77,35 @@ def test_failed_reranker_load_disables_reranking_without_switching_models():
     with patch.dict(sys.modules, {"sentence_transformers": SimpleNamespace(CrossEncoder=Broken)}):
         retriever = make_retriever(use_reranking=True)
     assert retriever._reranker is None and retriever.active_reranker_model is None
+
+
+class FakeLLM:
+    def __init__(self, text):
+        self.text = text
+
+    def generate(self, _prompt):
+        return self.text
+
+
+def test_hyde_searches_hybrid_with_filter_and_reranks_on_the_question():
+    seen = []
+
+    class RecordingCrossEncoder(FakeCrossEncoder):
+        def predict(self, pairs, **kwargs):
+            seen.extend(query for query, _ in pairs)
+            return super().predict(pairs, **kwargs)
+
+    with patch.dict(sys.modules, {"sentence_transformers": SimpleNamespace(CrossEncoder=RecordingCrossEncoder)}):
+        retriever = make_retriever(use_reranking=True)
+    docs = retriever.hyde_search("Ai dời núi?", k=1, llm=FakeLLM("Sơn Tinh dời núi chặn nước lũ"),
+                                 filter={"root": "b"})
+    assert [d.metadata["source"] for d in docs] == ["son_tinh.md"]
+    assert set(seen) == {"Ai dời núi?"}
+
+
+def test_multi_query_rrf_honours_filter_and_fuses_documents():
+    retriever = make_retriever()
+    docs = retriever.multi_query_rrf_search("cá bống", k=2, filter={"root": "a"})
+    assert docs and all(d.metadata["root"] == "a" for d in docs)
+    fused = retriever._rrf_fusion([[DOCS[0], DOCS[1]], [DOCS[1], DOCS[2]]], k=3)
+    assert fused[0] is DOCS[1]
