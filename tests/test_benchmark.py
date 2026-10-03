@@ -164,6 +164,8 @@ def test_answer_benchmark_scores_answers_calls_and_abstention():
     assert summary["faithfulness"] == 0.8
     assert judged == [CASES[0].question]  # abstentions and unanswerables are not judged
     assert report["cases"][0]["answer_recall"] == 1.0
+    assert report["by_tag"]["paraphrase"]["false_abstention_rate"] == 1.0
+    assert report["by_tag"]["fact"]["false_abstention_rate"] == 0.5
 
 
 def test_compare_reports_marks_direction():

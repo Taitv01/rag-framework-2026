@@ -131,10 +131,16 @@ def build_rag(args, use_hybrid: bool, use_reranking: bool, llm_provider="openai"
     return rag, time.perf_counter() - start
 
 
+def display_path(path: Path) -> str:
+    """Repo-relative POSIX path for reports, so they read the same on every machine."""
+    path = Path(path).resolve()
+    return path.relative_to(ROOT).as_posix() if path.is_relative_to(ROOT) else str(path)
+
+
 def pipeline_settings(args, rag, index_seconds: float) -> dict:
     retriever = rag._retriever
     return {
-        "eval_dir": str(args.eval_dir.relative_to(ROOT) if args.eval_dir.is_relative_to(ROOT) else args.eval_dir),
+        "eval_dir": display_path(args.eval_dir),
         "k": args.k,
         "chunk_size": args.chunk_size,
         "chunk_overlap": args.chunk_overlap,
@@ -329,7 +335,7 @@ def cmd_answer(args) -> int:
         "llm_model": rag.llm.config.model,
         "base_url": args.base_url if not agent else None,
         "temperature": args.temperature if not agent else None,
-        "agent_answers": str(agent.answers_path) if agent else None,
+        "agent_answers": display_path(agent.answers_path) if agent else None,
         "judge": "same model as the pipeline" if args.judge else None,
         "transform_query": not args.no_transform,
         "grade_documents": not args.no_grade,

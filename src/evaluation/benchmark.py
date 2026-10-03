@@ -183,14 +183,17 @@ def _mean(values: Sequence[Optional[float]]) -> Optional[float]:
     return sum(present) / len(present) if present else None
 
 
-def _by_tag(rows: List[Dict[str, Any]], metrics: Sequence[str]) -> Dict[str, Dict[str, Any]]:
+def _by_tag(rows: List[Dict[str, Any]], metrics: Sequence[Any]) -> Dict[str, Dict[str, Any]]:
+    """Mean of each metric per tag; a metric is a row key or (output name, row key)."""
     tags = sorted({tag for row in rows for tag in row["tags"]})
     breakdown = {}
     for tag in tags:
         tagged = [row for row in rows if tag in row["tags"]]
         breakdown[tag] = {"cases": len(tagged)}
         for metric in metrics:
-            breakdown[tag][metric] = _mean([row.get(metric) for row in tagged])
+            name, key = metric if isinstance(metric, tuple) else (metric, metric)
+            values = [row.get(key) for row in tagged]
+            breakdown[tag][name] = _mean([None if v is None else float(v) for v in values])
     return breakdown
 
 
@@ -428,7 +431,10 @@ def run_answer_benchmark(
 
     return {
         "summary": summary,
-        "by_tag": _by_tag(answerable, ("answer_recall", "faithfulness", "false_abstention_rate")),
+        "by_tag": _by_tag(
+            answerable,
+            ("answer_recall", "faithfulness", ("false_abstention_rate", "abstained")),
+        ),
         "cases": rows,
     }
 
