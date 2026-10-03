@@ -7,7 +7,7 @@ kỹ thuật mới khi số đo cho thấy cần.
 | Giai đoạn | Nội dung | Ước lượng | Trạng thái |
 |-----------|----------|-----------|------------|
 | 0 | Ổn định nền | 1–2 ngày | ✅ Hoàn thành |
-| 1 | Đo trước khi tối ưu (golden set + eval baseline) | 2–3 ngày | ⏳ |
+| 1 | Đo trước khi tối ưu (golden set + eval baseline) | 2–3 ngày | 🟡 Retrieval xong, baseline câu trả lời chờ chọn LLM |
 | 2 | Sửa lõi retrieval | 3–5 ngày | ⏳ |
 | 3 | Hợp nhất pipeline generation | 3–4 ngày | ⏳ |
 | 4 | API & vận hành | 2–3 ngày | ⏳ |
@@ -84,13 +84,73 @@ kỹ thuật mới khi số đo cho thấy cần.
 **Kết quả:** 194/194 test pass (trước đó 189 pass / 3 fail), ruff sạch,
 `.venv` dựng lại từ `pip install -e ".[dev,api]"` không có torch.
 
-## Giai đoạn 1: Đo trước khi tối ưu
-- Golden set 50–100 câu từ corpus thật, gồm cả câu **không có đáp án**.
-- `scripts/eval.py`: recall@k, nDCG, faithfulness, latency p50/p95 và số lời gọi
-  LLM mỗi query; xuất baseline JSON để so sánh mọi thay đổi về sau.
-- ✅ Xong khi: có baseline số liệu.
+## Giai đoạn 1: Đo trước khi tối ưu 🟡
+
+- [x] Golden set truyện cổ tích/sáng tác (`evals/fairy_tales/`): 10 tài liệu,
+      95 câu (87 có đáp án, 8 không có), mỗi câu có nguồn và cụm bằng chứng
+      nguyên văn. Hướng dẫn: [`evals/fairy_tales/README.md`](../evals/fairy_tales/README.md).
+- [x] Sửa lỗi `RAGEvaluator` đếm trùng chunk cùng nguồn (recall/nDCG từng vượt 1).
+- [x] `src/evaluation/benchmark.py` + `scripts/eval.py` (`retrieval`, `answer`,
+      `compare`): recall/MRR/nDCG theo nguồn, `evidence_recall`, latency p50/p95,
+      số lời gọi LLM và token mỗi query, tỉ lệ từ chối đúng, faithfulness (LLM judge).
+- [x] Baseline retrieval: [`evals/fairy_tales/baselines/retrieval.json`](../evals/fairy_tales/baselines/retrieval.json).
+- [x] Sửa lỗi phát hiện khi đo: reranker mặc định `AITeamVN/Vietnamese_Reranker`
+      cần `sentencepiece`. Thiếu gói này, hệ thống lặng lẽ chuyển sang reranker
+      tiếng Anh `ms-marco-MiniLM`.
+- [ ] Baseline câu trả lời (`scripts/eval.py answer`): cần chọn LLM vì tốn credit.
+
+### Baseline retrieval (commit `098d5f1`)
+
+AdvancedRAG mặc định: chunk cha 500, chunk con 250, `k=5`, `BAAI/bge-m3`.
+Đo trên 87 câu có đáp án. Độ trễ đo trên GTX 1650 (embedding chạy CPU,
+reranker chạy GPU).
+
+| Cấu hình | recall@5 | MRR | nDCG | evidence_recall | p50 | p95 |
+|----------|---------:|----:|-----:|----------------:|----:|----:|
+| vector | 0.976 | 0.966 | 0.954 | 0.816 | 107 ms | 122 ms |
+| vector + rerank | 0.965 | 0.946 | 0.940 | 0.817 | 780 ms | 891 ms |
+| hybrid | 0.980 | 0.972 | 0.959 | 0.810 | 99 ms | 112 ms |
+| hybrid + rerank (mặc định) | 0.965 | 0.952 | 0.944 | 0.829 | 778 ms | 892 ms |
+
+`evidence_recall` theo nhóm câu hỏi:
+
+| Nhóm | Số câu | vector | vector + rerank | hybrid | hybrid + rerank |
+|------|------:|------:|------:|------:|------:|
+| fact | 42 | 0.937 | 0.905 | 0.937 | 0.905 |
+| sequence | 12 | 0.833 | 0.854 | 0.833 | 0.854 |
+| creative (kịch bản Hồ Gươm) | 9 | 1.000 | 1.000 | 1.000 | 1.000 |
+| multi_source | 9 | 0.556 | 0.574 | 0.611 | 0.574 |
+| character | 7 | 0.810 | 0.952 | 0.810 | 0.952 |
+| motif | 7 | 0.500 | 0.524 | 0.571 | 0.524 |
+| moral | 6 | 0.583 | 0.750 | 0.583 | 0.750 |
+| no_diacritics | 5 | 0.400 | 0.200 | 0.200 | 0.400 |
+| paraphrase | 4 | 0.750 | 0.750 | 0.750 | 0.750 |
+| multi_hop | 2 | 0.333 | 0.458 | 0.333 | 0.458 |
+
+### Nhận định từ số đo
+
+1. **Chỉ số theo nguồn đã bão hoà** (~0.97) vì corpus chỉ có 10 truyện. Từ nay
+   dùng `evidence_recall` làm thước đo chính. Trần của chỉ số này là 1.0: mọi cụm
+   bằng chứng đều nằm trọn trong một chunk, nên các lần trượt là lỗi truy xuất thật.
+2. **Đúng truyện nhưng sai đoạn.** 16 câu thiếu ít nhất một cụm bằng chứng ở cả 4 cấu hình. Nhiều
+   câu lấy được 5/5 chunk của đúng truyện nhưng không có đoạn chứa đáp án
+   (q022, q025, q036, q037, q055). Chunk con ~180 ký tự quá nhỏ. Đây là lý do ưu
+   tiên **parent-child thật** ở Giai đoạn 2.
+3. **Reranker gần như không đáng tiền ở cấu hình hiện tại.** Nó chỉ thêm +1,9
+   điểm `evidence_recall` (hybrid 0.810 → 0.829) nhưng chậm gấp khoảng 8 lần. Nó
+   giúp câu về nhân vật và bài học, nhưng làm giảm câu `fact`.
+4. **BM25 không đóng góp gì** (hybrid 0.810 so với vector 0.816) với trọng số và
+   cách tách từ hiện tại.
+5. **Nhóm yếu nhất:** câu gõ không dấu (0.2–0.4), multi-hop, motif và
+   multi-source (0.5–0.6). Với câu hỏi trải trên 3–4 truyện, 5 chunk nhỏ không đủ
+   phủ.
+6. **Chi phí LLM đo được:** 7 lời gọi mỗi câu hỏi (1 viết lại câu hỏi, 5 chấm
+   tài liệu, 1 sinh câu trả lời). Số này đo bằng `LLMCallCounter` với LLM giả.
 
 ## Giai đoạn 2: Sửa lõi retrieval
+Thứ tự theo số đo Giai đoạn 1: parent-child và kích thước chunk trước, sau đó là
+xử lý câu không dấu, rồi đến chi phí reranker (fp16, ít ứng viên hơn, hoặc tắt
+mặc định nếu không cải thiện).
 - `langchain-qdrant` (`QdrantVectorStore`). FAISS dùng `save_local`/`load_local`
   và truyền đúng ids.
 - Lưu chunk store xuống đĩa, hoặc dùng hybrid native của Qdrant
@@ -128,5 +188,7 @@ kỹ thuật mới khi số đo cho thấy cần.
 
 ## Quyết định còn mở
 1. Vector store chính: Qdrant (khuyến nghị) hay FAISS local?
-2. Mục đích dùng ưu tiên: truyện cổ tích/sáng tác hay kho tài liệu
-   (báo cáo, MMO)? Quyết định golden set và cách chia chunk.
+2. LLM cho baseline câu trả lời (`scripts/eval.py answer`): model nào qua
+   OpenRouter, và chạy bao nhiêu câu (toàn bộ 95 câu tốn khoảng 7 lời gọi mỗi câu).
+
+Đã quyết: mục đích dùng ưu tiên là **truyện cổ tích/sáng tác** (10/2026).

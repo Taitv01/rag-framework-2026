@@ -61,11 +61,13 @@ D:\RAG/
 │   ├── agents/          # Retrieval, Grading, Hallucination, và Query Rewrite Agents
 │   ├── story/           # Consistency Checker, Character Manager, World Builder cho truyện dài
 │   ├── monitoring/      # Langfuse Tracer & Metrics Collector
-│   ├── evaluation/      # RAG metrics & RAGAS / DeepEval pipeline
+│   ├── evaluation/      # RAG metrics, golden-set benchmark (retrieval + câu trả lời)
 │   └── utils/           # Semantic Cache, Config loader, Logging
 ├── docs/                # Tài liệu chi tiết & hướng dẫn triển khai
+├── evals/               # Bộ câu hỏi chuẩn + corpus + baseline (fairy_tales/)
 ├── examples/            # Ví dụ mã nguồn có thể chạy trực tiếp
-├── tests/               # Bộ test suite tự động (190+ test cases, chạy trên CI)
+├── scripts/             # eval.py: chạy benchmark và so sánh với baseline
+├── tests/               # Bộ test suite tự động (200+ test cases, chạy trên CI)
 ├── Dockerfile           # Docker multi-stage build definition
 ├── docker-compose.yml   # Multi-service deployment (API + Qdrant + Redis)
 ├── PHASES.md            # Lộ trình phát triển qua từng giai đoạn
@@ -277,6 +279,19 @@ py -m ruff check src tests examples scripts
 ```
 
 Test không bao giờ đọc `.env` / `.env.local`: `tests/conftest.py` đặt `RAG_DISABLE_DOTENV=1` và xoá các biến môi trường giống secret. CI (`.github/workflows/ci.yml`) chạy ruff và pytest trên Python 3.11–3.13 với bản cài lõi nhẹ `.[dev,api]`.
+
+### Đo chất lượng RAG (golden set)
+
+Mọi thay đổi về retrieval hay generation đều phải so với baseline trong
+`evals/fairy_tales/baselines/` (95 câu hỏi về truyện cổ tích và kịch bản Hồ Gươm):
+
+```powershell
+# Retrieval, không cần LLM (cần extra local-models; lần đầu tải khoảng 4,5 GB model)
+py scripts/eval.py retrieval --device cpu --baseline evals/fairy_tales/baselines/retrieval.json
+```
+
+Chi tiết chỉ số và chế độ đo câu trả lời: [`evals/fairy_tales/README.md`](evals/fairy_tales/README.md).
+Kết quả baseline và nhận định: [`docs/upgrade_plan_2026.md`](docs/upgrade_plan_2026.md).
 
 ---
 
