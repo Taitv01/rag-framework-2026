@@ -8,7 +8,7 @@ kỹ thuật mới khi số đo cho thấy cần.
 |-----------|----------|-----------|------------|
 | 0 | Ổn định nền | 1–2 ngày | ✅ Hoàn thành |
 | 1 | Đo trước khi tối ưu (golden set + eval baseline) | 2–3 ngày | ✅ Hoàn thành |
-| 2 | Sửa lõi retrieval | 3–5 ngày | ⏳ |
+| 2 | Sửa lõi retrieval | 3–5 ngày | ✅ Hoàn thành (compose chờ CI kiểm chứng) |
 | 3 | Hợp nhất pipeline generation | 3–4 ngày | ⏳ |
 | 4 | API & vận hành | 2–3 ngày | ⏳ |
 | 5 | Nâng cao (tùy chọn, theo số đo) | — | ⏳ |
@@ -193,20 +193,68 @@ qua `query_detailed`, chạy trên 95 câu. LLM là model đang gọi RAG (`clau
   trên. Khi so sánh về sau phải dùng cùng một model.
 - **Độ trễ không gồm thời gian sinh câu trả lời**, vì câu trả lời được phát lại từ file.
 
-## Giai đoạn 2: Sửa lõi retrieval
-Thứ tự theo số đo Giai đoạn 1: parent-child và kích thước chunk trước, sau đó là
-xử lý câu không dấu, rồi đến chi phí reranker (fp16, ít ứng viên hơn, hoặc tắt
-mặc định nếu không cải thiện).
-- `langchain-qdrant` (`QdrantVectorStore`). FAISS dùng `save_local`/`load_local`
-  và truyền đúng ids.
-- Lưu chunk store xuống đĩa, hoặc dùng hybrid native của Qdrant
-  (dense + sparse BM25/BGE-M3) để bỏ BM25 trong RAM.
-- Parent-child thật: `parent_id` dạng hash ổn định, đưa parent vào LLM.
-- Áp filter cho BM25; HyDE và multi-query đi qua cùng luồng hybrid + rerank; dùng RRF.
-- Reranker chỉ load một lần, chạy theo batch. Cập nhật tăng dần thật theo
-  `chunk_id` và manifest.
-- ✅ Xong khi: Qdrant chạy trong compose, restart không mất index, recall/nDCG
-  không thấp hơn baseline.
+## Giai đoạn 2: Sửa lõi retrieval ✅
+
+Làm theo thứ tự số đo của Giai đoạn 1: parent-child trước, rồi câu gõ không dấu,
+rồi chi phí reranker.
+
+- [x] **Qdrant chạy được** qua `langchain-qdrant` (`QdrantVectorStore`) ở 3 chế độ:
+      server (`QDRANT_URL`), nhúng trên đĩa (`PERSIST_DIRECTORY`), trong RAM
+      (`url=":memory:"`). Id chuyển thành UUID ổn định; filter dạng dict dùng được
+      cho cả tìm kiếm lẫn xoá.
+- [x] **Qdrant là vector store mặc định** của API (`DEFAULT_VECTOR_STORE=qdrant`,
+      `PERSIST_DIRECTORY=data/vector_store`); client Qdrant nằm trong phần lõi.
+- [x] **FAISS** lưu đúng ids, ghi đè khi trùng id, xoá theo id/filter, tự nạp lại
+      index đã lưu.
+- [x] **Restart không mất index**: `AdvancedRAG` nạp lại chunk từ store khi khởi
+      động (BM25, số tài liệu, refresh đều hoạt động). Có test cho FAISS và Qdrant.
+- [x] **Cập nhật tăng dần thật**: refresh chỉ xoá/embed lại file thay đổi. Sửa lỗi
+      manifest "không đổi" nhưng index trống thì không index lại.
+- [x] **Parent-child thật**: `parent_id` dạng hash, chunk con mang theo đoạn parent;
+      tìm trên chunk con, rerank và trả về parent. Bật mặc định
+      (`ENABLE_PARENT_CONTEXT`).
+- [x] **BM25**: áp filter metadata; thêm chỉ mục không dấu cho câu gõ không dấu.
+- [x] **HyDE và multi-query** đi qua hybrid + filter, rerank theo câu hỏi gốc; RRF
+      dùng khoá ổn định.
+- [x] **Reranker** nạp một lần và dùng chung giữa các lần refresh, chấm theo batch.
+      GPU hết bộ nhớ thì chuyển sang CPU; lỗi khác thì báo rõ và tắt rerank, không
+      còn âm thầm dùng model tiếng Anh.
+- [x] **docker-compose**: healthcheck của Qdrant gọi `curl`, nhưng image không có
+      `curl`, nên `rag-api` không bao giờ khởi động được. Đã đổi sang kiểm tra cổng
+      bằng bash. CI chạy test vector store với service `qdrant/qdrant`.
+- [ ] Hybrid native của Qdrant (dense + sparse) để bỏ BM25 trong RAM: chưa cần.
+      BM25 dựng lại từ store khi khởi động mất dưới 1 giây với corpus này. Xem lại
+      ở Giai đoạn 5 nếu corpus lớn.
+
+### Kết quả (commit `1992a93`, Qdrant, mặc định mới)
+
+[`evals/fairy_tales/baselines/retrieval_stage2.json`](../evals/fairy_tales/baselines/retrieval_stage2.json),
+so với baseline Giai đoạn 1 (`retrieval.json`, chunk con, FAISS):
+
+| Cấu hình | evidence_recall | recall@5 | MRR | nDCG | context_chars | p50 |
+|----------|------:|------:|------:|------:|------:|------:|
+| hybrid + rerank (mặc định) | 0.829 → **0.941** | 0.965 → 0.987 | 0.952 → 0.974 | 0.944 → 0.963 | 926 → 1939 | 778 → 770 ms |
+| hybrid | 0.810 → 0.909 | 0.980 → 0.979 | 0.972 → 0.987 | 0.959 → 0.973 | 890 → 1823 | 99 → 83 ms |
+| vector + rerank | 0.817 → 0.918 | 0.965 → 0.987 | 0.946 → 0.974 | 0.940 → 0.963 | 929 → 1956 | 780 → 754 ms |
+| vector | 0.816 → 0.907 | 0.976 → 0.976 | 0.966 → 0.966 | 0.954 → 0.954 | 894 → 1807 | 107 → 82 ms |
+
+- **Ngữ cảnh gấp khoảng 2 lần** (~1900 ký tự, khoảng 600 token). Ở k=3 parent,
+  ngữ cảnh chỉ tăng ~25% mà `evidence_recall` vẫn đạt 0.885, nên cải thiện không
+  chỉ đến từ việc đưa thêm chữ.
+- **Từng thay đổi được tách riêng:** Qdrant cho kết quả trùng khớp với FAISS. BM25
+  không dấu chỉ đổi nhóm `no_diacritics` (hybrid 0.20 → 0.80), các nhóm khác giữ
+  nguyên.
+- **Giảm nhẹ:** `precision_at_k` giảm (0.77 → 0.72) vì các parent không trùng nhau
+  trải trên nhiều truyện hơn; `hybrid` recall 0.980 → 0.979 (một câu thiếu một nguồn).
+- **Còn yếu:** câu hỏi trải trên nhiều truyện (`motif` 0.63, `multi_source` 0.71
+  với hybrid + rerank), để dành cho Giai đoạn 3/5.
+- **Chưa kiểm chứng:** máy dev không có Docker, nên `docker compose up` chưa chạy
+  thật. Chế độ server của Qdrant được test trong CI, nhưng CI chưa chạy vì nhánh
+  chưa push được.
+- **Bài học khi đo:** máy có 4 GB VRAM và paging file nhỏ (ổ C: gần đầy). Chạy hai
+  tiến trình nặng cùng lúc làm câu hỏi lỗi vì thiếu bộ nhớ, và lỗi đó kéo điểm
+  xuống. `scripts/eval.py` giờ cảnh báo khi có câu lỗi; không so sánh lần chạy
+  có lỗi.
 
 ## Giai đoạn 3: Hợp nhất pipeline generation
 - Một `RAGPipeline` (retrieve → grade → generate → verify) cho mọi đường query
