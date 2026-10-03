@@ -138,6 +138,8 @@ class RetrieverManager:
 
         # Initialize re-ranker
         self._reranker = None
+        # Model actually loaded; differs from config.reranker_model after a fallback.
+        self.active_reranker_model: Optional[str] = None
         if use_reranking:
             self._init_reranker()
 
@@ -190,6 +192,7 @@ class RetrieverManager:
             model_name = self.config.reranker_model
             try:
                 self._reranker = CrossEncoder(model_name)
+                self.active_reranker_model = model_name
                 logger.info(f"Reranker initialized: {model_name}")
             except Exception as e:
                 # Fallback to a multilingual model if Vietnamese reranker unavailable
@@ -200,6 +203,7 @@ class RetrieverManager:
                 )
                 try:
                     self._reranker = CrossEncoder(fallback)
+                    self.active_reranker_model = fallback
                 except Exception:
                     logger.error("Failed to load fallback reranker")
         except ImportError:

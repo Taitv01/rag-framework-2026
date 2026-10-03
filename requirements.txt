@@ -33,6 +33,7 @@ tiktoken>=0.7.0
 
 # [local-models] HuggingFace embeddings + rerankers (pulls in torch)
 sentence-transformers>=3.0.0
+sentencepiece>=0.2.0
 
 # [qdrant] / [chroma] vector stores
 qdrant-client>=1.9.0
