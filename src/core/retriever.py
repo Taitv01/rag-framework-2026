@@ -447,7 +447,8 @@ class RetrieverManager:
         try:
             return self._reranker.predict(pairs, batch_size=32, show_progress_bar=False)
         except Exception as e:
-            if "out of memory" not in str(e).lower():
+            message = str(e).lower()
+            if "out of memory" not in message and "alloc_failed" not in message:
                 raise
             logger.warning("GPU out of memory while reranking; retrying in small batches")
             try:

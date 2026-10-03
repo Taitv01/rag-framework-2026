@@ -62,6 +62,8 @@ def parse_args(argv=None) -> argparse.Namespace:
                          help="Search child chunks, return their parent chunks (pipeline default)")
         sub.add_argument("--parent-fanout", type=int, default=3,
                          help="Child chunks searched per parent returned")
+        sub.add_argument("--reranker-fp16", action="store_true",
+                         help="Run the reranker in half precision on the GPU (small GPUs)")
         sub.add_argument("--cache-dir", type=Path, default=None, help="HuggingFace cache (HF_HOME)")
         sub.add_argument("--out", type=Path, default=None, help="Report path (default: <eval-dir>/runs/)")
         sub.add_argument("--baseline", type=Path, default=None, help="Report to compare against")
@@ -130,7 +132,13 @@ def build_rag(args, use_hybrid: bool, use_reranking: bool, llm_provider="openai"
         from src.core.retriever import RetrieverConfig
 
         reranker_model = RetrieverConfig().reranker_model
-        reranker = CrossEncoder(reranker_model)
+        if args.reranker_fp16:
+            # Half precision halves VRAM (2.3 -> 1.1 GB); convert on the CPU first.
+            reranker = CrossEncoder(reranker_model, device="cpu")
+            reranker.half()
+            reranker.to("cuda")
+        else:
+            reranker = CrossEncoder(reranker_model)
 
     rag = AdvancedRAG(
         llm_provider=llm_provider,
@@ -173,6 +181,7 @@ def pipeline_settings(args, rag, index_seconds: float) -> dict:
         "vector_store": args.vector_store,
         "parent_context": args.parent_context,
         "parent_fanout": args.parent_fanout if args.parent_context else None,
+        "reranker_precision": "float16" if args.reranker_fp16 else "float32",
         "reranker_model": retriever.active_reranker_model if retriever else None,
         "documents": rag.num_documents,
         "retrieval_chunks": rag.num_chunks,
