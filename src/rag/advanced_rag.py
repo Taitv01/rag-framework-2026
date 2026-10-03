@@ -523,6 +523,7 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
             self._retriever = None
             return
 
+        previous = self._retriever
         self._retriever = RetrieverManager(
             vector_store=self.vector_store,
             embeddings=self.embeddings,
@@ -530,6 +531,9 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
             k=self.retrieval_k,
             use_hybrid=self.use_hybrid,
             use_reranking=self.use_reranking,
+            # Load the cross-encoder once, not after every ingest.
+            reranker=getattr(previous, "_reranker", None),
+            reranker_model=getattr(previous, "active_reranker_model", None),
         )
 
     def add_texts(
