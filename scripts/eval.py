@@ -196,6 +196,12 @@ def print_table(title: str, configs: dict, metrics) -> None:
     print("config".ljust(width) + "".join(m[:14].rjust(16) for m in metrics))
     for name, run in configs.items():
         print(name.ljust(width) + "".join(fmt(run["summary"].get(m)).rjust(16) for m in metrics))
+    for name, run in configs.items():
+        errors = run["summary"].get("errors")
+        if errors:
+            # Failed questions score zero and drag the averages down: never compare such a run.
+            first = next(case["error"] for case in run["cases"] if case.get("error"))
+            print(f"WARNING: {name}: {errors} questions failed (e.g. {first[:120]})")
 
 
 def print_comparison(baseline: dict, current: dict) -> None:
