@@ -7,7 +7,7 @@ kỹ thuật mới khi số đo cho thấy cần.
 | Giai đoạn | Nội dung | Ước lượng | Trạng thái |
 |-----------|----------|-----------|------------|
 | 0 | Ổn định nền | 1–2 ngày | ✅ Hoàn thành |
-| 1 | Đo trước khi tối ưu (golden set + eval baseline) | 2–3 ngày | 🟡 Retrieval xong, baseline câu trả lời chờ chọn LLM |
+| 1 | Đo trước khi tối ưu (golden set + eval baseline) | 2–3 ngày | ✅ Hoàn thành |
 | 2 | Sửa lõi retrieval | 3–5 ngày | ⏳ |
 | 3 | Hợp nhất pipeline generation | 3–4 ngày | ⏳ |
 | 4 | API & vận hành | 2–3 ngày | ⏳ |
@@ -84,7 +84,7 @@ kỹ thuật mới khi số đo cho thấy cần.
 **Kết quả:** 194/194 test pass (trước đó 189 pass / 3 fail), ruff sạch,
 `.venv` dựng lại từ `pip install -e ".[dev,api]"` không có torch.
 
-## Giai đoạn 1: Đo trước khi tối ưu 🟡
+## Giai đoạn 1: Đo trước khi tối ưu ✅
 
 - [x] Golden set truyện cổ tích/sáng tác (`evals/fairy_tales/`): 10 tài liệu,
       95 câu (87 có đáp án, 8 không có), mỗi câu có nguồn và cụm bằng chứng
@@ -97,7 +97,11 @@ kỹ thuật mới khi số đo cho thấy cần.
 - [x] Sửa lỗi phát hiện khi đo: reranker mặc định `AITeamVN/Vietnamese_Reranker`
       cần `sentencepiece`. Thiếu gói này, hệ thống lặng lẽ chuyển sang reranker
       tiếng Anh `ms-marco-MiniLM`.
-- [ ] Baseline câu trả lời (`scripts/eval.py answer`): cần chọn LLM vì tốn credit.
+- [x] Baseline câu trả lời: [`evals/fairy_tales/baselines/answer.json`](../evals/fairy_tales/baselines/answer.json).
+      Theo quyết định của chủ dự án, pipeline chạy bằng **chính model đang gọi RAG**
+      (`AgentLLM`, ở đây là `claude-opus-5-5`), không dùng API hay model nào khác.
+      Toàn bộ 749 câu trả lời của model được lưu trong `agent_answers.json`, nên
+      lần chạy có thể phát lại.
 
 ### Baseline retrieval (commit `098d5f1`)
 
@@ -145,7 +149,49 @@ reranker chạy GPU).
    multi-source (0.5–0.6). Với câu hỏi trải trên 3–4 truyện, 5 chunk nhỏ không đủ
    phủ.
 6. **Chi phí LLM đo được:** 7 lời gọi mỗi câu hỏi (1 viết lại câu hỏi, 5 chấm
-   tài liệu, 1 sinh câu trả lời). Số này đo bằng `LLMCallCounter` với LLM giả.
+   tài liệu, 1 sinh câu trả lời).
+7. **Lỗi âm thầm xuống cấp.** Khi reranker không nạp được (thiếu `sentencepiece`,
+   hoặc GPU hết bộ nhớ vì ứng dụng khác), `RetrieverManager` chỉ ghi log rồi chạy
+   tiếp mà không rerank. Giai đoạn 2 cần chuyển sang CPU hoặc báo lỗi rõ ràng.
+
+### Baseline câu trả lời (commit `aca3c77`)
+
+AdvancedRAG mặc định (hybrid + rerank, viết lại câu hỏi, chấm tài liệu bằng LLM)
+qua `query_detailed`, chạy trên 95 câu. LLM là model đang gọi RAG (`claude-opus-5-5`).
+
+| Chỉ số | Giá trị |
+|--------|--------:|
+| answer_recall (87 câu có đáp án) | 0.839 |
+| faithfulness (model tự chấm) | 0.994 |
+| abstention_accuracy (8 câu không có đáp án) | 1.000 |
+| false_abstention_rate | 0.034 (3/87) |
+| citation_rate | 1.000 |
+| llm_calls_per_query | 7.0 |
+
+| Nhóm | Số câu | answer_recall | false_abstention |
+|------|------:|------:|------:|
+| fact | 42 | 0.882 | 0.048 |
+| sequence | 12 | 0.854 | 0 |
+| creative | 9 | 0.787 | 0 |
+| multi_source | 9 | 0.699 | 0 |
+| character | 7 | 0.969 | 0 |
+| motif | 7 | 0.726 | 0 |
+| moral | 6 | 0.624 | 0 |
+| no_diacritics | 5 | 0.657 | 0.200 |
+| paraphrase | 4 | 0.879 | 0 |
+| multi_hop | 2 | 0.633 | 0 |
+
+**Đọc số liệu này thế nào:**
+
+- **Mọi câu sai hay thiếu đều do ngữ cảnh**, không phải do sinh câu trả lời. Ba
+  câu bị từ chối nhầm (q025, q037, q079) và các câu điểm thấp (q047, q036, q022)
+  đều thiếu đoạn chứa đáp án trong ngữ cảnh. Khớp với nhận định 2: cần
+  parent-child thật.
+- **Có thể bị chệch.** Model trả lời và tự chấm faithfulness cũng là model đã
+  viết golden set. Nó được dặn chỉ dùng ngữ cảnh, và đã từ chối cả những câu nó
+  biết đáp án nhưng ngữ cảnh không có. Dù vậy, `faithfulness` nên xem là giới hạn
+  trên. Khi so sánh về sau phải dùng cùng một model.
+- **Độ trễ không gồm thời gian sinh câu trả lời**, vì câu trả lời được phát lại từ file.
 
 ## Giai đoạn 2: Sửa lõi retrieval
 Thứ tự theo số đo Giai đoạn 1: parent-child và kích thước chunk trước, sau đó là
@@ -186,9 +232,8 @@ mặc định nếu không cải thiện).
 - GraphRAG có community summaries và lưu graph xuống đĩa.
 - Cập nhật catalog LLM; CI chặn merge khi chất lượng tụt quá ngưỡng.
 
-## Quyết định còn mở
-1. Vector store chính: Qdrant (khuyến nghị) hay FAISS local?
-2. LLM cho baseline câu trả lời (`scripts/eval.py answer`): model nào qua
-   OpenRouter, và chạy bao nhiêu câu (toàn bộ 95 câu tốn khoảng 7 lời gọi mỗi câu).
+## Quyết định đã chốt
+1. Mục đích dùng ưu tiên: **truyện cổ tích/sáng tác** (10/2026).
+2. LLM đo đánh giá: **model đang gọi RAG** (AgentLLM), không dùng model khác (10/2026).
+3. Vector store chính: **Qdrant** (10/2026).
 
-Đã quyết: mục đích dùng ưu tiên là **truyện cổ tích/sáng tác** (10/2026).

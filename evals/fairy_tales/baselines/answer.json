@@ -1,0 +1,1813 @@
+{
+  "kind": "answer",
+  "created_at": "2026-10-03T12:15:01+00:00",
+  "git_revision": "aca3c77",
+  "python": "3.13.5",
+  "settings": {
+    "eval_dir": "evals/fairy_tales",
+    "k": 5,
+    "chunk_size": 500,
+    "chunk_overlap": 50,
+    "embedding_model": "BAAI/bge-m3",
+    "embedding_device": "cpu",
+    "reranker_model": "AITeamVN/Vietnamese_Reranker",
+    "documents": 10,
+    "retrieval_chunks": 211,
+    "index_seconds": 28.22,
+    "llm_provider": "agent",
+    "llm_model": "claude-opus-5-5",
+    "base_url": null,
+    "temperature": null,
+    "agent_answers": "evals/fairy_tales/agent_answers.json",
+    "judge": "same model as the pipeline",
+    "transform_query": true,
+    "grade_documents": true,
+    "note": "Agent answers are replayed: latency excludes LLM generation."
+  },
+  "configs": {
+    "hybrid_rerank": {
+      "summary": {
+        "cases": 95,
+        "answerable_cases": 87,
+        "unanswerable_cases": 8,
+        "answer_recall": 0.8389001408628012,
+        "faithfulness": 0.9940476190476191,
+        "citation_rate": 1.0,
+        "false_abstention_rate": 0.034482758620689655,
+        "abstention_accuracy": 1.0,
+        "llm_calls_per_query": 7.0,
+        "input_tokens_per_query": null,
+        "output_tokens_per_query": null,
+        "latency_p50_ms": 746.51,
+        "latency_p95_ms": 783.13,
+        "errors": 0
+      },
+      "by_tag": {
+        "character": {
+          "cases": 7,
+          "answer_recall": 0.9687028657616893,
+          "faithfulness": 1.0,
+          "false_abstention_rate": 0.0
+        },
+        "creative": {
+          "cases": 9,
+          "answer_recall": 0.787130407718643,
+          "faithfulness": 1.0,
+          "false_abstention_rate": 0.0
+        },
+        "fact": {
+          "cases": 42,
+          "answer_recall": 0.8821145902028256,
+          "faithfulness": 1.0,
+          "false_abstention_rate": 0.047619047619047616
+        },
+        "moral": {
+          "cases": 6,
+          "answer_recall": 0.623550061050061,
+          "faithfulness": 0.9166666666666666,
+          "false_abstention_rate": 0.0
+        },
+        "motif": {
+          "cases": 7,
+          "answer_recall": 0.7261883062634942,
+          "faithfulness": 1.0,
+          "false_abstention_rate": 0.0
+        },
+        "multi_hop": {
+          "cases": 2,
+          "answer_recall": 0.6333333333333333,
+          "faithfulness": 1.0,
+          "false_abstention_rate": 0.0
+        },
+        "multi_source": {
+          "cases": 9,
+          "answer_recall": 0.6994285117092134,
+          "faithfulness": 1.0,
+          "false_abstention_rate": 0.0
+        },
+        "no_diacritics": {
+          "cases": 5,
+          "answer_recall": 0.6567365967365968,
+          "faithfulness": 1.0,
+          "false_abstention_rate": 0.2
+        },
+        "paraphrase": {
+          "cases": 4,
+          "answer_recall": 0.8785087719298246,
+          "faithfulness": 1.0,
+          "false_abstention_rate": 0.0
+        },
+        "sequence": {
+          "cases": 12,
+          "answer_recall": 0.8544025883300179,
+          "faithfulness": 1.0,
+          "false_abstention_rate": 0.0
+        }
+      },
+      "cases": [
+        {
+          "id": "q001",
+          "question": "Gia tài của Thạch Sanh khi sống một mình dưới gốc đa là gì?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Gia tài của Thạch Sanh chỉ có một lưỡi búa của cha để lại [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 843.23,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q002",
+          "question": "Ai dạy võ nghệ và phép thần thông cho Thạch Sanh?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Ngọc Hoàng sai các thiên thần xuống dạy cho Thạch Sanh đủ các môn võ nghệ và mọi phép thần thông [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 777.66,
+          "error": null,
+          "answer_recall": 0.875,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q003",
+          "question": "Lý Thông làm nghề gì trước khi kết nghĩa với Thạch Sanh?",
+          "tags": [
+            "character"
+          ],
+          "answerable": true,
+          "answer": "Lý Thông là người bán rượu [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 566.86,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q004",
+          "question": "Lý Thông đã nói dối thế nào để Thạch Sanh đi canh miếu thay mình?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Mẹ con Lý Thông nói dối rằng đêm đó đến phiên Lý Thông canh miếu thờ nhưng hắn dở cất mẻ rượu, nên nhờ Thạch Sanh đi canh thay [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 749.64,
+          "error": null,
+          "answer_recall": 0.8823529411764706,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q005",
+          "question": "Sau khi bị giết, chằn tinh hiện nguyên hình là con gì và để lại vật gì?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Chằn tinh hiện nguyên hình là một con trăn khổng lồ, bên cạnh có một bộ cung tên bằng vàng [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 752.65,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q006",
+          "question": "Lý Thông được vua ban chức gì sau khi nộp đầu chằn tinh?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Lý Thông được vua phong làm Quận công [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 781.42,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q007",
+          "question": "Vì sao Thạch Sanh tìm được hang của đại bàng?",
+          "tags": [
+            "sequence"
+          ],
+          "answerable": true,
+          "answer": "Thạch Sanh giương cung tên vàng bắn trúng cánh đại bàng rồi lần theo vết máu đến tận cửa hang [S2].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 567.37,
+          "error": null,
+          "answer_recall": 0.9375,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q008",
+          "question": "Sau khi Thạch Sanh đưa công chúa lên khỏi hang, Lý Thông đã làm gì?",
+          "tags": [
+            "sequence"
+          ],
+          "answerable": true,
+          "answer": "Vừa kéo công chúa lên xong, Lý Thông sai quân lấp kín cửa hang, nhốt Thạch Sanh dưới đó [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 867.62,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q009",
+          "question": "Thạch Sanh xin vua Thủy Tề món quà gì?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Thạch Sanh chỉ xin một cây đàn thần [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 772.99,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q010",
+          "question": "Vì sao Thạch Sanh bị bắt giam vào ngục?",
+          "tags": [
+            "sequence"
+          ],
+          "answerable": true,
+          "answer": "Hồn chằn tinh và đại bàng lấy trộm vàng bạc trong kho của nhà vua đem giấu ở gốc đa để vu oan, nên Thạch Sanh bị bắt giam vào ngục [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 627.48,
+          "error": null,
+          "answer_recall": 0.9130434782608695,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q011",
+          "question": "Tiếng đàn của Thạch Sanh trong ngục nói gì?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Tiếng đàn vang lên: \"Đàn kêu tích tịch tình tang, ai mang công chúa dưới hang trở về\" [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 741.48,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q012",
+          "question": "Mẹ con Lý Thông có kết cục ra sao?",
+          "tags": [
+            "character"
+          ],
+          "answerable": true,
+          "answer": "Thạch Sanh tha tội chết cho mẹ con Lý Thông về quê làm ăn, nhưng trên đường về cả hai bị sét đánh chết và hóa thành bọ hung [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 767.85,
+          "error": null,
+          "answer_recall": 0.9411764705882353,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q013",
+          "question": "Thạch Sanh đã làm gì để quân mười tám nước chư hầu xin hàng?",
+          "tags": [
+            "sequence"
+          ],
+          "answerable": true,
+          "answer": "Thạch Sanh mang đàn ra gảy; quân mười tám nước nghe tiếng đàn thì bủn rủn tay chân, không còn nghĩ đến chuyện đánh nhau và xin hàng [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 712.33,
+          "error": null,
+          "answer_recall": 0.7333333333333333,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q014",
+          "question": "Niêu cơm thần trong truyện có gì đặc biệt?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Niêu cơm thần bé xíu nhưng cứ ăn hết lại đầy, đủ cho cả vạn quân ăn [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 632.56,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q015",
+          "question": "Dì ghẻ hứa thưởng gì cho đứa bắt được đầy giỏ tép?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Dì ghẻ hứa thưởng một cái yếm đỏ [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 933.21,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q016",
+          "question": "Cám đã lừa Tấm bằng câu nói nào để lấy giỏ tép?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Cám nói: \"Chị Tấm ơi chị Tấm, đầu chị lấm, chị hụp cho sâu kẻo về mẹ mắng\" [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 782.38,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q017",
+          "question": "Tấm gọi cá bống lên ăn bằng câu gì?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Tấm gọi: \"Bống bống bang bang, lên ăn cơm vàng cơm bạc nhà ta, chớ ăn cơm hẩm cháo hoa nhà người\" [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 747.92,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q018",
+          "question": "Bụt bảo Tấm làm gì với xương cá bống?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Bụt bảo Tấm tìm xương bống, bỏ vào bốn cái lọ rồi chôn dưới bốn chân giường [S2].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 784.88,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q019",
+          "question": "Con vật nào giúp Tấm nhặt thóc lẫn trong gạo để đi xem hội?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Một đàn chim sẻ do Bụt sai xuống nhặt giúp Tấm [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 750.69,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q020",
+          "question": "Nhờ đâu nhà vua tìm được Tấm?",
+          "tags": [
+            "sequence"
+          ],
+          "answerable": true,
+          "answer": "Nhờ chiếc giày Tấm đánh rơi khi đi hội: nhà vua cho các cô gái thử và chỉ Tấm đi vừa [S2]. Lần sau, vua nhận ra Tấm nhờ miếng trầu têm cánh phượng ở quán nước của bà lão [S3].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 736.1,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q021",
+          "question": "Tấm bị hại chết lần đầu như thế nào?",
+          "tags": [
+            "sequence"
+          ],
+          "answerable": true,
+          "answer": "Dì ghẻ bảo Tấm trèo cau hái cau cúng bố rồi đứng dưới chặt gốc cau; cây đổ, Tấm ngã xuống ao chết [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 769.72,
+          "error": null,
+          "answer_recall": 0.9411764705882353,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q022",
+          "question": "Kể theo thứ tự các lần hóa thân của Tấm sau khi chết.",
+          "tags": [
+            "sequence",
+            "multi_hop"
+          ],
+          "answerable": true,
+          "answer": "Theo ngữ cảnh, Tấm hóa thành chim vàng anh bay vào cung [S1]; về sau Tấm ở trong quả thị và bước ra từ quả thị để dọn nhà, nấu cơm cho bà lão [S2]. Ngữ cảnh không kể đủ các lần hóa thân ở giữa.",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 772.85,
+          "error": null,
+          "answer_recall": 0.35,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q023",
+          "question": "Vì sao nhà vua nhận ra Tấm ở quán nước của bà lão?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Vì vua thấy miếng trầu têm cánh phượng giống hệt cách Tấm vẫn têm [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 746.51,
+          "error": null,
+          "answer_recall": 0.9090909090909091,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q024",
+          "question": "Khung cửi kêu câu gì khi Cám ngồi dệt?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Khung cửi kêu: \"Cót ca cót két, lấy tranh chồng chị, chị khoét mắt ra\" [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 744.83,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q025",
+          "question": "Vì sao mẹ Sọ Dừa mang thai?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Ngữ cảnh chỉ cho biết bà về nhà thì có mang [S1], không nói vì sao. Tôi không có đủ thông tin để trả lời.",
+          "abstained": true,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 772.11,
+          "error": null,
+          "answer_recall": 0.05555555555555555,
+          "cited": true,
+          "faithfulness": null
+        },
+        {
+          "id": "q026",
+          "question": "Sọ Dừa làm công việc gì cho nhà phú ông?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Sọ Dừa xin đến nhà phú ông chăn bò [S2].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 567.0,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q027",
+          "question": "Phú ông thách cưới những gì?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Phú ông thách cưới một chĩnh vàng cốm, mười tấm lụa đào, mười con lợn béo, mười vò rượu tăm [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 568.47,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q028",
+          "question": "Cô út phát hiện Sọ Dừa không phải người thường nhờ chi tiết nào?",
+          "tags": [
+            "character"
+          ],
+          "answerable": true,
+          "answer": "Cô út nghe tiếng sáo, rón rén nhìn thì thấy một chàng trai khôi ngô thổi sáo trên chiếc võng đào cho đàn bò gặm cỏ [S2]; đến gần lại chỉ thấy Sọ Dừa nằm lăn lóc, nên cô biết Sọ Dừa không phải người phàm trần [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 753.6,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q029",
+          "question": "Trước khi đi sứ, Sọ Dừa đưa cho vợ những vật gì?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Sọ Dừa đưa vợ một hòn đá lửa, một con dao và hai quả trứng gà, dặn phải luôn giắt trong người [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 744.6,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q030",
+          "question": "Vợ Sọ Dừa thoát khỏi bụng cá kình bằng cách nào?",
+          "tags": [
+            "sequence"
+          ],
+          "answerable": true,
+          "answer": "Cô lấy dao đâm chết cá kình; xác cá trôi dạt vào một hòn đảo, cô khoét bụng cá chui ra [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 861.73,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q031",
+          "question": "Con gà trống gáy câu gì khi thuyền quan trạng đi qua đảo?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Gà trống gáy: \"Ò ó o... Phải thuyền quan trạng rước cô tôi về\" [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 752.2,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q032",
+          "question": "Hai cô chị của vợ Sọ Dừa có kết cục thế nào?",
+          "tags": [
+            "character"
+          ],
+          "answerable": true,
+          "answer": "Hai cô chị xấu hổ, lén bỏ đi biệt xứ [S2].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 752.4,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q033",
+          "question": "Khi chia gia tài, người em trong truyện Cây khế được những gì?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Người em chỉ được một túp lều nát và một cây khế ở góc vườn [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 714.03,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q034",
+          "question": "Con chim lạ hứa trả ơn người em bằng câu nói nào?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Chim hứa: \"Ăn một quả, trả cục vàng, may túi ba gang, mang đi mà đựng\" [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 749.82,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q035",
+          "question": "Người anh may túi bao nhiêu gang và vì sao bị rơi xuống biển?",
+          "tags": [
+            "sequence"
+          ],
+          "answerable": true,
+          "answer": "Người anh may túi mười hai gang [S2]. Hắn nhét đầy vàng bạc khiến chim mỏi cánh chao nghiêng [S3], nhưng vẫn khư khư ôm túi vàng không chịu buông nên rơi xuống biển [S4].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 779.59,
+          "error": null,
+          "answer_recall": 0.7777777777777778,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q036",
+          "question": "Truyện Cây khế muốn khuyên người đọc điều gì?",
+          "tags": [
+            "moral"
+          ],
+          "answerable": true,
+          "answer": "Ngữ cảnh không nêu bài học trực tiếp, nhưng cho thấy truyện phê phán thói tham lam của người anh: chiếm hết gia tài rồi ghen tức đòi đổi lấy cây khế của em [S1][S2].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 750.4,
+          "error": null,
+          "answer_recall": 0.125,
+          "cited": true,
+          "faithfulness": 0.5
+        },
+        {
+          "id": "q037",
+          "question": "Vua Hùng thách những sính lễ gì khi kén rể cho Mị Nương?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Ngữ cảnh chỉ cho biết vua Hùng phán ai mang sính lễ đến trước sẽ được cưới Mị Nương [S2], không nêu cụ thể sính lễ gồm những gì. Tôi không có đủ thông tin về danh sách sính lễ.",
+          "abstained": true,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 749.84,
+          "error": null,
+          "answer_recall": 0.0,
+          "cited": true,
+          "faithfulness": null
+        },
+        {
+          "id": "q038",
+          "question": "Sơn Tinh có tài lạ gì?",
+          "tags": [
+            "character"
+          ],
+          "answerable": true,
+          "answer": "Sơn Tinh vẫy tay về phía đông thì phía đông nổi cồn bãi, vẫy tay về phía tây thì phía tây mọc lên từng dãy núi đồi [S1]; thần còn bốc đồi, dời núi [S2].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 721.14,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q039",
+          "question": "Vì sao Thủy Tinh dâng nước đánh Sơn Tinh?",
+          "tags": [
+            "sequence"
+          ],
+          "answerable": true,
+          "answer": "Vì Thủy Tinh đến sau, không lấy được Mị Nương nên nổi giận đem quân đuổi theo đòi cướp nàng [S4]; từ đó oán nặng thù sâu, năm nào cũng dâng nước đánh Sơn Tinh [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 748.76,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q040",
+          "question": "Sơn Tinh chống lại nước lũ bằng cách nào?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Sơn Tinh dùng phép lạ bốc từng quả đồi, dời từng dãy núi, dựng thành lũy đất ngăn nước lũ; nước dâng lên bao nhiêu, đồi núi cao lên bấy nhiêu [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 745.32,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q041",
+          "question": "Truyện Sơn Tinh, Thủy Tinh giải thích hiện tượng tự nhiên nào?",
+          "tags": [
+            "moral"
+          ],
+          "answerable": true,
+          "answer": "Truyện giải thích hiện tượng mưa gió, lũ lụt hằng năm ở vùng đồng bằng Bắc Bộ [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 711.99,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q042",
+          "question": "Vì sao bà mẹ Thánh Gióng thụ thai?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Bà ra đồng thấy một vết chân rất to, đặt bàn chân mình lên ướm thử [S3]; về nhà thì bà thụ thai [S2].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 567.54,
+          "error": null,
+          "answer_recall": 0.8461538461538461,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q043",
+          "question": "Câu nói đầu tiên của cậu bé làng Gióng là gì?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Câu nói đầu tiên của cậu bé là: \"Mẹ ra mời sứ giả vào đây\" [S2].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 711.36,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q044",
+          "question": "Gióng yêu cầu nhà vua chuẩn bị những gì để đánh giặc?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Gióng yêu cầu một con ngựa sắt, một cái roi sắt và một tấm áo giáp sắt [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 752.53,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q045",
+          "question": "Khi roi sắt gãy, Gióng dùng gì để đánh giặc?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Gióng nhổ những cụm tre cạnh đường quật vào giặc [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 744.23,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q046",
+          "question": "Sau khi đánh tan giặc, Gióng đi đâu?",
+          "tags": [
+            "sequence"
+          ],
+          "answerable": true,
+          "answer": "Gióng đuổi giặc đến chân núi Sóc, một mình một ngựa lên đỉnh núi, cởi áo giáp sắt bỏ lại rồi cả người lẫn ngựa bay lên trời [S2].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 658.29,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q047",
+          "question": "Những dấu tích nào còn lại sau trận đánh của Thánh Gióng?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Theo ngữ cảnh, Gióng để lại áo giáp sắt trên đỉnh núi Sóc, và vua lập đền thờ Gióng ở quê nhà [S2]. Ngữ cảnh không nêu thêm dấu tích nào khác.",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 744.55,
+          "error": null,
+          "answer_recall": 0.058823529411764705,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q048",
+          "question": "Vua phong cho Gióng danh hiệu gì?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Vua phong Gióng là Phù Đổng Thiên Vương [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 741.73,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q049",
+          "question": "Vua Hùng đặt điều kiện gì cho người nối ngôi?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Người nối ngôi phải nối được chí vua, không nhất thiết là con trưởng; nhân lễ Tiên vương, ai làm vừa ý vua thì được truyền ngôi [S2].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 618.49,
+          "error": null,
+          "answer_recall": 0.9090909090909091,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q050",
+          "question": "Lang Liêu là con thứ mấy của vua Hùng và vì sao chàng thiệt thòi?",
+          "tags": [
+            "character"
+          ],
+          "answerable": true,
+          "answer": "Lang Liêu là con thứ mười tám; mẹ chàng bị vua ghẻ lạnh, ốm rồi mất sớm nên chàng thiệt thòi nhất [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 577.24,
+          "error": null,
+          "answer_recall": 0.9230769230769231,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q051",
+          "question": "Vị thần báo mộng cho Lang Liêu điều gì?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Thần bảo trong trời đất không gì quý bằng hạt gạo, chỉ có gạo mới nuôi sống con người và ăn không bao giờ chán; các thứ khác tuy ngon nhưng hiếm [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 723.97,
+          "error": null,
+          "answer_recall": 0.5294117647058824,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q052",
+          "question": "Hình dáng bánh chưng và bánh giầy tượng trưng cho điều gì?",
+          "tags": [
+            "moral"
+          ],
+          "answerable": true,
+          "answer": "Bánh hình tròn tượng Trời (bánh giầy), bánh hình vuông tượng Đất (bánh chưng); thịt mỡ, đậu xanh, lá dong tượng cầm thú, cây cỏ muôn loài [S1]; lá bọc ngoài, mĩ vị bên trong ngụ ý đùm bọc nhau [S2].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 778.0,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q053",
+          "question": "Lạc Long Quân đã diệt trừ những yêu quái nào?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Lạc Long Quân diệt trừ Ngư Tinh, Hồ Tinh và Mộc Tinh [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 742.42,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q054",
+          "question": "Âu Cơ sinh ra những gì?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Âu Cơ sinh ra một cái bọc trăm trứng, nở ra một trăm người con trai [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 654.82,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q055",
+          "question": "Lạc Long Quân và Âu Cơ chia con như thế nào?",
+          "tags": [
+            "sequence"
+          ],
+          "answerable": true,
+          "answer": "Theo ngữ cảnh, Lạc Long Quân trở về thủy cung, còn Âu Cơ đưa năm mươi người con lên vùng núi [S1][S2]. Ngữ cảnh không nói rõ số con còn lại đi đâu.",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 748.03,
+          "error": null,
+          "answer_recall": 0.6,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q056",
+          "question": "Nước Văn Lang đóng đô ở đâu?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Nước Văn Lang đóng đô ở đất Phong Châu [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 740.71,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q057",
+          "question": "Vì sao người Việt gọi nhau là đồng bào?",
+          "tags": [
+            "moral"
+          ],
+          "answerable": true,
+          "answer": "Vì theo sự tích này, người Việt là những người cùng sinh ra từ một bọc; \"đồng bào\" mang nghĩa đó [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 775.89,
+          "error": null,
+          "answer_recall": 0.5833333333333334,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q058",
+          "question": "Đạo sĩ họ Lưu làm cách nào để biết ai là anh trong hai anh em họ Cao?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Đạo sĩ bảo con gái dọn cho hai anh em một bát cháo với một đôi đũa; người em nhường anh ăn trước, nhờ vậy biết ai là anh [S2].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 723.52,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q059",
+          "question": "Ba nhân vật trong Sự tích trầu cau lần lượt hóa thành gì?",
+          "tags": [
+            "character",
+            "multi_hop"
+          ],
+          "answerable": true,
+          "answer": "Theo ngữ cảnh, Tân hóa thành cây cau [S3] và người vợ hóa thành dây trầu [S2]. Ngữ cảnh không nói rõ người em hóa thành gì, chỉ nhắc vôi lấy từ một tảng đá [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 574.08,
+          "error": null,
+          "answer_recall": 0.9166666666666666,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q060",
+          "question": "Khi nhai lá trầu, quả cau và vôi cùng nhau thì có hiện tượng gì?",
+          "tags": [
+            "fact"
+          ],
+          "answerable": true,
+          "answer": "Miệng nhai ra nước đỏ thắm như máu, hương vị cay nồng mà ấm áp [S2].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 575.09,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q061",
+          "question": "Ai vớt được lưỡi gươm dưới sông Lương và trên lưỡi gươm có chữ gì?",
+          "tags": [
+            "fact",
+            "creative"
+          ],
+          "answerable": true,
+          "answer": "Lê Thận là người vớt được lưỡi gươm dưới sông Lương [S1]. Ngữ cảnh không cho biết trên lưỡi gươm có chữ gì.",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 757.0,
+          "error": null,
+          "answer_recall": 0.5833333333333334,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q062",
+          "question": "Lê Lợi tìm thấy chuôi gươm ở đâu?",
+          "tags": [
+            "fact",
+            "creative"
+          ],
+          "answerable": true,
+          "answer": "Lê Lợi thấy chuôi gươm kẹt trên ngọn một cây đa cổ thụ trong rừng Lam Sơn [S1][S3].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 774.76,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q063",
+          "question": "Quân sư Nguyễn Trãi đề ra chiến lược gì cho nghĩa quân Lam Sơn?",
+          "tags": [
+            "fact",
+            "creative"
+          ],
+          "answerable": true,
+          "answer": "Nguyễn Trãi đề ra chiến lược đánh du kích: tránh đối đầu trực diện, dùng yếu thắng mạnh, dùng ít thắng nhiều, lấy rừng núi làm thành trì, đánh bất ngờ rồi rút lui [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 635.06,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q064",
+          "question": "Sau khi lên ngôi, Lê Lợi lấy hiệu là gì?",
+          "tags": [
+            "fact",
+            "creative"
+          ],
+          "answerable": true,
+          "answer": "Lê Lợi lấy hiệu là Lê Thái Tổ [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 775.65,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q065",
+          "question": "Ai được Long Vương sai đến nhận lại thanh kiếm?",
+          "tags": [
+            "fact",
+            "creative"
+          ],
+          "answerable": true,
+          "answer": "Long Vương sai sứ giả đến nhận lại thanh kiếm [S1]; sứ giả đó là Kim Quy, người cất tiếng đòi trả kiếm cho Long Vương [S2].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 781.51,
+          "error": null,
+          "answer_recall": 0.4,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q066",
+          "question": "Bài học rút ra từ kịch bản Hồ Gươm là gì?",
+          "tags": [
+            "moral",
+            "creative"
+          ],
+          "answerable": true,
+          "answer": "Sức mạnh thật sự không phải để sở hữu, mà để phục vụ chính nghĩa, bảo vệ lẽ phải [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 582.6,
+          "error": null,
+          "answer_recall": 0.5714285714285714,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q067",
+          "question": "Kịch bản Hồ Gươm được viết cho độc giả nào và theo giọng văn gì?",
+          "tags": [
+            "creative"
+          ],
+          "answerable": true,
+          "answer": "Kịch bản viết cho trẻ em 6–14 tuổi, theo phong cách kể chuyện cổ tích, giọng ấm áp, cuốn hút, có cảm xúc [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 730.59,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q068",
+          "question": "Bản chỉnh sửa kịch bản Hồ Gươm đã cải thiện những gì?",
+          "tags": [
+            "creative"
+          ],
+          "answerable": true,
+          "answer": "Bản chỉnh sửa giảm lặp từ, giảm lặp ý (gộp các câu cùng ý), dùng câu ngắn hơn và thêm cảm xúc [S1][S2].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 746.07,
+          "error": null,
+          "answer_recall": 0.5294117647058824,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q069",
+          "question": "Kịch bản Hồ Gươm có bao nhiêu cảnh và cảnh cuối tên là gì?",
+          "tags": [
+            "creative"
+          ],
+          "answerable": true,
+          "answer": "Theo ngữ cảnh, cảnh có số lớn nhất là Cảnh 20: \"Bài học muôn đời\" [S2], nên kịch bản có ít nhất 20 cảnh; ngữ cảnh không xác nhận đó là cảnh cuối.",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 576.73,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q070",
+          "question": "Những truyện nào có chi tiết nhân vật hóa thân thành vật khác sau khi chết?",
+          "tags": [
+            "motif",
+            "multi_source"
+          ],
+          "answerable": true,
+          "answer": "Sự tích trầu cau: Lang hóa thành tảng đá vôi [S1], Tân hóa thành cây cau [S4]. Thạch Sanh: mẹ con Lý Thông bị sét đánh chết, hóa thành bọ hung [S2]. Tấm Cám: Tấm hóa thành chim vàng anh [S3], về sau đống tro mọc lên cây thị [S5].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 751.0,
+          "error": null,
+          "answer_recall": 0.7857142857142857,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q071",
+          "question": "Những truyện nào có kẻ tham lam hoặc độc ác bị trừng phạt?",
+          "tags": [
+            "motif",
+            "multi_source"
+          ],
+          "answerable": true,
+          "answer": "Thạch Sanh: mẹ con Lý Thông bị sét đánh chết, hóa thành bọ hung [S3]. Truyện Cây khế có người anh tham lam [S1][S2], nhưng ngữ cảnh không kể việc hắn bị trừng phạt.",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 751.08,
+          "error": null,
+          "answer_recall": 0.5,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q072",
+          "question": "Truyện nào có chi tiết thách cưới bằng sính lễ?",
+          "tags": [
+            "motif",
+            "multi_source"
+          ],
+          "answerable": true,
+          "answer": "Sọ Dừa: phú ông thách cưới vàng cốm, lụa đào, lợn béo, rượu tăm [S1]. Sơn Tinh, Thủy Tinh: vua Hùng đặt điều kiện mang sính lễ đến trước [S4], sính lễ gồm cơm nếp, bánh chưng, voi chín ngà, gà chín cựa, ngựa chín hồng mao [S3].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 714.96,
+          "error": null,
+          "answer_recall": 0.9285714285714286,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q073",
+          "question": "Những truyện nào có loài chim giúp đỡ nhân vật chính?",
+          "tags": [
+            "motif",
+            "multi_source"
+          ],
+          "answerable": true,
+          "answer": "Cây khế: con chim chở người em ra đảo lấy vàng [S4][S3]. Tấm Cám: đàn chim sẻ nhặt thóc giúp Tấm [S2].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 718.66,
+          "error": null,
+          "answer_recall": 0.8888888888888888,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q074",
+          "question": "Những truyện nào xảy ra vào đời Hùng Vương thứ sáu?",
+          "tags": [
+            "multi_source"
+          ],
+          "answerable": true,
+          "answer": "Truyện làng Gióng (Thánh Gióng) [S1] và truyện vua Hùng thứ sáu truyền ngôi (bánh chưng, bánh giầy) [S2].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 748.33,
+          "error": null,
+          "answer_recall": 0.75,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q075",
+          "question": "Những truyện nào kể về cuộc chiến chống giặc ngoại xâm?",
+          "tags": [
+            "motif",
+            "multi_source"
+          ],
+          "answerable": true,
+          "answer": "Thánh Gióng đánh giặc Ân [S3][S2][S5] và kịch bản Hồ Gươm, kể Lê Lợi cùng kiếm Thuận Thiên đánh thắng quân thù [S1][S4].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 727.04,
+          "error": null,
+          "answer_recall": 0.9090909090909091,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q076",
+          "question": "Những vật báu thần kỳ nào giúp nhân vật đánh thắng kẻ thù?",
+          "tags": [
+            "motif",
+            "multi_source"
+          ],
+          "answerable": true,
+          "answer": "Kiếm Thuận Thiên giúp Lê Lợi đánh thắng quân thù [S1][S2][S3]. Ngữ cảnh cũng nhắc bộ cung tên bằng vàng trong truyện Thạch Sanh [S4] nhưng không nói nó được dùng để đánh kẻ thù.",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 660.02,
+          "error": null,
+          "answer_recall": 0.42105263157894735,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q077",
+          "question": "Thủy cung hay thế giới dưới nước xuất hiện trong những truyện nào?",
+          "tags": [
+            "motif",
+            "multi_source"
+          ],
+          "answerable": true,
+          "answer": "Con Rồng cháu Tiên: Lạc Long Quân ở dưới nước và trở về thủy cung [S1][S2]. Kịch bản Hồ Gươm: Rùa Vàng mang kiếm lặn xuống đáy hồ [S3].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 658.79,
+          "error": null,
+          "answer_recall": 0.65,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q078",
+          "question": "Những truyện nào giải thích nguồn gốc một phong tục của người Việt?",
+          "tags": [
+            "moral",
+            "multi_source"
+          ],
+          "answerable": true,
+          "answer": "Sự tích trầu cau giải thích tục ăn trầu [S1]; Con Rồng cháu Tiên giải thích vì sao người Việt gọi nhau là đồng bào [S2].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 631.11,
+          "error": null,
+          "answer_recall": 0.46153846153846156,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q079",
+          "question": "thach sanh giet chan tinh bang gi",
+          "tags": [
+            "no_diacritics"
+          ],
+          "answerable": true,
+          "answer": "Ngữ cảnh chỉ kể Thạch Sanh xách đầu chằn tinh về [S1], không nói chàng giết chằn tinh bằng gì. Tôi không có đủ thông tin để trả lời.",
+          "abstained": true,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 775.97,
+          "error": null,
+          "answer_recall": 0.3333333333333333,
+          "cited": true,
+          "faithfulness": null
+        },
+        {
+          "id": "q080",
+          "question": "tam bi di ghe hai chet nhu the nao",
+          "tags": [
+            "no_diacritics"
+          ],
+          "answerable": true,
+          "answer": "Dì ghẻ bảo Tấm trèo cau hái cau cúng bố rồi đứng dưới chặt gốc cau; cây đổ, Tấm ngã xuống ao chết [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 754.68,
+          "error": null,
+          "answer_recall": 0.9230769230769231,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q081",
+          "question": "so dua chan bo co gioi khong",
+          "tags": [
+            "no_diacritics"
+          ],
+          "answerable": true,
+          "answer": "Có, Sọ Dừa chăn bò rất giỏi: ngày ngày lăn sau đàn bò ra đồng, tối lăn về chuồng, con bò nào cũng no căng bụng [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 718.09,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q082",
+          "question": "son tinh thuy tinh danh nhau vi ai",
+          "tags": [
+            "no_diacritics"
+          ],
+          "answerable": true,
+          "answer": "Sơn Tinh và Thủy Tinh đánh nhau vì Mị Nương [S1][S5].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 748.79,
+          "error": null,
+          "answer_recall": 0.3,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q083",
+          "question": "lang lieu lam banh gi de le tien vuong",
+          "tags": [
+            "no_diacritics"
+          ],
+          "answerable": true,
+          "answer": "Lang Liêu lấy gạo làm bánh để lễ Tiên vương [S1]: chàng dùng gạo nếp, nhân đậu xanh, thịt lợn, gói lá dong thành hình vuông [S4]; vua chọn hai thứ bánh ấy để lễ Trời, Đất và Tiên vương [S2].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 662.31,
+          "error": null,
+          "answer_recall": 0.7272727272727273,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q084",
+          "question": "Nhân vật nào vốn là người nhà trời được phái xuống làm con một cặp vợ chồng nghèo hiếm muộn?",
+          "tags": [
+            "paraphrase"
+          ],
+          "answerable": true,
+          "answer": "Đó là thái tử được Ngọc Hoàng sai xuống đầu thai làm con hai vợ chồng già nghèo ở quận Cao Bình [S1], tức nhân vật trong truyện Thạch Sanh.",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 747.45,
+          "error": null,
+          "answer_recall": 0.9,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q085",
+          "question": "Khi cha mẹ qua đời, người anh đã đối xử bất công với em mình ra sao?",
+          "tags": [
+            "paraphrase"
+          ],
+          "answerable": true,
+          "answer": "Người anh lấy hết nhà cửa, ruộng vườn, trâu bò, chỉ để lại cho em một túp lều nát và một cây khế ở góc vườn [S1].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 755.7,
+          "error": null,
+          "answer_recall": 0.9473684210526315,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q086",
+          "question": "Cậu bé nào ba tuổi chưa biết nói cười rồi bỗng lớn vụt lên để cứu nước?",
+          "tags": [
+            "paraphrase"
+          ],
+          "answerable": true,
+          "answer": "Đó là cậu bé trong truyện Thánh Gióng: lên ba vẫn không biết nói, biết cười [S1], nghe tiếng sứ giả thì cất tiếng nói [S3], rồi vươn vai thành tráng sĩ đánh giặc [S2].",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 748.57,
+          "error": null,
+          "answer_recall": 1.0,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q087",
+          "question": "Vì sao người anh trong truyện trầu cau ngày càng xa cách em trai?",
+          "tags": [
+            "paraphrase"
+          ],
+          "answerable": true,
+          "answer": "Vì Tân về thấy một chuyện khiến anh sinh lòng nghi ngờ em, từ đó càng lạnh nhạt với em [S1]; ngữ cảnh không nêu rõ Tân đã thấy gì.",
+          "abstained": false,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 754.25,
+          "error": null,
+          "answer_recall": 0.6666666666666666,
+          "cited": true,
+          "faithfulness": 1.0
+        },
+        {
+          "id": "q088",
+          "question": "Thạch Sanh và công chúa có bao nhiêu người con?",
+          "tags": [
+            "unanswerable"
+          ],
+          "answerable": false,
+          "answer": "Ngữ cảnh chỉ cho biết vua gả công chúa cho Thạch Sanh [S1], không nói họ có bao nhiêu người con. Tôi không có đủ thông tin để trả lời.",
+          "abstained": true,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 780.1,
+          "error": null
+        },
+        {
+          "id": "q089",
+          "question": "Câu chuyện Tấm Cám xảy ra vào năm nào?",
+          "tags": [
+            "unanswerable"
+          ],
+          "answerable": false,
+          "answer": "Tôi không có đủ thông tin: ngữ cảnh không nêu năm xảy ra câu chuyện Tấm Cám.",
+          "abstained": true,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 750.77,
+          "error": null
+        },
+        {
+          "id": "q090",
+          "question": "Truyện Cóc kiện trời kể về điều gì?",
+          "tags": [
+            "unanswerable"
+          ],
+          "answerable": false,
+          "answer": "Tôi không có đủ thông tin: ngữ cảnh không có nội dung về truyện Cóc kiện trời.",
+          "abstained": true,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 747.05,
+          "error": null
+        },
+        {
+          "id": "q091",
+          "question": "Sọ Dừa được vua sai đi sứ sang nước nào?",
+          "tags": [
+            "unanswerable"
+          ],
+          "answerable": false,
+          "answer": "Ngữ cảnh chỉ nói vua sai quan trạng Sọ Dừa đi sứ [S1], không nêu sang nước nào. Tôi không có đủ thông tin để trả lời.",
+          "abstained": true,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 570.81,
+          "error": null
+        },
+        {
+          "id": "q092",
+          "question": "Con chim lạ trong truyện Cây khế tên là gì?",
+          "tags": [
+            "unanswerable"
+          ],
+          "answerable": false,
+          "answer": "Ngữ cảnh chỉ gọi đó là một con chim lạ, thân hình to lớn [S1], không nêu tên. Tôi không có đủ thông tin để trả lời.",
+          "abstained": true,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 719.44,
+          "error": null
+        },
+        {
+          "id": "q093",
+          "question": "Mị Nương có mấy anh chị em ruột?",
+          "tags": [
+            "unanswerable"
+          ],
+          "answerable": false,
+          "answer": "Ngữ cảnh chỉ nói vua Hùng thứ mười tám có một người con gái là Mị Nương [S1], không nói về anh chị em ruột của nàng. Tôi không có đủ thông tin để trả lời.",
+          "abstained": true,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 576.83,
+          "error": null
+        },
+        {
+          "id": "q094",
+          "question": "Quân sư Nguyễn Trãi sinh năm bao nhiêu?",
+          "tags": [
+            "unanswerable"
+          ],
+          "answerable": false,
+          "answer": "Tôi không có đủ thông tin: ngữ cảnh chỉ giới thiệu Nguyễn Trãi là quân sư tài giỏi [S1], không nêu năm sinh.",
+          "abstained": true,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 748.27,
+          "error": null
+        },
+        {
+          "id": "q095",
+          "question": "Lang Liêu cưới vợ là ai?",
+          "tags": [
+            "unanswerable"
+          ],
+          "answerable": false,
+          "answer": "Tôi không có đủ thông tin: ngữ cảnh không nói Lang Liêu cưới ai.",
+          "abstained": true,
+          "llm_calls": 7,
+          "input_tokens": null,
+          "output_tokens": null,
+          "latency_ms": 745.08,
+          "error": null
+        }
+      ]
+    }
+  }
+}
