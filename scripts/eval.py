@@ -92,6 +92,10 @@ def parse_args(argv=None) -> argparse.Namespace:
     answer.add_argument("--limit", type=int, default=None, help="Only the first N questions")
     answer.add_argument("--ids", default=None, help="Comma-separated question ids")
 
+    calibrate = commands.add_parser(
+        "calibrate", help="Reranker score thresholds for grading and abstention (no LLM)")
+    add_pipeline_options(calibrate)
+
     compare = commands.add_parser("compare", help="Diff two reports")
     compare.add_argument("baseline", type=Path)
     compare.add_argument("current", type=Path)
@@ -118,6 +122,16 @@ def build_rag(args, use_hybrid: bool, use_reranking: bool, llm_provider="openai"
     """Index the eval corpus with AdvancedRAG; returns (rag, seconds spent indexing)."""
     from src.rag.advanced_rag import AdvancedRAG
 
+    reranker, reranker_model = None, None
+    if use_reranking:
+        # Load the cross-encoder onto the GPU before the embedding model fills
+        # host memory: loading stages the weights in RAM first.
+        from sentence_transformers import CrossEncoder
+        from src.core.retriever import RetrieverConfig
+
+        reranker_model = RetrieverConfig().reranker_model
+        reranker = CrossEncoder(reranker_model)
+
     rag = AdvancedRAG(
         llm_provider=llm_provider,
         llm_model=llm_model,
@@ -132,6 +146,8 @@ def build_rag(args, use_hybrid: bool, use_reranking: bool, llm_provider="openai"
         use_reranking=use_reranking,
         use_parent_context=args.parent_context,
         parent_fanout=args.parent_fanout,
+        reranker=reranker,
+        reranker_model=reranker_model,
     )
 
     start = time.perf_counter()
@@ -374,6 +390,34 @@ def cmd_answer(args) -> int:
     return 0
 
 
+def cmd_calibrate(args) -> int:
+    from src.evaluation.benchmark import load_golden_set, run_threshold_calibration
+
+    cases = load_golden_set(args.eval_dir / "golden.jsonl")
+    rag, index_seconds = build_rag(args, use_hybrid=True, use_reranking=True)
+    rag.retrieve(cases[0].question, k=args.k)  # warm-up
+
+    calibration = run_threshold_calibration(
+        lambda question, k: rag.retrieve(question, k=k), cases, k=args.k,
+    )
+    report = {
+        **run_metadata("calibration"),
+        "settings": pipeline_settings(args, rag, index_seconds),
+        **calibration,
+    }
+    path = write_report(report, args.out, args.eval_dir)
+
+    print(f"\nTop reranker score, answerable (p5/p25/p50): {calibration['top_score_answerable']}")
+    print(f"Top reranker score, unanswerable (p50/p75/p95): {calibration['top_score_unanswerable']}")
+    columns = ["threshold", "evidence_recall", "evidence_docs_kept", "other_docs_dropped",
+               "docs_kept_per_query", "false_abstention_rate", "abstention_accuracy"]
+    print("".join(c[:18].rjust(20) for c in columns))
+    for row in calibration["thresholds"]:
+        print("".join(fmt(row[c]).rjust(20) for c in columns))
+    print(f"\nReport: {path}")
+    return 0
+
+
 def cmd_compare(args) -> int:
     baseline = json.loads(args.baseline.read_text(encoding="utf-8"))
     current = json.loads(args.current.read_text(encoding="utf-8"))
@@ -387,7 +431,12 @@ def main(argv=None) -> int:
     args = parse_args(argv)
     if getattr(args, "cache_dir", None):
         os.environ["HF_HOME"] = str(args.cache_dir.resolve())
-    handlers = {"retrieval": cmd_retrieval, "answer": cmd_answer, "compare": cmd_compare}
+    handlers = {
+        "retrieval": cmd_retrieval,
+        "answer": cmd_answer,
+        "calibrate": cmd_calibrate,
+        "compare": cmd_compare,
+    }
     return handlers[args.command](args)
 
 

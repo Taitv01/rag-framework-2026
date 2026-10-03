@@ -180,3 +180,25 @@ def test_compare_reports_marks_direction():
     assert set(rows) == {"recall_at_k", "latency_p50_ms"}
     assert rows["recall_at_k"]["status"] == "better"
     assert rows["latency_p50_ms"]["status"] == "worse"
+
+
+def test_threshold_calibration_counts_drops_and_abstentions():
+    from src.evaluation.benchmark import run_threshold_calibration
+
+    def scored(text, source, score):
+        return Document(page_content=text, metadata={"source": source, "relevance_score": score})
+
+    results = {
+        CASES[0].question: [scored("một lưỡi búa của cha", "c/thach_sanh.md", 0.9),
+                            scored("chuyện khác", "c/tam_cam.md", 0.02)],
+        CASES[1].question: [scored("cá bống dưới giếng", "c/tam_cam.md", 0.04)],
+        CASES[2].question: [scored("không liên quan", "c/so_dua.md", 0.01)],
+    }
+    report = run_threshold_calibration(lambda q, k: results[q], CASES, k=5, thresholds=(0.0, 0.03, 0.5))
+    by_t = {row["threshold"]: row for row in report["thresholds"]}
+
+    assert by_t[0.0]["evidence_recall"] == 1.0 and by_t[0.0]["abstention_accuracy"] == 0.0
+    assert by_t[0.03]["other_docs_dropped"] == 1.0  # the two off-topic docs go
+    assert by_t[0.03]["false_abstention_rate"] == 0.0 and by_t[0.03]["abstention_accuracy"] == 1.0
+    assert by_t[0.5]["false_abstention_rate"] == 0.5  # q2's only evidence doc scored 0.04
+    assert report["top_score_unanswerable"][50] == 0.01

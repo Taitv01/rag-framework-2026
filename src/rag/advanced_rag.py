@@ -104,6 +104,8 @@ class AdvancedRAG:
         use_reranking: bool = True,
         use_parent_context: bool = True,
         parent_fanout: int = 3,
+        reranker=None,
+        reranker_model: Optional[str] = None,
         system_prompt: Optional[str] = None,
         # Phase 2 options
         use_cache: bool = False,
@@ -145,6 +147,9 @@ class AdvancedRAG:
             use_parent_context: Search small child chunks but return their
                 parent chunks, so the LLM sees the surrounding passage
             parent_fanout: Child chunks searched per requested parent
+            reranker: An already loaded cross-encoder to use (e.g. shared
+                between pipelines) instead of loading one
+            reranker_model: Name of that cross-encoder
             system_prompt: Custom system prompt
             use_cache: Enable semantic caching
             cache_ttl: Cache time-to-live in seconds
@@ -190,6 +195,8 @@ class AdvancedRAG:
         self.use_reranking = use_reranking
         self.use_parent_context = use_parent_context
         self.parent_fanout = max(1, parent_fanout)
+        self._shared_reranker = reranker
+        self._shared_reranker_model = reranker_model
         self.system_prompt = system_prompt or self._get_default_system_prompt()
 
         # Context window validation
@@ -590,8 +597,11 @@ Tài liệu này có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
             use_hybrid=self.use_hybrid,
             use_reranking=self.use_reranking,
             # Load the cross-encoder once, not after every ingest.
-            reranker=getattr(previous, "_reranker", None),
-            reranker_model=getattr(previous, "active_reranker_model", None),
+            reranker=getattr(previous, "_reranker", None) or getattr(self, "_shared_reranker", None),
+            reranker_model=(
+                getattr(previous, "active_reranker_model", None)
+                or getattr(self, "_shared_reranker_model", None)
+            ),
         )
 
     def add_texts(

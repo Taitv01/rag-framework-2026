@@ -478,3 +478,82 @@ def compare_reports(baseline: Dict[str, Any], current: Dict[str, Any]) -> List[D
                 "status": status,
             })
     return rows
+
+
+DEFAULT_THRESHOLDS = (0.001, 0.003, 0.01, 0.03, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9)
+
+
+def run_threshold_calibration(
+    retrieve: Callable[[str, int], Sequence[Any]],
+    cases: Sequence[GoldenCase],
+    k: int = 5,
+    thresholds: Sequence[float] = DEFAULT_THRESHOLDS,
+) -> Dict[str, Any]:
+    """
+    How a relevance-score cut-off would grade retrieved documents.
+
+    ``retrieve`` must return documents whose ``metadata["relevance_score"]``
+    holds the reranker score. For each threshold, documents below it are
+    dropped; a question left with no document would be answered "no
+    information" without calling the LLM.
+
+    Returns:
+        Dict with per-question ``cases`` and a per-threshold ``thresholds`` table
+    """
+    rows = []
+    for case in cases:
+        docs = list(retrieve(case.question, k))[:k]
+        scored = []
+        for doc in docs:
+            text = normalize_text(document_text(doc))
+            scored.append({
+                "score": (getattr(doc, "metadata", None) or {}).get("relevance_score"),
+                "source": source_key(doc),
+                "evidence": [i for i, phrase in enumerate(case.evidence) if normalize_text(phrase) in text],
+            })
+        rows.append({"id": case.id, "answerable": case.answerable, "tags": case.tags, "docs": scored})
+
+    table = []
+    for threshold in thresholds:
+        kept_evidence = dropped_evidence = kept_other = dropped_other = 0
+        recalls, kept_counts = [], []
+        false_abstentions = correct_abstentions = 0
+        for row, case in zip(rows, cases):
+            kept = [d for d in row["docs"] if d["score"] is not None and d["score"] >= threshold]
+            dropped = [d for d in row["docs"] if d not in kept]
+            kept_counts.append(len(kept))
+            kept_evidence += sum(1 for d in kept if d["evidence"])
+            dropped_evidence += sum(1 for d in dropped if d["evidence"])
+            kept_other += sum(1 for d in kept if not d["evidence"])
+            dropped_other += sum(1 for d in dropped if not d["evidence"])
+            if case.answerable:
+                covered = {i for d in kept for i in d["evidence"]}
+                recalls.append(len(covered) / len(case.evidence) if case.evidence else 1.0)
+                false_abstentions += not kept
+            else:
+                correct_abstentions += not kept
+        answerable = sum(1 for c in cases if c.answerable)
+        unanswerable = len(cases) - answerable
+        table.append({
+            "threshold": threshold,
+            "evidence_recall": _mean(recalls),
+            "evidence_docs_kept": kept_evidence / max(kept_evidence + dropped_evidence, 1),
+            "other_docs_dropped": dropped_other / max(kept_other + dropped_other, 1),
+            "docs_kept_per_query": _mean(kept_counts),
+            "false_abstention_rate": false_abstentions / max(answerable, 1),
+            "abstention_accuracy": correct_abstentions / max(unanswerable, 1),
+        })
+
+    def top_scores(answerable: bool) -> List[float]:
+        return sorted(
+            max((d["score"] for d in row["docs"] if d["score"] is not None), default=0.0)
+            for row in rows if row["answerable"] == answerable
+        )
+
+    return {
+        "k": k,
+        "top_score_answerable": {q: percentile(top_scores(True), q) for q in (5, 25, 50)},
+        "top_score_unanswerable": {q: percentile(top_scores(False), q) for q in (50, 75, 95)},
+        "thresholds": table,
+        "cases": rows,
+    }

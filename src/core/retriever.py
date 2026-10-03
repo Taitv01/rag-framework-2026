@@ -442,6 +442,22 @@ class RetrieverManager:
 
         return self._rerank_documents(query, candidates, k=k, filter=filter)
 
+    def _predict(self, pairs: List[Tuple[str, str]]):
+        """Cross-encoder scores; a GPU shared with other programs may fill up mid-run."""
+        try:
+            return self._reranker.predict(pairs, batch_size=32, show_progress_bar=False)
+        except Exception as e:
+            if "out of memory" not in str(e).lower():
+                raise
+            logger.warning("GPU out of memory while reranking; retrying in small batches")
+            try:
+                import torch
+
+                torch.cuda.empty_cache()
+            except ImportError:
+                pass
+            return self._reranker.predict(pairs, batch_size=2, show_progress_bar=False)
+
     def rerank(self, query: str, documents: List[Document], k: Optional[int] = None) -> List[Document]:
         """Order documents by cross-encoder relevance and keep the top k."""
         return self._rerank_documents(query, documents, k=k)
@@ -475,12 +491,19 @@ class RetrieverManager:
             return []
 
         pairs = [(query, doc.page_content) for doc in candidates]
-        scores = self._reranker.predict(pairs, batch_size=32, show_progress_bar=False)
+        scores = self._predict(pairs)
 
         scored_candidates = list(zip(candidates, scores))
         scored_candidates.sort(key=lambda x: x[1], reverse=True)
 
-        return [doc for doc, _ in scored_candidates[:k]]
+        # Copies carry the score, so callers can grade relevance without an LLM.
+        return [
+            Document(
+                page_content=doc.page_content,
+                metadata={**(doc.metadata or {}), "relevance_score": float(score)},
+            )
+            for doc, score in scored_candidates[:k]
+        ]
 
     def mmr_search(
         self,

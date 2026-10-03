@@ -132,7 +132,10 @@ class TestRetrieverManager:
         results = retriever.search("programming", k=2)
 
         retriever.hybrid_search.assert_called_once()
-        assert results == [self.sample_docs[1], self.sample_docs[2]]
+        assert [d.page_content for d in results] == [
+            self.sample_docs[1].page_content, self.sample_docs[2].page_content]
+        assert [d.metadata["relevance_score"] for d in results] == [0.9, 0.2]
+        assert "relevance_score" not in self.sample_docs[1].metadata  # originals untouched
 
     def test_multi_query_search(self):
         """Test multi-query search."""

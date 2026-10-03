@@ -109,3 +109,17 @@ def test_multi_query_rrf_honours_filter_and_fuses_documents():
     assert docs and all(d.metadata["root"] == "a" for d in docs)
     fused = retriever._rrf_fusion([[DOCS[0], DOCS[1]], [DOCS[1], DOCS[2]]], k=3)
     assert fused[0] is DOCS[1]
+
+
+def test_rerank_retries_in_small_batches_when_the_gpu_is_full():
+    class FlakyCrossEncoder(FakeCrossEncoder):
+        def predict(self, pairs, batch_size=32, **kwargs):
+            if batch_size > 2:
+                raise RuntimeError("CUDA out of memory. Tried to allocate 20.00 MiB")
+            return super().predict(pairs, **kwargs)
+
+    with patch.dict(sys.modules, {"sentence_transformers": SimpleNamespace(CrossEncoder=FlakyCrossEncoder),
+                                  "torch": SimpleNamespace(cuda=SimpleNamespace(empty_cache=lambda: None))}):
+        retriever = make_retriever(use_reranking=True)
+        top = retriever.rerank("Tấm gọi cá bống", list(DOCS), k=1)[0]
+    assert top.metadata["source"] == "tam_cam.md"
