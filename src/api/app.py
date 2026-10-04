@@ -179,6 +179,30 @@ def _validate_remote_media_url(url: str) -> str:
     return value
 
 
+async def _iterate_in_thread(iterable):
+    """Consume a blocking iterator (LLM token stream) without blocking the event loop.
+
+    Each item is fetched in a worker thread. When the consumer stops early
+    (client disconnected), the iterator is closed so the provider stream ends.
+    """
+    iterator = iter(iterable)
+    done = object()
+    try:
+        while True:
+            item = await asyncio.to_thread(next, iterator, done)
+            if item is done:
+                return
+            yield item
+    finally:
+        close = getattr(iterator, "close", None)
+        if close is not None:
+            await asyncio.to_thread(close)
+
+
+def _sse(payload: Dict[str, Any]) -> str:
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
 # ============================================================================
 # Pydantic Models
 # ============================================================================
@@ -608,42 +632,65 @@ def create_app(
     @app.post("/query/stream", tags=["RAG"])
     async def query_rag_stream(request: QueryRequest):
         """
-        Stream RAG query response in real-time using Server-Sent Events (SSE).
+        Stream the answer with Server-Sent Events.
+
+        Events, each ``data: {json}``:
+        - ``{"status": "sources", "sources": [...], "transformed_query", "abstained"}``:
+          the passages of the prompt, labelled [S1], [S2]... as the answer cites them
+        - ``{"status": "generating", "chunk": "..."}``: answer tokens
+        - ``{"status": "done", "citations": [...], "invalid_citations": [...]}``:
+          the sources the answer cites ([S#]); every source when it cites none
+        - ``{"status": "error", "detail": "..."}``
+
+        Retrieval runs once, in a worker thread, with the same options as /query;
+        tokens are read in worker threads too, so the event loop never blocks.
         """
         trace = app.state.tracer.start_trace(
             name="query_rag_stream",
-            input_data={"question": request.question},
+            input_data={"question": request.question, "k": request.k, "filter": request.filter},
         )
+        rag = app.state.rag
 
         async def sse_event_generator():
             try:
-                # First retrieve sources asynchronously
-                docs = await asyncio.to_thread(app.state.rag.retrieve, request.question, request.k)
-                sources = [{"content": d.page_content, "metadata": d.metadata} for d in docs]
-                
-                # Emit sources metadata first
-                meta_event = json.dumps({"status": "sources", "sources": sources})
-                yield f"data: {meta_event}\n\n"
-
-                # Stream response text
-                if hasattr(app.state.rag, "stream"):
-                    for token in app.state.rag.stream(request.question):
-                        chunk_event = json.dumps({"status": "generating", "chunk": token})
-                        yield f"data: {chunk_event}\n\n"
-                        await asyncio.sleep(0.01)
+                if app.state.rag_type == "advanced":
+                    prepared = await asyncio.to_thread(
+                        rag.prepare,
+                        request.question,
+                        k=request.k,
+                        transform_query=request.transform_query,
+                        grade_documents=request.grade_documents,
+                        filter=request.filter,
+                    )
+                    sources = rag.sources_for(prepared)
+                    yield _sse({
+                        "status": "sources",
+                        "sources": sources,
+                        "transformed_query": None if prepared.cache_hit else prepared.search_query,
+                        "abstained": prepared.abstained,
+                    })
+                    parts = []
+                    async for token in _iterate_in_thread(rag.stream_prepared(prepared)):
+                        parts.append(token)
+                        yield _sse({"status": "generating", "chunk": token})
+                    answer = "".join(parts)
+                    citations, invalid = rag.cited_sources(answer, sources)
                 else:
-                    # Fallback if streaming not supported
-                    ans = await asyncio.to_thread(app.state.rag.query, request.question)
-                    chunk_event = json.dumps({"status": "generating", "chunk": ans})
-                    yield f"data: {chunk_event}\n\n"
+                    # No token streaming here: one retrieval, the whole answer at once.
+                    result = await asyncio.to_thread(
+                        rag.query_with_sources, request.question, k=request.k, filter=request.filter,
+                    )
+                    sources = result["sources"]
+                    yield _sse({"status": "sources", "sources": sources})
+                    answer = result["answer"]
+                    yield _sse({"status": "generating", "chunk": answer})
+                    citations, invalid = sources, []
 
-                done_event = json.dumps({"status": "done"})
-                yield f"data: {done_event}\n\n"
-                app.state.tracer.end_trace(trace, output="SSE streaming finished")
+                yield _sse({"status": "done", "citations": citations, "invalid_citations": invalid})
+                app.state.tracer.end_trace(trace, output=answer)
             except Exception as e:
                 logger.error(f"Streaming error: {e}")
-                err_event = json.dumps({"status": "error", "detail": str(e)})
-                yield f"data: {err_event}\n\n"
+                yield _sse({"status": "error", "detail": str(e)})
                 app.state.tracer.end_trace(trace, output=str(e))
 
         return StreamingResponse(sse_event_generator(), media_type="text/event-stream")

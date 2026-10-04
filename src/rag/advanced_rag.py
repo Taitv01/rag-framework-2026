@@ -980,8 +980,8 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         return self._detailed_result(prepared, answer)
 
     def _detailed_result(self, prepared: PreparedQuery, answer: str) -> Dict[str, Any]:
-        sources = self._format_sources(prepared.web_docs or prepared.docs)
-        cited, invalid = self._cited_sources(answer, sources)
+        sources = self.sources_for(prepared)
+        cited, invalid = self.cited_sources(answer, sources)
         return {
             "answer": answer,
             "original_query": prepared.question,
@@ -995,8 +995,12 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
             "cache_hit": prepared.cache_hit,
         }
 
+    def sources_for(self, prepared: PreparedQuery) -> List[Dict[str, Any]]:
+        """The sources in a prepared query's prompt, labelled [S1], [S2]... as there."""
+        return self._format_sources(prepared.web_docs or prepared.docs)
+
     @staticmethod
-    def _cited_sources(answer: str, sources: List[Dict[str, Any]]):
+    def cited_sources(answer: str, sources: List[Dict[str, Any]]):
         """Sources the answer cites as [S#], and cited ids that do not exist.
 
         An answer without any [S#] marker keeps every source, as before.
@@ -1233,6 +1237,30 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
             Response tokens
         """
         prepared = self._prepare(question, k, transform_query, grade_documents, use_reranking, filter)
+        yield from self.stream_prepared(prepared, **kwargs)
+
+    def prepare(
+        self,
+        question: str,
+        k: Optional[int] = None,
+        transform_query: Optional[bool] = None,
+        grade_documents: Optional[bool] = None,
+        use_reranking: Optional[bool] = None,
+        filter: Optional[Dict[str, Any]] = None,
+    ) -> PreparedQuery:
+        """
+        First half of the pipeline, for callers that generate separately.
+
+        Cache lookup, query rewrite, retrieval, grading and the prompt; then
+        ``stream_prepared()`` generates. An async server runs the two halves in
+        worker threads and can send ``sources_for(prepared)`` before the first
+        token: they are exactly the passages of the prompt. Arguments as in
+        ``query()``.
+        """
+        return self._prepare(question, k, transform_query, grade_documents, use_reranking, filter)
+
+    def stream_prepared(self, prepared: PreparedQuery, **kwargs) -> Generator[str, None, None]:
+        """Second half: stream the answer to a ``prepare()`` result, then cache it."""
         if prepared.answer is not None:
             yield prepared.answer
             return
