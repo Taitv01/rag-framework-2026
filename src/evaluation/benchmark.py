@@ -480,6 +480,52 @@ def compare_reports(baseline: Dict[str, Any], current: Dict[str, Any]) -> List[D
     return rows
 
 
+# How far a quality metric may move the wrong way before quality_gate fails.
+# Latency and context size are left out: they depend on the machine and on k.
+DEFAULT_GATE = {
+    "evidence_recall": 0.02,
+    "recall_at_k": 0.02,
+    "mrr": 0.02,
+    "ndcg": 0.02,
+    "answer_recall": 0.02,
+    "faithfulness": 0.02,
+    "citation_rate": 0.02,
+    "abstention_accuracy": 0.0,
+    "false_abstention_rate": 0.02,
+    "llm_calls_per_query": 0.5,
+    "errors": 0,
+}
+
+
+def quality_gate(
+    baseline: Dict[str, Any],
+    current: Dict[str, Any],
+    tolerances: Optional[Dict[str, float]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Regressions beyond tolerance: an empty list means the change may merge.
+
+    Every config of the baseline must be in the current report; for each
+    metric in ``tolerances`` (default ``DEFAULT_GATE``) the current value may
+    be worse by at most the tolerance. Returns ``compare_reports`` rows plus
+    ``tolerance``, and a ``metric="missing config"`` row per absent config.
+    """
+    tolerances = DEFAULT_GATE if tolerances is None else tolerances
+    failures = [
+        {"config": name, "metric": "missing config", "baseline": None, "current": None,
+         "delta": None, "status": "worse", "tolerance": None}
+        for name in baseline.get("configs", {})
+        if name not in current.get("configs", {})
+    ]
+    for row in compare_reports(baseline, current):
+        tolerance = tolerances.get(row["metric"])
+        if tolerance is None or row["status"] != "worse":
+            continue
+        if abs(row["delta"]) > tolerance + 1e-9:
+            failures.append({**row, "tolerance": tolerance})
+    return failures
+
+
 DEFAULT_THRESHOLDS = (0.001, 0.003, 0.01, 0.03, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9)
 
 

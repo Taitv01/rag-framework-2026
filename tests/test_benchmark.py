@@ -202,3 +202,41 @@ def test_threshold_calibration_counts_drops_and_abstentions():
     assert by_t[0.03]["false_abstention_rate"] == 0.0 and by_t[0.03]["abstention_accuracy"] == 1.0
     assert by_t[0.5]["false_abstention_rate"] == 0.5  # q2's only evidence doc scored 0.04
     assert report["top_score_unanswerable"][50] == 0.01
+
+
+def _report(**configs):
+    return {"configs": {name: {"summary": summary} for name, summary in configs.items()}}
+
+
+def test_quality_gate_fails_on_regressions_beyond_tolerance():
+    from src.evaluation.benchmark import quality_gate
+
+    baseline = _report(hybrid={"evidence_recall": 0.94, "mrr": 0.97, "errors": 0, "latency_p50_ms": 80},
+                       vector={"evidence_recall": 0.90})
+    within = _report(hybrid={"evidence_recall": 0.925, "mrr": 0.99, "errors": 0, "latency_p50_ms": 900},
+                     vector={"evidence_recall": 0.90})
+    assert quality_gate(baseline, within) == []  # small drop, better MRR, slower: all fine
+
+    worse = _report(hybrid={"evidence_recall": 0.90, "mrr": 0.97, "errors": 2})
+    failures = {(row["config"], row["metric"]) for row in quality_gate(baseline, worse)}
+    assert failures == {("hybrid", "evidence_recall"), ("hybrid", "errors"), ("vector", "missing config")}
+
+
+def test_compare_gate_exit_code(tmp_path, capsys):
+    import json as _json
+    import importlib.util
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location("eval_cli", Path(__file__).parents[1] / "scripts" / "eval.py")
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+
+    base, good, bad = tmp_path / "base.json", tmp_path / "good.json", tmp_path / "bad.json"
+    base.write_text(_json.dumps(_report(hybrid={"evidence_recall": 0.94})), encoding="utf-8")
+    good.write_text(_json.dumps(_report(hybrid={"evidence_recall": 0.95})), encoding="utf-8")
+    bad.write_text(_json.dumps(_report(hybrid={"evidence_recall": 0.80})), encoding="utf-8")
+
+    assert cli.main(["compare", str(base), str(good), "--gate"]) == 0
+    assert cli.main(["compare", str(base), str(bad), "--gate"]) == 1
+    assert "Quality gate: FAILED" in capsys.readouterr().out
+    assert cli.main(["compare", str(base), str(bad)]) == 0  # without --gate it only reports

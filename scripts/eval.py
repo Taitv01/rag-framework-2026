@@ -108,6 +108,11 @@ def parse_args(argv=None) -> argparse.Namespace:
     compare = commands.add_parser("compare", help="Diff two reports")
     compare.add_argument("baseline", type=Path)
     compare.add_argument("current", type=Path)
+    compare.add_argument(
+        "--gate", action="store_true",
+        help="Exit 1 when a quality metric got worse than the baseline beyond its "
+             "tolerance (src.evaluation.benchmark.DEFAULT_GATE): for CI",
+    )
 
     return parser.parse_args(argv)
 
@@ -472,10 +477,28 @@ def cmd_calibrate(args) -> int:
 
 
 def cmd_compare(args) -> int:
+    from src.evaluation.benchmark import quality_gate
+
     baseline = json.loads(args.baseline.read_text(encoding="utf-8"))
     current = json.loads(args.current.read_text(encoding="utf-8"))
     print_comparison(baseline, current)
-    return 0
+    if not args.gate:
+        return 0
+
+    failures = quality_gate(baseline, current)
+    if not failures:
+        print("\nQuality gate: passed")
+        return 0
+    print("\nQuality gate: FAILED")
+    for row in failures:
+        if row["metric"] == "missing config":
+            print(f"  {row['config']}: missing from the current report")
+        else:
+            print(
+                f"  {row['config']} {row['metric']}: {fmt(row['baseline'])} -> {fmt(row['current'])} "
+                f"({row['delta']:+.3f}, tolerance {row['tolerance']})"
+            )
+    return 1
 
 
 def main(argv=None) -> int:
