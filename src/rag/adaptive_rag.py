@@ -7,12 +7,12 @@ Intelligent RAG router that selects the optimal pipeline based on query complexi
 Features:
 - LLM-based query complexity classification (simple/medium/complex)
 - Routes to appropriate RAG pipeline:
-  - Simple queries → NaiveRAG (lightweight vector search)
+  - Simple queries → AdvancedRAG without reranking (fast)
   - Medium queries → AdvancedRAG (hybrid search + reranking)
-  - Complex multi-hop queries → AgenticRAG (full agentic pipeline)
+  - Complex multi-hop queries → AgenticRAG (agent loop over the same retrieval)
 - Bilingual (Vietnamese/English) classification prompts
 - Logging of routing decisions
-- Shared knowledge base across all pipelines
+- One index for every route: documents are loaded, embedded and indexed once
 
 Pipeline:
 1. Receive query
@@ -35,8 +35,6 @@ from typing import List, Optional, Dict, Any, Union
 from pathlib import Path
 from dataclasses import dataclass
 from enum import Enum
-
-from langchain_core.documents import Document
 
 from src.core.llm import LLMManager
 
@@ -89,10 +87,11 @@ class AdaptiveRAG:
     Adaptive RAG that routes queries to the optimal pipeline.
 
     Uses an LLM-based router to classify query complexity and dispatches
-    to the appropriate RAG implementation:
-    - Simple → NaiveRAG (fast, lightweight)
+    to the appropriate RAG implementation. One AdvancedRAG owns the index
+    (one embedding model, one vector store, one reranker):
+    - Simple → AdvancedRAG retrieval without reranking (fast)
     - Medium → AdvancedRAG (hybrid search + reranking)
-    - Complex → AgenticRAG (multi-step agentic reasoning)
+    - Complex → AgenticRAG searching the same index (multi-step reasoning)
 
     Example:
         rag = AdaptiveRAG(
@@ -103,7 +102,7 @@ class AdaptiveRAG:
         # Add documents (shared across all pipelines)
         rag.add_documents(["documents/"])
 
-        # Simple query → routed to NaiveRAG
+        # Simple query → fast route (no reranking)
         answer = rag.query("Thạch Sanh là ai?")
 
         # Complex query → routed to AgenticRAG
@@ -179,7 +178,6 @@ class AdaptiveRAG:
         )
 
         # Lazy-initialized pipelines (created on first add_documents)
-        self._naive_rag = None
         self._advanced_rag = None
         self._agentic_rag = None
         self._pipelines_initialized = False
@@ -194,39 +192,22 @@ class AdaptiveRAG:
             ComplexityLevel.COMPLEX: 0,
         }
 
-        # Track documents
-        self._documents: List[Document] = []
-
         logger.info(
             f"AdaptiveRAG initialized with router LLM={self._router_llm.config.model}, "
             f"default_route={self._routing_config.default_route.value}"
         )
 
     def _initialize_pipelines(self):
-        """Lazily initialize all RAG pipelines."""
+        """Lazily create the shared AdvancedRAG and the agent that searches it."""
         if self._pipelines_initialized:
             return
 
-        from src.rag.naive_rag import NaiveRAG
         from src.rag.advanced_rag import AdvancedRAG
         from src.rag.agentic_rag import AgenticRAG
 
         logger.info("Initializing RAG pipelines for AdaptiveRAG...")
 
-        # NaiveRAG for simple queries
-        self._naive_rag = NaiveRAG(
-            llm_provider=self._shared_params["llm_provider"],
-            llm_model=self._shared_params["llm_model"],
-            llm_api_key=self._shared_params["llm_api_key"],
-            embedding_provider=self._shared_params["embedding_provider"],
-            embedding_model=self._shared_params["embedding_model"],
-            vector_store_provider=self._shared_params["vector_store_provider"],
-            chunk_size=self._shared_params["chunk_size"],
-            chunk_overlap=self._shared_params["chunk_overlap"],
-            retrieval_k=self._shared_params["retrieval_k"],
-        )
-
-        # AdvancedRAG for medium queries
+        # Owns the index; serves the simple and medium routes.
         self._advanced_rag = AdvancedRAG(
             llm_provider=self._shared_params["llm_provider"],
             llm_model=self._shared_params["llm_model"],
@@ -241,18 +222,12 @@ class AdaptiveRAG:
             use_reranking=self._advanced_params["use_reranking"],
         )
 
-        # AgenticRAG for complex queries
+        # AgenticRAG for complex queries, over the same retrieval and LLM.
         self._agentic_rag = AgenticRAG(
-            llm_provider=self._shared_params["llm_provider"],
-            llm_model=self._shared_params["llm_model"],
-            llm_api_key=self._shared_params["llm_api_key"],
-            embedding_provider=self._shared_params["embedding_provider"],
-            embedding_model=self._shared_params["embedding_model"],
-            vector_store_provider=self._shared_params["vector_store_provider"],
-            chunk_size=self._shared_params["chunk_size"],
-            chunk_overlap=self._shared_params["chunk_overlap"],
             retrieval_k=self._shared_params["retrieval_k"],
             max_retries=self._agentic_params["max_retries"],
+            search=self._advanced_rag.retrieve,
+            llm=self._advanced_rag.llm,
         )
 
         self._pipelines_initialized = True
@@ -399,22 +374,19 @@ Reason"""
             confidence=1.0,
         )
 
-    def _get_pipeline(self, level: ComplexityLevel):
-        """
-        Get the appropriate RAG pipeline for a complexity level.
+    def _run(self, level: ComplexityLevel, question: str, detailed: bool = False, **kwargs):
+        """Answer on the route for ``level``; ``detailed`` returns the pipeline's result dict."""
+        if level == ComplexityLevel.COMPLEX:
+            if detailed:
+                return self._agentic_rag.query_with_trace(question, **kwargs)
+            return self._agentic_rag.query(question, **kwargs)
 
-        Args:
-            level: Query complexity level
-
-        Returns:
-            The corresponding RAG pipeline instance
-        """
-        pipeline_map = {
-            ComplexityLevel.SIMPLE: self._naive_rag,
-            ComplexityLevel.MEDIUM: self._advanced_rag,
-            ComplexityLevel.COMPLEX: self._agentic_rag,
-        }
-        return pipeline_map[level]
+        if level == ComplexityLevel.SIMPLE:
+            # Same index, no cross-encoder pass.
+            kwargs.setdefault("use_reranking", False)
+        if detailed:
+            return self._advanced_rag.query_detailed(question, **kwargs)
+        return self._advanced_rag.query(question, **kwargs)
 
     def add_documents(
         self,
@@ -422,39 +394,17 @@ Reason"""
         metadata: Optional[Dict[str, Any]] = None
     ) -> int:
         """
-        Add documents to all RAG pipelines.
-
-        Documents are loaded once and distributed to all pipelines
-        to keep their knowledge bases synchronized.
+        Add documents to the shared index (every route searches it).
 
         Args:
             sources: File path(s) or directory path(s)
             metadata: Additional metadata to attach
 
         Returns:
-            Number of chunks added (from the NaiveRAG pipeline)
+            Number of chunks added
         """
-        # Initialize pipelines on first use
         self._initialize_pipelines()
-
-        # Add to all pipelines
-        logger.info("Adding documents to all AdaptiveRAG pipelines...")
-
-        naive_chunks = self._naive_rag.add_documents(sources, metadata=metadata)
-        logger.debug(f"NaiveRAG: {naive_chunks} chunks added")
-
-        advanced_chunks = self._advanced_rag.add_documents(sources, metadata=metadata)
-        logger.debug(f"AdvancedRAG: {advanced_chunks} chunks added")
-
-        agentic_chunks = self._agentic_rag.add_documents(sources, metadata=metadata)
-        logger.debug(f"AgenticRAG: {agentic_chunks} chunks added")
-
-        logger.info(
-            f"Documents added to all pipelines "
-            f"(naive={naive_chunks}, advanced={advanced_chunks}, agentic={agentic_chunks})"
-        )
-
-        return naive_chunks
+        return self._advanced_rag.add_documents(sources, metadata=metadata)
 
     def add_texts(
         self,
@@ -462,37 +412,17 @@ Reason"""
         metadatas: Optional[List[Dict[str, Any]]] = None
     ) -> int:
         """
-        Add raw texts to all RAG pipelines.
+        Add raw texts to the shared index.
 
         Args:
             texts: List of text strings
             metadatas: Optional metadata for each text
 
         Returns:
-            Number of chunks added (from the NaiveRAG pipeline)
+            Number of chunks added
         """
-        # Initialize pipelines on first use
         self._initialize_pipelines()
-
-        naive_chunks = self._naive_rag.add_texts(texts, metadatas=metadatas)
-        self._advanced_rag.add_texts(texts, metadatas=metadatas)
-
-        # AgenticRAG doesn't have add_texts, so convert to documents and add
-        docs = []
-        for i, text in enumerate(texts):
-            meta = metadatas[i] if metadatas else {}
-            docs.append(Document(page_content=text, metadata=meta))
-
-        # Use a temporary file approach or directly add chunks
-        # For simplicity, we add to its vector store directly
-        chunks = self._agentic_rag.text_splitter.split_documents(docs)
-        self._agentic_rag._documents.extend(docs)
-        self._agentic_rag._chunks.extend(chunks)
-        self._agentic_rag.vector_store.add_documents(chunks)
-        self._agentic_rag._create_retriever_tool()
-        self._agentic_rag._build_graph()
-
-        return naive_chunks
+        return self._advanced_rag.add_texts(texts, metadatas=metadatas)
 
     def query(
         self,
@@ -539,17 +469,10 @@ Reason"""
         # Update stats
         self._route_stats[complexity.level] += 1
 
-        # Get pipeline and execute
-        pipeline = self._get_pipeline(complexity.level)
-
-        logger.info(
-            f"Routing query to {complexity.level.value} pipeline "
-            f"({type(pipeline).__name__})"
-        )
+        logger.info(f"Routing query to the {complexity.level.value} route")
 
         try:
-            answer = pipeline.query(question, **kwargs)
-            return answer
+            return self._run(complexity.level, question, **kwargs)
         except Exception as e:
             if self._routing_config.enable_fallback:
                 return self._fallback_query(question, complexity.level, e, **kwargs)
@@ -597,23 +520,10 @@ Reason"""
         # Update stats
         self._route_stats[complexity.level] += 1
 
-        pipeline = self._get_pipeline(complexity.level)
-
-        logger.info(
-            f"Routing query_with_sources to {complexity.level.value} pipeline "
-            f"({type(pipeline).__name__})"
-        )
+        logger.info(f"Routing query_with_sources to the {complexity.level.value} route")
 
         try:
-            # Each pipeline has different detailed query methods
-            if complexity.level == ComplexityLevel.SIMPLE:
-                result = self._naive_rag.query_with_sources(question, **kwargs)
-            elif complexity.level == ComplexityLevel.MEDIUM:
-                result = self._advanced_rag.query_detailed(question, **kwargs)
-            elif complexity.level == ComplexityLevel.COMPLEX:
-                result = self._agentic_rag.query_with_trace(question, **kwargs)
-            else:
-                result = {"answer": pipeline.query(question, **kwargs), "sources": []}
+            result = self._run(complexity.level, question, detailed=True, **kwargs)
 
             # Normalize result format
             return self._normalize_result(result, complexity)
@@ -679,10 +589,10 @@ Reason"""
         **kwargs
     ) -> str:
         """
-        Fall back to a simpler pipeline when the target pipeline fails.
+        Fall back to a simpler route when the target route fails.
 
-        Tries progressively simpler pipelines:
-        Complex → Medium → Simple → Direct LLM
+        Tries progressively simpler routes: Complex → Medium → Simple. When
+        all fail, says so: an answer without retrieval would not be grounded.
 
         Args:
             question: Original question
@@ -703,34 +613,24 @@ Reason"""
 
         for fallback_level in fallbacks:
             try:
-                pipeline = self._get_pipeline(fallback_level)
                 logger.warning(
                     f"Falling back from {failed_level.value} to "
                     f"{fallback_level.value} due to: {error}"
                 )
-                return pipeline.query(question, **kwargs)
+                return self._run(fallback_level, question, **kwargs)
             except Exception as fallback_error:
                 logger.warning(
                     f"Fallback to {fallback_level.value} also failed: {fallback_error}"
                 )
                 continue
 
-        # Last resort: direct LLM answer without retrieval
-        logger.warning(
-            "All pipelines failed, falling back to direct LLM answer"
+        logger.error("All routes failed")
+        return (
+            "I'm sorry, I was unable to process your query. "
+            "Please try again later. / "
+            "Xin lỗi, tôi không thể xử lý truy vấn của bạn. "
+            "Vui lòng thử lại sau."
         )
-        try:
-            return self._router_llm.generate(
-                f"Answer this question based on your knowledge: {question}"
-            )
-        except Exception as final_error:
-            logger.error(f"Direct LLM fallback also failed: {final_error}")
-            return (
-                "I'm sorry, I was unable to process your query. "
-                "Please try again later. / "
-                "Xin lỗi, tôi không thể xử lý truy vấn của bạn. "
-                "Vui lòng thử lại sau."
-            )
 
     @property
     def route_stats(self) -> Dict[str, int]:
@@ -744,16 +644,16 @@ Reason"""
 
     @property
     def num_documents(self) -> int:
-        """Number of loaded documents (from NaiveRAG pipeline)."""
-        if self._naive_rag:
-            return self._naive_rag.num_documents
+        """Number of loaded documents in the shared index."""
+        if self._advanced_rag:
+            return self._advanced_rag.num_documents
         return 0
 
     @property
     def num_chunks(self) -> int:
-        """Number of chunks (from NaiveRAG pipeline)."""
-        if self._naive_rag:
-            return self._naive_rag.num_chunks
+        """Number of chunks in the shared index."""
+        if self._advanced_rag:
+            return self._advanced_rag.num_chunks
         return 0
 
     def clear_route_cache(self):

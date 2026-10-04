@@ -167,7 +167,9 @@ Cập nhật framework theo xu hướng RAG mới nhất 2025-2026, sửa bugs, 
 #### 2.5.5 Adaptive RAG (NEW)
 - **File**: `src/rag/adaptive_rag.py` (NEW)
 - Query router phân loại độ phức tạp (simple/medium/complex)
-- Simple → NaiveRAG, Medium → AdvancedRAG, Complex → AgenticRAG
+- Simple → AdvancedRAG không rerank, Medium → AdvancedRAG, Complex → AgenticRAG
+  (từ 10/2026 cả ba dùng chung một index; trước đó Simple → NaiveRAG và mỗi
+  route tự index lại tài liệu)
 - Giảm latency + cost cho câu hỏi đơn giản
 - Bilingual prompts (VI/EN)
 

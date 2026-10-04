@@ -704,6 +704,7 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         k: Optional[int] = None,
         transform_query: Optional[bool] = None,
         grade_documents: Optional[bool] = None,
+        use_reranking: Optional[bool] = None,
         **kwargs
     ) -> str:
         """
@@ -719,11 +720,12 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
             transform_query: Rewrite the query (None: follow ``query_rewrite``)
             grade_documents: Grade relevance (None: follow ``grading``;
                 True with grading="none" means one batched LLM call)
+            use_reranking: Override reranking for this query (None: as configured)
 
         Returns:
             Answer string
         """
-        prepared = self._prepare(question, k, transform_query, grade_documents)
+        prepared = self._prepare(question, k, transform_query, grade_documents, use_reranking)
         if prepared.answer is not None:
             return prepared.answer
         answer = self.llm.generate(prepared.prompt, **kwargs)
@@ -735,6 +737,7 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         k: Optional[int] = None,
         transform_query: Optional[bool] = None,
         grade_documents: Optional[bool] = None,
+        use_reranking: Optional[bool] = None,
     ) -> PreparedQuery:
         """Everything before generation; sets ``answer`` when no LLM call is needed."""
         k = k or self.retrieval_k
@@ -744,7 +747,7 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
             return PreparedQuery(question, question, answer=cached, cache_hit=True)
 
         search_query = self._rewrite_for_search(question, transform_query)
-        retrieved = self._retrieve(search_query, k=k)
+        retrieved = self._retrieve(search_query, k=k, use_reranking=use_reranking)
         docs = self._grade(question, retrieved, grade_documents)
         prepared = PreparedQuery(question, search_query, retrieved=retrieved, docs=docs)
 
@@ -867,7 +870,7 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         # with docs, at least some were deemed relevant
         return False
 
-    def _retrieve(self, query: str, k: int = 5) -> List[Document]:
+    def _retrieve(self, query: str, k: int = 5, use_reranking: Optional[bool] = None) -> List[Document]:
         """
         Internal retrieval method supporting multiple strategies.
 
@@ -895,7 +898,7 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
                 return self._expand_to_parents(docs)[:k] if self.use_parent_context else docs
 
         # Standard search (hybrid + reranking)
-        return self._search(query, k=k)
+        return self._search(query, k=k, use_reranking=use_reranking)
 
     def _search(
         self,
@@ -926,6 +929,7 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         k: Optional[int] = None,
         transform_query: Optional[bool] = None,
         grade_documents: Optional[bool] = None,
+        use_reranking: Optional[bool] = None,
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -936,13 +940,14 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
             k: Number of documents
             transform_query: Rewrite the query (None: follow ``query_rewrite``)
             grade_documents: Grade relevance (None: follow ``grading``)
+            use_reranking: Override reranking for this query (None: as configured)
 
         Returns:
             Dict with the answer, the search query, ``relevant_docs`` (every
             source given to the LLM) and ``citations`` (the sources the answer
             actually cites; all of them when it cites none)
         """
-        prepared = self._prepare(question, k, transform_query, grade_documents)
+        prepared = self._prepare(question, k, transform_query, grade_documents, use_reranking)
         if prepared.answer is None:
             answer = self._finish(prepared, self.llm.generate(prepared.prompt, **kwargs))
         else:
@@ -1176,6 +1181,7 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         k: Optional[int] = None,
         transform_query: Optional[bool] = None,
         grade_documents: Optional[bool] = None,
+        use_reranking: Optional[bool] = None,
         **kwargs
     ) -> Generator[str, None, None]:
         """
@@ -1189,11 +1195,12 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
             k: Number of documents
             transform_query: Rewrite the query (None: follow ``query_rewrite``)
             grade_documents: Grade relevance (None: follow ``grading``)
+            use_reranking: Override reranking for this query (None: as configured)
 
         Yields:
             Response tokens
         """
-        prepared = self._prepare(question, k, transform_query, grade_documents)
+        prepared = self._prepare(question, k, transform_query, grade_documents, use_reranking)
         if prepared.answer is not None:
             yield prepared.answer
             return

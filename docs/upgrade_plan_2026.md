@@ -9,7 +9,7 @@ kỹ thuật mới khi số đo cho thấy cần.
 | 0 | Ổn định nền | 1–2 ngày | ✅ Hoàn thành |
 | 1 | Đo trước khi tối ưu (golden set + eval baseline) | 2–3 ngày | ✅ Hoàn thành |
 | 2 | Sửa lõi retrieval | 3–5 ngày | ✅ Hoàn thành (compose chờ CI kiểm chứng) |
-| 3 | Hợp nhất pipeline generation | 3–4 ngày | ⏳ |
+| 3 | Hợp nhất pipeline generation | 3–4 ngày | ✅ Hoàn thành (cache theo filter dời sang GĐ 4) |
 | 4 | API & vận hành | 2–3 ngày | ⏳ |
 | 5 | Nâng cao (tùy chọn, theo số đo) | — | ⏳ |
 
@@ -256,24 +256,102 @@ so với baseline Giai đoạn 1 (`retrieval.json`, chunk con, FAISS):
   xuống. `scripts/eval.py` giờ cảnh báo khi có câu lỗi; không so sánh lần chạy
   có lỗi.
 
-## Giai đoạn 3: Hợp nhất pipeline generation
-- Một `RAGPipeline` (retrieve → grade → generate → verify) cho mọi đường query
-  và API.
-- Chấm độ liên quan bằng điểm reranker + ngưỡng, hoặc 1 lời gọi LLM structured
-  cho cả batch.
-- Không đủ ngữ cảnh thì trả lời "không có thông tin"; web fallback chạy đúng lúc.
-- Kiểm tra citation `[S#]`. Cache có key theo câu hỏi, filter và phiên bản corpus;
-  Redis tùy chọn.
-- AgenticRAG: áp `max_retries` và `recursion_limit`, dùng chung retriever.
-  AdaptiveRAG: các route dùng chung một index.
-- ✅ Xong khi: số lời gọi LLM mỗi query giảm từ ~7 xuống 2–3, faithfulness không
-  thấp hơn baseline.
+## Giai đoạn 3: Hợp nhất pipeline generation ✅
+
+- [x] **Một pipeline cho mọi đường query.** `query`, `query_detailed` và `stream`
+      dùng chung `_prepare` (cache → viết lại câu hỏi → retrieve → chấm → web
+      fallback → prompt) và `_finish` (kiểm tra hallucination, cache). Trước đây chỉ
+      `query()` có web fallback và kiểm tra hallucination.
+- [x] **Viết lại câu hỏi chỉ khi cần** (`query_rewrite="auto"`): chỉ cho câu gõ
+      không dấu. Đo trên golden set: viết lại mọi câu làm `evidence_recall` giảm
+      (0.941 → 0.929), còn với câu không dấu thì tăng (0.80 → 1.00).
+- [x] **Bỏ chấm tài liệu bằng LLM theo mặc định** (`grading="none"`): LLM sinh câu
+      trả lời đọc thẳng các đoạn parent đã rerank. Đã hiệu chỉnh ngưỡng điểm
+      reranker trên golden set (`scripts/eval.py calibrate`): điểm reranker không
+      tách được đoạn liên quan và không liên quan, ngưỡng 0.01 đã làm
+      `evidence_recall` giảm xuống 0.840. Vẫn còn hai tuỳ chọn: `grading="llm"`
+      (1 lời gọi cho cả batch, thay vì 1 lời gọi mỗi tài liệu) và
+      `grading="reranker"` (ngưỡng `min_relevance_score`).
+- [x] **Không có ngữ cảnh thì trả lời "không có đủ thông tin"** mà không gọi LLM,
+      hoặc chạy web fallback. Trước đây web fallback không bao giờ chạy vì bước chấm
+      luôn giữ lại 1 tài liệu.
+- [x] **Citation:** `query_detailed` trả về `citations` là các nguồn câu trả lời
+      thực sự trích (`[S#]`), `invalid_citations` là các id không tồn tại, và cờ
+      `abstained`.
+- [x] **Cache** bị xoá mỗi khi corpus đổi (thêm, refresh, xoá tài liệu).
+- [x] **AgenticRAG:** tối đa `max_retries` lần viết lại câu hỏi, sau đó trả lời từ
+      những gì đã tìm được; `recursion_limit` là lớp chặn thứ hai. Grader và câu trả
+      lời luôn dùng câu hỏi gốc (trước đây câu trả lời được sinh cho câu đã viết
+      lại). Mỗi lần viết lại được báo các truy vấn đã thất bại. Tool retrieve trả
+      đoạn văn có nhãn `[S#]` và giữ metadata, nên `query_with_trace` trả về
+      `sources`. Có thể tìm trên index của pipeline khác (`search=`); grader chuyển
+      sang văn bản thường thay cho structured output, nên chạy được với mọi provider.
+- [x] **AdaptiveRAG:** cả ba route dùng chung một AdvancedRAG, nên chỉ một embedding
+      model, một vector store và một lần index. Simple là AdvancedRAG không rerank
+      (`use_reranking=False` theo từng query), Medium là AdvancedRAG, Complex là
+      AgenticRAG tìm trên cùng index đó. Khi mọi route đều lỗi thì báo lỗi, không
+      còn để LLM tự trả lời mà không có ngữ cảnh.
+- [ ] Cache có key theo filter: chuyển sang Giai đoạn 4, làm cùng lúc với filter
+      metadata trong `QueryRequest` (hiện chưa đường query nào nhận filter).
+      Redis vẫn là tuỳ chọn, chưa cần.
+
+### Kết quả (`evals/fairy_tales/baselines/answer_stage3.json`)
+
+Cùng golden set 95 câu, cùng model trả lời và chấm (`claude-opus-5-5` qua
+`AgentLLM`), so với baseline Giai đoạn 1 (`answer.json`). Pipeline mặc định:
+Qdrant, parent context, hybrid + rerank (fp32), `query_rewrite="auto"`,
+`grading="none"`.
+
+| Chỉ số | Giai đoạn 1 | Giai đoạn 3 |
+|--------|------:|------:|
+| answer_recall (87 câu có đáp án) | 0.839 | **0.920** |
+| faithfulness (model tự chấm) | 0.994 | 0.993 |
+| abstention_accuracy (8 câu không có đáp án) | 1.000 | 1.000 |
+| false_abstention_rate | 0.034 (3/87) | **0.000** |
+| citation_rate | 1.000 | 1.000 |
+| llm_calls_per_query | 7.0 | **1.05** |
+| latency p50 / p95 (không gồm sinh câu trả lời) | 747 / 783 ms | 804 / 1009 ms |
+
+| Nhóm | Số câu | Giai đoạn 1 | Giai đoạn 3 |
+|------|------:|------:|------:|
+| fact | 42 | 0.882 | 0.973 |
+| sequence | 12 | 0.854 | 0.884 |
+| creative | 9 | 0.787 | 0.969 |
+| multi_source | 9 | 0.699 | 0.797 |
+| character | 7 | 0.969 | 0.947 |
+| motif | 7 | 0.726 | 0.739 |
+| moral | 6 | 0.624 | 0.868 |
+| no_diacritics | 5 | 0.657 | 0.760 |
+| paraphrase | 4 | 0.879 | 0.912 |
+| multi_hop | 2 | 0.633 | 0.692 |
+
+- **Lời gọi LLM giảm từ 7 xuống 1,05 mỗi câu hỏi.** Chỉ 5 câu gõ không dấu cần thêm
+  1 lời gọi để viết lại câu hỏi. Mục tiêu 2–3 lời gọi đã vượt.
+- **answer_recall tăng 0,08** nhờ ngữ cảnh đầy đủ hơn (parent context của Giai đoạn
+  2). Ba câu từng bị từ chối nhầm nay được trả lời: q025 (0,06 → 0,89), q037
+  (0 → 1,0), q079 (0,33 → 0,67). Chưa tách riêng phần đóng góp của việc bỏ bước chấm
+  tài liệu.
+- **Faithfulness ngang baseline (0,993 so với 0,994).** Lần này có 4 câu bị trừ nhẹ
+  (0,8–0,9) vì câu trả lời có suy luận như bài học của truyện, hoặc đoán số cảnh của
+  kịch bản. Baseline có 1 câu bị trừ (q036: 0,5), câu này nay được 0,8. Mức chênh
+  0,001 nằm trong sai số của việc tự chấm, không có câu nào mâu thuẫn với ngữ cảnh.
+- **Độ trễ tăng ~60 ms ở p50** do ngữ cảnh parent của Giai đoạn 2 (retrieval Giai
+  đoạn 2 đã ở mức 770 ms). Bản thân pipeline sinh câu trả lời không thêm độ trễ.
+  Với reranker fp16 (`--reranker-fp16`), p50 lên 3,7 giây trên GTX 1650, nên đừng
+  so độ trễ giữa hai chế độ.
+- **Còn yếu:** câu trải trên nhiều truyện (`motif` 0,74, `multi_source` 0,80).
+  q071 ("những truyện nào có kẻ tham lam hoặc độc ác bị trừng phạt") còn giảm
+  (0,50 → 0,36): ngữ cảnh thiếu các đoạn kể kết cục của người anh trong Cây khế và
+  của mẹ con Lý Thông. Đây là việc của retrieval (Giai đoạn 5), không phải của bước sinh.
+- **Chưa đo:** AgenticRAG và AdaptiveRAG chưa chạy trên golden set. AgenticRAG cần
+  model có tool calling, còn `AgentLLM` chưa hỗ trợ.
 
 ## Giai đoạn 4: API & vận hành
 - Stream bất đồng bộ thật, retrieve một lần, gửi đúng sources đã dùng.
 - Langfuse trace cho từng bước (retrieve, rerank, grade, generate) kèm token và
   chi phí.
-- Ingest/OCR chạy nền; filter metadata trong `QueryRequest`.
+- Ingest/OCR chạy nền; filter metadata trong `QueryRequest`, kèm key cache theo
+  filter (dời từ Giai đoạn 3).
 
 ## Giai đoạn 5: Nâng cao (theo số đo)
 - BGE-M3 sparse/multi-vector; contextual retrieval cho corpus truyện.

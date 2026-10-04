@@ -13,34 +13,41 @@ Features:
 Architecture:
 START → generate_query_or_respond → [tool_calls?] → retrieve → grade_documents
             ↑                                        ↓              ↓
-            ←── rewrite_question ←── [irrelevant]    [relevant]
+            ←── rewrite_question ←── [irrelevant]    [relevant, or max_retries reached]
                                                                 ↓
                                                           generate_answer → END
+
+The loop is bounded twice: at most ``max_retries`` rewrites, and LangGraph's
+``recursion_limit`` as a safety net. Grading and the answer always use the
+user's question, not a rewritten search query.
 
 Usage:
     rag = AgenticRAG()
     rag.add_documents(["docs/"])
     answer = rag.query("Thạch Sanh là ai?")
+
+    # Or search an index another pipeline owns (hybrid, reranking, parents):
+    advanced = AdvancedRAG()
+    agent = AgenticRAG(search=advanced.retrieve, llm=advanced.llm)
 """
 
 import json
 import logging
 import re
-from typing import List, Optional, Dict, Any, Union, Literal
+from typing import Callable, List, Optional, Dict, Any, Union, Literal
 from pathlib import Path
 
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from langchain_core.documents import Document
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage
 from langchain_core.tools import tool
-from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
-
-class GradeDocuments(BaseModel):
-    """Document relevance grading schema."""
-    binary_score: str = Field(
-        description="Relevance score: 'yes' if relevant, or 'no' if not relevant"
-    )
+# Answer when the agent loop runs past its recursion limit.
+GAVE_UP_ANSWER = (
+    "Tôi không có đủ thông tin trong tài liệu để trả lời câu hỏi này. / "
+    "I don't have enough information in the documents to answer this question."
+)
 
 
 class AgenticRAG:
@@ -86,6 +93,9 @@ class AgenticRAG:
         chunk_overlap: int = 50,
         retrieval_k: int = 4,
         max_retries: int = 3,
+        recursion_limit: Optional[int] = None,
+        search: Optional[Callable[[str, int], List[Document]]] = None,
+        llm=None,
     ):
         """
         Initialize Agentic RAG.
@@ -100,12 +110,15 @@ class AgenticRAG:
             chunk_size: Chunk size
             chunk_overlap: Chunk overlap
             retrieval_k: Number of documents to retrieve
-            max_retries: Maximum query rewrite retries
+            max_retries: Maximum query rewrites before answering from what was found
+            recursion_limit: LangGraph step limit (default: enough for max_retries)
+            search: Shared ``search(query, k) -> documents`` over an index another
+                pipeline owns (e.g. ``AdvancedRAG.retrieve``); no embedding model
+                or vector store is loaded and add_documents() is not used
+            llm: Shared LLMManager instead of creating one
         """
         from src.core.document_loader import DocumentLoader
         from src.core.text_splitter import TextSplitter
-        from src.core.embeddings import EmbeddingsManager
-        from src.core.vector_store import VectorStoreManager
         from src.core.llm import LLMManager
 
         # Initialize components
@@ -114,22 +127,32 @@ class AgenticRAG:
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
         )
-        self.embeddings = EmbeddingsManager(
-            provider=embedding_provider,
-            model_name=embedding_model,
-        )
-        self.vector_store = VectorStoreManager(
-            provider=vector_store_provider,
-            embeddings=self.embeddings,
-        )
-        self.llm = LLMManager(
+        self._search_fn = search
+        self.embeddings = None
+        self.vector_store = None
+        if search is None:
+            from src.core.embeddings import EmbeddingsManager
+            from src.core.vector_store import VectorStoreManager
+
+            self.embeddings = EmbeddingsManager(
+                provider=embedding_provider,
+                model_name=embedding_model,
+            )
+            self.vector_store = VectorStoreManager(
+                provider=vector_store_provider,
+                embeddings=self.embeddings,
+            )
+        self.llm = llm or LLMManager(
             provider=llm_provider,
             model=llm_model,
             api_key=llm_api_key,
         )
 
         self.retrieval_k = retrieval_k
-        self.max_retries = max_retries
+        self.max_retries = max(0, max_retries)
+        # Each rewrite costs three graph steps (decide, retrieve, rewrite); the
+        # final round three more. The default leaves two steps of headroom.
+        self.recursion_limit = recursion_limit or 3 * (self.max_retries + 1) + 2
 
         # Track documents
         self._documents = []
@@ -138,6 +161,10 @@ class AgenticRAG:
         # Initialize graph
         self._graph = None
         self._retriever_tool = None
+        if search is not None:
+            # The shared index is searchable already.
+            self._create_retriever_tool()
+            self._build_graph()
 
     def add_documents(
         self,
@@ -154,6 +181,12 @@ class AgenticRAG:
         Returns:
             Number of chunks added
         """
+        if self._search_fn is not None:
+            raise RuntimeError(
+                "This AgenticRAG searches a shared index: add documents to the "
+                "pipeline that owns it."
+            )
+
         # Normalize to list
         if isinstance(sources, (str, Path)):
             sources = [sources]
@@ -185,15 +218,31 @@ class AgenticRAG:
 
         return len(chunks)
 
+    def _search(self, query: str) -> List[Document]:
+        if self._search_fn is not None:
+            return list(self._search_fn(query, self.retrieval_k))
+        return self.vector_store.similarity_search(query, k=self.retrieval_k)
+
+    @staticmethod
+    def _format_context(docs: List[Document]) -> str:
+        """Passages labelled [S1], [S2]... with their source, as AdvancedRAG does."""
+        parts = []
+        for i, doc in enumerate(docs, 1):
+            metadata = doc.metadata or {}
+            source = metadata.get("source") or metadata.get("file_name") or metadata.get("url") or f"Document {i}"
+            parts.append(f"[S{i}] Source: {source}\n{doc.page_content}")
+        return "\n\n".join(parts)
+
     def _create_retriever_tool(self):
         """Create retriever tool for the agent."""
-        retriever = self.vector_store.get_retriever(k=self.retrieval_k)
 
-        @tool
-        def retrieve_documents(query: str) -> str:
+        # The model reads the labelled text; the documents travel as the
+        # message artifact so callers keep their metadata for citations.
+        @tool(response_format="content_and_artifact")
+        def retrieve_documents(query: str):
             """Search and return relevant documents from the knowledge base."""
-            docs = retriever.invoke(query)
-            return "\n\n".join([doc.page_content for doc in docs])
+            docs = self._search(query)
+            return self._format_context(docs), docs
 
         self._retriever_tool = retrieve_documents
 
@@ -209,8 +258,12 @@ class AgenticRAG:
                 "Install it with: pip install langgraph"
             )
 
+        class AgentState(MessagesState):
+            question: str  # the user's question; rewrites never replace it
+            rewrites: int
+
         # Define workflow
-        workflow = StateGraph(MessagesState)
+        workflow = StateGraph(AgentState)
 
         # Add nodes
         workflow.add_node("generate_query_or_respond", self._generate_query_or_respond)
@@ -265,25 +318,24 @@ class AgenticRAG:
         return END
 
     def _get_question_from_state(self, state: Dict) -> str:
-        """Extract the original question from state messages.
-
-        Handles conversation history by finding the last HumanMessage
-        before the tool calls.
-        """
+        """The user's question (rewritten search queries are not questions)."""
+        if state.get("question"):
+            return state["question"]
         messages = state["messages"]
-        # Find the last human message (the question)
+        # States built without a question: the last human message.
         for msg in reversed(messages):
             if isinstance(msg, HumanMessage):
                 return msg.content
-        # Fallback to first message
         return messages[0].content
 
     def _grade_documents(self, state: Dict) -> Literal["generate_answer", "rewrite_question"]:
-        """Grade document relevance."""
+        """Grade document relevance; after max_retries rewrites, answer anyway."""
         question = self._get_question_from_state(state)
         context = state["messages"][-1].content
 
-        prompt = f"""You are a document relevance grader / Bạn là người đánh giá tài liệu.
+        relevant = False
+        if context.strip():
+            prompt = f"""You are a document relevance grader / Bạn là người đánh giá tài liệu.
 Determine if the retrieved documents are relevant to the question.
 Xác định tài liệu có liên quan đến câu hỏi không.
 
@@ -294,31 +346,47 @@ Retrieved documents / Tài liệu:
 
 Are these documents relevant? Answer only 'yes' or 'no'.
 Tài liệu có liên quan không? Chỉ trả lời 'yes' hoặc 'no'."""
+            # Plain text, not structured output: works with every provider.
+            reply = str(self.llm.generate(prompt)).strip().casefold()
+            relevant = reply.startswith(("yes", "có"))
 
-        response = self.llm.with_structured_output(GradeDocuments).invoke(
-            [{"role": "user", "content": prompt}]
-        )
-
-        if response.binary_score in ("yes", "có"):
+        if relevant:
             return "generate_answer"
-        else:
-            return "rewrite_question"
+        if state.get("rewrites", 0) >= self.max_retries:
+            # The answer prompt tells the model to say when the context lacks the answer.
+            logger.info(f"No relevant documents after {self.max_retries} rewrites; answering anyway")
+            return "generate_answer"
+        return "rewrite_question"
 
     def _rewrite_question(self, state: Dict) -> Dict:
-        """Rewrite question for better retrieval."""
+        """Rewrite the user's question into a search query not tried yet."""
         question = self._get_question_from_state(state)
+        tried = [
+            call["args"].get("query", "")
+            for msg in state["messages"] if isinstance(msg, AIMessage)
+            for call in (msg.tool_calls or [])
+        ]
+        tried_block = "\n".join(f"- {query}" for query in tried if query)
 
         prompt = f"""You are a search query optimizer / Bạn là người tối ưu hóa truy vấn.
 Transform this question into a better search query.
 Chuyển đổi câu hỏi thành truy vấn tốt hơn.
 
 Original question / Câu hỏi gốc: {question}
-
-Return ONLY the optimized search query, nothing else."""
+"""
+        if tried_block:
+            prompt += f"""
+These queries found nothing relevant; write a different one / Các truy vấn sau không tìm được gì, hãy viết truy vấn khác:
+{tried_block}
+"""
+        prompt += "\nReturn ONLY the optimized search query, nothing else."
 
         response = self.llm.generate(prompt)
 
-        return {"messages": [HumanMessage(content=response)]}
+        return {
+            "messages": [HumanMessage(content=response)],
+            "rewrites": state.get("rewrites", 0) + 1,
+        }
 
     def _generate_answer(self, state: Dict) -> Dict:
         """Generate answer from context."""
@@ -334,6 +402,7 @@ Rules / Quy tắc:
 2. If the context doesn't contain the answer, say so / Nếu không đủ thông tin, nói rõ
 3. Be concise and accurate / Ngắn gọn và chính xác
 4. Answer in the same language as the question / Trả lời bằng ngôn ngữ của câu hỏi
+5. Cite the sources you use as [S1], [S2] / Trích nguồn đã dùng dạng [S1], [S2]
 
 Context / Ngữ cảnh:
 {context}
@@ -343,6 +412,31 @@ Question / Câu hỏi: {question}"""
         response = self.llm.generate(prompt)
 
         return {"messages": [AIMessage(content=response)]}
+
+    def _initial_state(
+        self,
+        question: str,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+    ) -> Dict[str, Any]:
+        if self._graph is None:
+            raise RuntimeError(
+                "No documents loaded. Call add_documents() first."
+            )
+
+        messages = []
+        for msg in conversation_history or []:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+
+            if role == "system":
+                messages.append(SystemMessage(content=content))
+            elif role == "assistant":
+                messages.append(AIMessage(content=content))
+            else:
+                messages.append(HumanMessage(content=content))
+        messages.append(HumanMessage(content=question))
+
+        return {"messages": messages, "question": question, "rewrites": 0}
 
     def query(
         self,
@@ -360,37 +454,7 @@ Question / Câu hỏi: {question}"""
         Returns:
             Answer string
         """
-        if self._graph is None:
-            raise RuntimeError(
-                "No documents loaded. Call add_documents() first."
-            )
-
-        # Build messages
-        messages = []
-
-        # Add conversation history
-        if conversation_history:
-            for msg in conversation_history:
-                role = msg.get("role", "user")
-                content = msg.get("content", "")
-
-                if role == "system":
-                    messages.append(SystemMessage(content=content))
-                elif role == "assistant":
-                    messages.append(AIMessage(content=content))
-                else:
-                    messages.append(HumanMessage(content=content))
-
-        # Add current question
-        messages.append(HumanMessage(content=question))
-
-        # Run graph
-        result = self._graph.invoke({"messages": messages})
-
-        # Extract answer
-        answer = result["messages"][-1].content
-
-        return answer
+        return self.query_with_trace(question, conversation_history)["answer"]
 
     def query_with_trace(
         self,
@@ -406,54 +470,58 @@ Question / Câu hỏi: {question}"""
             conversation_history: Optional conversation history
 
         Returns:
-            Dict with answer and execution trace
+            Dict with the answer, the execution trace, ``sources`` (the
+            passages of the last retrieval, labelled as in the answer's [S#]
+            citations) and ``rewrites``
         """
-        if self._graph is None:
-            raise RuntimeError(
-                "No documents loaded. Call add_documents() first."
-            )
+        from langgraph.errors import GraphRecursionError
 
-        # Build messages
-        messages = []
-
-        if conversation_history:
-            for msg in conversation_history:
-                role = msg.get("role", "user")
-                content = msg.get("content", "")
-
-                if role == "system":
-                    messages.append(SystemMessage(content=content))
-                elif role == "assistant":
-                    messages.append(AIMessage(content=content))
-                else:
-                    messages.append(HumanMessage(content=content))
-
-        messages.append(HumanMessage(content=question))
-
-        # Run graph with tracing
+        state = self._initial_state(question, conversation_history)
         trace = []
-        result = None
+        answer = None
+        docs: List[Document] = []
+        rewrites = 0
 
-        for event in self._graph.stream({"messages": messages}):
-            for node, output in event.items():
-                trace.append({
-                    "node": node,
-                    "output": output,
-                })
-            result = event
-
-        # Extract answer from final result
-        if result:
-            last_output = list(result.values())[-1]
-            answer = last_output["messages"][-1].content
-        else:
-            answer = "No answer generated"
+        try:
+            for event in self._graph.stream(state, config={"recursion_limit": self.recursion_limit}):
+                for node, output in event.items():
+                    trace.append({
+                        "node": node,
+                        "output": output,
+                    })
+                    output = output or {}
+                    rewrites = output.get("rewrites", rewrites)
+                    messages = output.get("messages") or []
+                    for message in messages:
+                        if isinstance(message, ToolMessage):
+                            docs = list(message.artifact or [])
+                    if messages:
+                        answer = messages[-1].content
+        except GraphRecursionError:
+            logger.warning(f"Agent loop hit recursion_limit={self.recursion_limit}; giving up")
+            answer = GAVE_UP_ANSWER
 
         return {
-            "answer": answer,
+            "answer": answer if answer is not None else GAVE_UP_ANSWER,
             "trace": trace,
             "question": question,
+            "sources": self._format_sources(docs),
+            "rewrites": rewrites,
         }
+
+    @staticmethod
+    def _format_sources(docs: List[Document]) -> List[Dict[str, Any]]:
+        sources = []
+        for i, doc in enumerate(docs, 1):
+            metadata = {k: v for k, v in (doc.metadata or {}).items() if k != "parent_text"}
+            content = doc.page_content
+            sources.append({
+                "source_id": f"S{i}",
+                "source": metadata.get("source") or metadata.get("file_name") or metadata.get("url") or f"Document {i}",
+                "content": content[:300] + "..." if len(content) > 300 else content,
+                "metadata": metadata,
+            })
+        return sources
 
     def check_hallucination(self, context: str, answer: str) -> Dict[str, Any]:
         """
