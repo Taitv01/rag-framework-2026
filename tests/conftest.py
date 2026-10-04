@@ -33,3 +33,30 @@ for _name in list(os.environ):
 
 os.environ["DEFAULT_VECTOR_STORE"] = "faiss"
 os.environ["PERSIST_DIRECTORY"] = tempfile.mkdtemp(prefix="rag-tests-")
+
+
+# Imported after the environment is cleaned.
+import pytest  # noqa: E402
+
+from tests.fakes import STORIES, ScriptedChat, default_reply, fake_embeddings_manager  # noqa: E402
+
+
+@pytest.fixture
+def make_rag(monkeypatch, tmp_path):
+    """AdvancedRAG over two short stories, fake embeddings, a scripted chat model."""
+    def build(reply=default_reply, **kwargs):
+        monkeypatch.setattr("src.rag.advanced_rag.EmbeddingsManager", lambda **_: fake_embeddings_manager())
+        from src.rag.advanced_rag import AdvancedRAG
+
+        corpus = tmp_path / "docs"
+        corpus.mkdir(exist_ok=True)
+        for name, text in STORIES.items():
+            (corpus / name).write_text(text, encoding="utf-8")
+        rag = AdvancedRAG(vector_store_provider="faiss", chunk_size=160, chunk_overlap=20,
+                          retrieval_k=2, use_reranking=False, **kwargs)
+        rag.add_documents(corpus)
+        chat = ScriptedChat(reply)
+        rag.llm._llm = chat
+        return rag, chat
+
+    return build

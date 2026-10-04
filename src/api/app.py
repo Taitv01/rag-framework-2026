@@ -46,7 +46,7 @@ if sys.platform == "win32":
         except (AttributeError, OSError, ValueError):
             pass
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Query, Request
+from fastapi import Body, FastAPI, HTTPException, UploadFile, File, Form, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -184,11 +184,28 @@ def _validate_remote_media_url(url: str) -> str:
 # ============================================================================
 
 class QueryRequest(BaseModel):
-    """Request model for query endpoint."""
-    question: str = Field(..., description="Question to ask")
-    k: Optional[int] = Field(default=5, description="Number of documents to retrieve")
-    transform_query: Optional[bool] = Field(default=True, description="Transform query for better retrieval")
-    grade_documents: Optional[bool] = Field(default=True, description="Grade document relevance")
+    """Request model for query endpoint.
+
+    Unset options follow the pipeline's configuration, which the fairy-tale
+    benchmark tuned (stage 3): forcing them costs extra LLM calls.
+    """
+    question: str = Field(..., min_length=1, description="Question to ask")
+    k: Optional[int] = Field(
+        default=None, ge=1, le=50,
+        description="Number of passages given to the LLM (default: RETRIEVAL_K)",
+    )
+    transform_query: Optional[bool] = Field(
+        default=None,
+        description="Rewrite the query before retrieval (default: only queries typed without diacritics)",
+    )
+    grade_documents: Optional[bool] = Field(
+        default=None,
+        description="Grade passage relevance with one LLM call (default: the pipeline's grading setting)",
+    )
+    filter: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description='Metadata filter, e.g. {"file_name": "tam_cam.md"}; a list value matches any of its items',
+    )
 
 
 class QueryResponse(BaseModel):
@@ -197,6 +214,7 @@ class QueryResponse(BaseModel):
     sources: List[Dict[str, Any]] = Field(default=[], description="Source documents")
     citations: List[Dict[str, Any]] = Field(default=[], description="Citation-ready source documents")
     transformed_query: Optional[str] = Field(default=None, description="Transformed query")
+    abstained: bool = Field(default=False, description="True when the context had no answer")
 
 
 class MediaURLItem(BaseModel):
@@ -542,7 +560,7 @@ def create_app(
         """
         trace = app.state.tracer.start_trace(
             name="query_rag",
-            input_data={"question": request.question, "k": request.k},
+            input_data={"question": request.question, "k": request.k, "filter": request.filter},
         )
         try:
             if app.state.rag_type == "advanced":
@@ -551,17 +569,20 @@ def create_app(
                     k=request.k,
                     transform_query=request.transform_query,
                     grade_documents=request.grade_documents,
+                    filter=request.filter,
                 )
                 res = QueryResponse(
                     answer=result["answer"],
                     sources=result["relevant_docs"],
                     citations=result.get("citations", result["relevant_docs"]),
                     transformed_query=result.get("transformed_query"),
+                    abstained=bool(result.get("abstained")),
                 )
             else:
                 result = app.state.rag.query_with_sources(
                     question=request.question,
                     k=request.k,
+                    filter=request.filter,
                 )
                 citations = [
                     {
@@ -1007,11 +1028,15 @@ def create_app(
     @app.post("/search", tags=["RAG"])
     def search_documents(
         query: str = Query(..., description="Search query"),
-        k: int = Query(default=5, description="Number of results"),
+        k: int = Query(default=5, ge=1, le=50, description="Number of results"),
+        filter: Optional[Dict[str, Any]] = Body(
+            default=None, embed=True,
+            description='Optional JSON body {"filter": {...}}: metadata filter',
+        ),
     ):
         """Search for relevant documents without generating an answer."""
         try:
-            docs = app.state.rag.retrieve(query, k=k)
+            docs = app.state.rag.retrieve(query, k=k, filter=filter)
             results = [
                 SearchResult(content=doc.page_content, metadata=doc.metadata)
                 for doc in docs

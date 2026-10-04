@@ -1,63 +1,6 @@
 """One generation pipeline for query, query_detailed and stream (no models, scripted LLM)."""
 
-from types import SimpleNamespace
-
-import pytest
 from langchain_core.documents import Document
-
-from tests.fakes import fake_embeddings_manager
-
-STORIES = {
-    "thach_sanh.md": "# Thạch Sanh\n\nThạch Sanh sống dưới gốc đa, gia tài chỉ có một lưỡi búa của cha. "
-                     "Chàng dùng búa chặt đầu chằn tinh, xác nó là con trăn khổng lồ.",
-    "tam_cam.md": "# Tấm Cám\n\nBụt bảo Tấm thả cá bống xuống giếng và gọi bống lên ăn cơm. "
-                  "Mẹ con Cám bắt bống làm thịt.",
-}
-
-
-class ScriptedChat:
-    """Chat model whose reply depends on the prompt; records every call."""
-
-    def __init__(self, reply):
-        self.reply = reply
-        self.prompts = []
-
-    def invoke(self, messages, **_kwargs):
-        prompt = messages[-1].content
-        self.prompts.append(prompt)
-        return SimpleNamespace(content=self.reply(prompt))
-
-    def stream(self, messages, **kwargs):
-        for word in self.invoke(messages).content.split(" "):
-            yield SimpleNamespace(content=word + " ")
-
-
-def default_reply(prompt):
-    if "search query optimizer" in prompt:
-        return "Thạch Sanh giết chằn tinh bằng gì"
-    if "document relevance grader" in prompt:
-        return "S1"
-    return "Thạch Sanh dùng búa [S1]."
-
-
-@pytest.fixture
-def make_rag(monkeypatch, tmp_path):
-    def build(reply=default_reply, **kwargs):
-        monkeypatch.setattr("src.rag.advanced_rag.EmbeddingsManager", lambda **_: fake_embeddings_manager())
-        from src.rag.advanced_rag import AdvancedRAG
-
-        corpus = tmp_path / "docs"
-        corpus.mkdir(exist_ok=True)
-        for name, text in STORIES.items():
-            (corpus / name).write_text(text, encoding="utf-8")
-        rag = AdvancedRAG(vector_store_provider="faiss", chunk_size=160, chunk_overlap=20,
-                          retrieval_k=2, use_reranking=False, **kwargs)
-        rag.add_documents(corpus)
-        chat = ScriptedChat(reply)
-        rag.llm._llm = chat
-        return rag, chat
-
-    return build
 
 
 def test_default_pipeline_calls_the_llm_once(make_rag):

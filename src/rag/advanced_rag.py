@@ -33,6 +33,7 @@ Usage:
 """
 
 import hashlib
+import json
 import logging
 import re
 from dataclasses import dataclass, field
@@ -74,6 +75,7 @@ class PreparedQuery:
     answer: Optional[str] = None  # set when no LLM call is needed (cache hit, no context)
     cache_hit: bool = False
     abstained: bool = False
+    cache_scope: Optional[str] = None  # cached answers are only reused in the same scope
 
 
 class AdvancedRAG:
@@ -705,6 +707,7 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         transform_query: Optional[bool] = None,
         grade_documents: Optional[bool] = None,
         use_reranking: Optional[bool] = None,
+        filter: Optional[Dict[str, Any]] = None,
         **kwargs
     ) -> str:
         """
@@ -721,11 +724,13 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
             grade_documents: Grade relevance (None: follow ``grading``;
                 True with grading="none" means one batched LLM call)
             use_reranking: Override reranking for this query (None: as configured)
+            filter: Metadata filter, e.g. ``{"file_name": "tam_cam.md"}``; a list
+                value matches any of its items
 
         Returns:
             Answer string
         """
-        prepared = self._prepare(question, k, transform_query, grade_documents, use_reranking)
+        prepared = self._prepare(question, k, transform_query, grade_documents, use_reranking, filter)
         if prepared.answer is not None:
             return prepared.answer
         answer = self.llm.generate(prepared.prompt, **kwargs)
@@ -738,18 +743,26 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         transform_query: Optional[bool] = None,
         grade_documents: Optional[bool] = None,
         use_reranking: Optional[bool] = None,
+        filter: Optional[Dict[str, Any]] = None,
     ) -> PreparedQuery:
         """Everything before generation; sets ``answer`` when no LLM call is needed."""
         k = k or self.retrieval_k
+        # Same question, other filter or k: another answer.
+        scope = json.dumps(
+            {"k": k, "filter": filter or None, "use_reranking": use_reranking},
+            sort_keys=True, ensure_ascii=False, default=str,
+        )
 
-        cached = self._cache_get(question)
+        cached = self._cache_get(question, scope)
         if cached is not None:
-            return PreparedQuery(question, question, answer=cached, cache_hit=True)
+            return PreparedQuery(question, question, answer=cached, cache_hit=True, cache_scope=scope)
 
         search_query = self._rewrite_for_search(question, transform_query)
-        retrieved = self._retrieve(search_query, k=k, use_reranking=use_reranking)
+        retrieved = self._retrieve(search_query, k=k, use_reranking=use_reranking, filter=filter)
         docs = self._grade(question, retrieved, grade_documents)
-        prepared = PreparedQuery(question, search_query, retrieved=retrieved, docs=docs)
+        prepared = PreparedQuery(
+            question, search_query, retrieved=retrieved, docs=docs, cache_scope=scope,
+        )
 
         if self._web_searcher and self._is_retrieval_quality_poor(docs, question):
             logger.info("Retrieval quality poor, falling back to web search")
@@ -797,14 +810,14 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
 
         # Web results change quickly: do not cache answers built on them.
         if not prepared.web_docs:
-            self._cache_put(prepared.question, answer)
+            self._cache_put(prepared.question, answer, prepared.cache_scope)
         return answer
 
-    def _cache_get(self, question: str) -> Optional[str]:
+    def _cache_get(self, question: str, scope: Optional[str] = None) -> Optional[str]:
         if not self._cache:
             return None
         try:
-            cached = self._cache.get(self.embeddings.embed_query(question))
+            cached = self._cache.get(self.embeddings.embed_query(question), scope=scope)
         except Exception as e:
             logger.debug(f"Cache lookup failed: {e}")
             return None
@@ -812,11 +825,11 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
             logger.debug("Semantic cache hit")
         return cached
 
-    def _cache_put(self, question: str, answer: str) -> None:
+    def _cache_put(self, question: str, answer: str, scope: Optional[str] = None) -> None:
         if not self._cache:
             return
         try:
-            self._cache.put(self.embeddings.embed_query(question), question, answer)
+            self._cache.put(self.embeddings.embed_query(question), question, answer, scope=scope)
         except Exception as e:
             logger.debug(f"Cache store failed: {e}")
 
@@ -870,7 +883,13 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         # with docs, at least some were deemed relevant
         return False
 
-    def _retrieve(self, query: str, k: int = 5, use_reranking: Optional[bool] = None) -> List[Document]:
+    def _retrieve(
+        self,
+        query: str,
+        k: int = 5,
+        use_reranking: Optional[bool] = None,
+        filter: Optional[Dict[str, Any]] = None,
+    ) -> List[Document]:
         """
         Internal retrieval method supporting multiple strategies.
 
@@ -880,11 +899,11 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         3. Standard search
         """
         if self._retriever is None:
-            return self.vector_store.similarity_search(query, k=k)
+            return self.vector_store.similarity_search(query, k=k, filter=filter)
 
         # HyDE: generate hypothetical answer, search with that
         if self.use_hyde:
-            docs = self._retriever.hyde_search(query, k=k, llm=self.llm)
+            docs = self._retriever.hyde_search(query, k=k, llm=self.llm, filter=filter)
             if docs:
                 return self._expand_to_parents(docs)[:k] if self.use_parent_context else docs
 
@@ -893,12 +912,13 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
             docs = self._retriever.multi_query_rrf_search(
                 query, k=k, llm=self.llm,
                 num_queries=self.num_query_variations,
+                filter=filter,
             )
             if docs:
                 return self._expand_to_parents(docs)[:k] if self.use_parent_context else docs
 
         # Standard search (hybrid + reranking)
-        return self._search(query, k=k, use_reranking=use_reranking)
+        return self._search(query, k=k, use_reranking=use_reranking, filter=filter)
 
     def _search(
         self,
@@ -906,16 +926,18 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         k: int,
         use_hybrid: Optional[bool] = None,
         use_reranking: Optional[bool] = None,
+        filter: Optional[Dict[str, Any]] = None,
     ) -> List[Document]:
         """Hybrid/rerank search; with parent context, children are searched and parents returned."""
         if not self.use_parent_context:
             return self._retriever.search(
-                query, k=k, use_hybrid=use_hybrid, use_reranking=use_reranking
+                query, k=k, use_hybrid=use_hybrid, use_reranking=use_reranking, filter=filter
             )
 
         reranking = self._retriever.config.use_reranking if use_reranking is None else use_reranking
         children = self._retriever.search(
-            query, k=k * self.parent_fanout, use_hybrid=use_hybrid, use_reranking=False
+            query, k=k * self.parent_fanout, use_hybrid=use_hybrid, use_reranking=False,
+            filter=filter,
         )
         parents = self._expand_to_parents(children)
         if reranking:
@@ -930,6 +952,7 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         transform_query: Optional[bool] = None,
         grade_documents: Optional[bool] = None,
         use_reranking: Optional[bool] = None,
+        filter: Optional[Dict[str, Any]] = None,
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -941,13 +964,15 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
             transform_query: Rewrite the query (None: follow ``query_rewrite``)
             grade_documents: Grade relevance (None: follow ``grading``)
             use_reranking: Override reranking for this query (None: as configured)
+            filter: Metadata filter, e.g. ``{"file_name": "tam_cam.md"}``; a list
+                value matches any of its items
 
         Returns:
             Dict with the answer, the search query, ``relevant_docs`` (every
             source given to the LLM) and ``citations`` (the sources the answer
             actually cites; all of them when it cites none)
         """
-        prepared = self._prepare(question, k, transform_query, grade_documents, use_reranking)
+        prepared = self._prepare(question, k, transform_query, grade_documents, use_reranking, filter)
         if prepared.answer is None:
             answer = self._finish(prepared, self.llm.generate(prepared.prompt, **kwargs))
         else:
@@ -1113,7 +1138,8 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         query: str,
         k: Optional[int] = None,
         use_hybrid: Optional[bool] = None,
-        use_reranking: Optional[bool] = None
+        use_reranking: Optional[bool] = None,
+        filter: Optional[Dict[str, Any]] = None,
     ) -> List[Document]:
         """
         Retrieve documents with specific strategy.
@@ -1123,6 +1149,7 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
             k: Number of results
             use_hybrid: Override hybrid setting
             use_reranking: Override reranking setting
+            filter: Metadata filter (equality; a list value matches any item)
 
         Returns:
             List of relevant documents
@@ -1130,9 +1157,11 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         k = k or self.retrieval_k
 
         if self._retriever is None:
-            return self.vector_store.similarity_search(query, k=k)
+            return self.vector_store.similarity_search(query, k=k, filter=filter)
 
-        return self._search(query, k=k, use_hybrid=use_hybrid, use_reranking=use_reranking)
+        return self._search(
+            query, k=k, use_hybrid=use_hybrid, use_reranking=use_reranking, filter=filter
+        )
 
     @property
     def num_documents(self) -> int:
@@ -1182,6 +1211,7 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         transform_query: Optional[bool] = None,
         grade_documents: Optional[bool] = None,
         use_reranking: Optional[bool] = None,
+        filter: Optional[Dict[str, Any]] = None,
         **kwargs
     ) -> Generator[str, None, None]:
         """
@@ -1196,11 +1226,13 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
             transform_query: Rewrite the query (None: follow ``query_rewrite``)
             grade_documents: Grade relevance (None: follow ``grading``)
             use_reranking: Override reranking for this query (None: as configured)
+            filter: Metadata filter, e.g. ``{"file_name": "tam_cam.md"}``; a list
+                value matches any of its items
 
         Yields:
             Response tokens
         """
-        prepared = self._prepare(question, k, transform_query, grade_documents, use_reranking)
+        prepared = self._prepare(question, k, transform_query, grade_documents, use_reranking, filter)
         if prepared.answer is not None:
             yield prepared.answer
             return

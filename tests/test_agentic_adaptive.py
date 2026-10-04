@@ -144,9 +144,9 @@ def adaptive(monkeypatch, tmp_path):
     reranking = []
     search = rag._advanced_rag._search
 
-    def spy(query, k, use_hybrid=None, use_reranking=None):
+    def spy(query, k, use_reranking=None, **kwargs):
         reranking.append(use_reranking)
-        return search(query, k, use_hybrid=use_hybrid, use_reranking=use_reranking)
+        return search(query, k, use_reranking=use_reranking, **kwargs)
 
     rag._advanced_rag._search = spy
     return rag, chat, chunks, built, reranking

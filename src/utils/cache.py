@@ -365,16 +365,18 @@ class SemanticCache:
         self.max_size = max_size
         self.ttl = ttl
 
-        # Store: {key: (query_text, answer, embedding, timestamp)}
-        self._cache: Dict[str, Tuple[str, Any, List[float], float]] = {}
+        # Store: {key: (query_text, answer, embedding, timestamp, scope)}
+        self._cache: Dict[str, Tuple[str, Any, List[float], float, Optional[str]]] = {}
         self._access_order: List[str] = []  # For LRU eviction
 
-    def get(self, query_embedding: List[float]) -> Optional[Any]:
+    def get(self, query_embedding: List[float], scope: Optional[str] = None) -> Optional[Any]:
         """
         Find cached answer for semantically similar query.
 
         Args:
             query_embedding: Embedding vector of the new query
+            scope: Only entries stored with the same scope match (e.g. the
+                metadata filter and k the answer was built with)
 
         Returns:
             Cached answer if similar query found, None otherwise
@@ -386,10 +388,12 @@ class SemanticCache:
         best_key = None
         expired_keys = []
 
-        for key, (query_text, answer, cached_embedding, timestamp) in self._cache.items():
+        for key, (query_text, answer, cached_embedding, timestamp, entry_scope) in self._cache.items():
             # Check TTL
             if time.time() - timestamp > self.ttl:
                 expired_keys.append(key)
+                continue
+            if entry_scope != scope:
                 continue
 
             # Compute cosine similarity
@@ -417,13 +421,14 @@ class SemanticCache:
         return None
 
     def get_with_score(
-        self, query_embedding: List[float]
+        self, query_embedding: List[float], scope: Optional[str] = None
     ) -> Optional[Tuple[Any, float]]:
         """
         Find cached answer and return with similarity score.
 
         Args:
             query_embedding: Embedding vector of the new query
+            scope: Only entries stored with the same scope match
 
         Returns:
             Tuple of (answer, similarity_score) if found, None otherwise
@@ -435,9 +440,11 @@ class SemanticCache:
         best_key = None
         expired_keys = []
 
-        for key, (query_text, answer, cached_embedding, timestamp) in self._cache.items():
+        for key, (query_text, answer, cached_embedding, timestamp, entry_scope) in self._cache.items():
             if time.time() - timestamp > self.ttl:
                 expired_keys.append(key)
+                continue
+            if entry_scope != scope:
                 continue
 
             score = self._cosine_similarity(query_embedding, cached_embedding)
@@ -462,6 +469,7 @@ class SemanticCache:
         query_embedding: List[float],
         query_text: str,
         answer: Any,
+        scope: Optional[str] = None,
     ) -> None:
         """
         Cache a query-answer pair.
@@ -470,13 +478,14 @@ class SemanticCache:
             query_embedding: Embedding vector of the query
             query_text: Original query text (for debugging)
             answer: The answer to cache
+            scope: Lookups must pass the same scope to reuse this answer
         """
+        key = hashlib.md5(f"{scope}\n{query_text}".encode()).hexdigest()
         # Evict if at capacity
-        while len(self._cache) >= self.max_size:
+        while key not in self._cache and len(self._cache) >= self.max_size:
             self._evict_lru()
 
-        key = hashlib.md5(query_text.encode()).hexdigest()
-        self._cache[key] = (query_text, answer, query_embedding, time.time())
+        self._cache[key] = (query_text, answer, query_embedding, time.time(), scope)
 
         if key not in self._access_order:
             self._access_order.append(key)

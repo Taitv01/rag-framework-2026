@@ -276,17 +276,19 @@ Question: {question}"""
     def retrieve(
         self,
         query: str,
-        k: Optional[int] = None
+        k: Optional[int] = None,
+        filter: Optional[Dict[str, Any]] = None,
     ) -> List[Document]:
         k = k or self.retrieval_k
-        return self.vector_store.similarity_search(query, k=k)
+        return self.vector_store.similarity_search(query, k=k, filter=filter)
 
     def query(
         self,
         question: str,
-        k: Optional[int] = None
+        k: Optional[int] = None,
+        filter: Optional[Dict[str, Any]] = None,
     ) -> str:
-        docs = self.retrieve(question, k=k)
+        docs = self.retrieve(question, k=k, filter=filter)
         context = "\n\n".join([doc.page_content for doc in docs])
         prompt = self.system_prompt.format(context=context, question=question)
         response = self.llm.generate(prompt)
@@ -295,9 +297,10 @@ Question: {question}"""
     def query_with_sources(
         self,
         question: str,
-        k: Optional[int] = None
+        k: Optional[int] = None,
+        filter: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        docs = self.retrieve(question, k=k)
+        docs = self.retrieve(question, k=k, filter=filter)
         context = "\n\n".join([doc.page_content for doc in docs])
         prompt = self.system_prompt.format(context=context, question=question)
         answer = self.llm.generate(prompt)
