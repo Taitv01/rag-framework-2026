@@ -79,3 +79,35 @@ def test_anthropic_base_url_is_forwarded(monkeypatch):
     assert llm.kwargs["model"] == "claude-sonnet-4-20250514"
     assert llm.kwargs["api_key"] == "test-key"
     assert llm.kwargs["anthropic_api_url"] == "https://anthropic-proxy.example"
+
+
+def test_temperature_only_for_claude_models_that_accept_it(monkeypatch):
+    import sys
+
+    from src.core.llm import LLMManager, anthropic_accepts_sampling
+
+    monkeypatch.setitem(sys.modules, "langchain_anthropic", SimpleNamespace(ChatAnthropic=FakeChatModel))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    # Current models reject sampling parameters with HTTP 400.
+    current = LLMManager(provider="anthropic", model="claude-opus-5-5", temperature=0.2)._create_anthropic_llm()
+    assert "temperature" not in current.kwargs
+    older = LLMManager(provider="anthropic", model="claude-haiku-4-5", temperature=0.2)._create_anthropic_llm()
+    assert older.kwargs["temperature"] == 0.2
+
+    assert not any(anthropic_accepts_sampling(m) for m in (
+        "claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1", "claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-5",
+    ))
+    assert all(anthropic_accepts_sampling(m) for m in (
+        "claude-haiku-4-5", "claude-sonnet-4-6", "claude-opus-4-6", "claude-sonnet-4-20250514", "claude-3-haiku-20240307",
+    ))
+
+
+def test_catalog_knows_current_claude_limits():
+    from src.core.llm import LLMManager
+
+    opus = LLMManager(provider="anthropic", model="claude-opus-5-5")
+    assert (opus.get_context_window(), opus.get_max_output_tokens()) == (1_000_000, 128_000)
+    haiku = LLMManager(provider="anthropic", model="claude-haiku-4-5")
+    assert (haiku.get_context_window(), haiku.get_max_output_tokens()) == (200_000, 64_000)
+    assert LLMManager(provider="anthropic").config.model == "claude-opus-5-5"

@@ -37,9 +37,9 @@ def test_model_defaults_follow_provider(monkeypatch):
 
     config = Config()
 
-    assert config.get_llm_config()["model"] == "claude-sonnet-4-20250514"
+    assert config.get_llm_config()["model"] == "claude-opus-5-5"
     assert config.get_embedding_config()["model"] == "BAAI/bge-m3"
-    assert LLMManager(provider="anthropic").config.model == "claude-sonnet-4-20250514"
+    assert LLMManager(provider="anthropic").config.model == "claude-opus-5-5"
     assert EmbeddingsManager(provider="openai").config.model_name == "text-embedding-3-small"
 
 

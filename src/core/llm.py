@@ -14,7 +14,7 @@ Usage:
     llm = LLMManager(provider="openai", model="gpt-4o")
 
     # Anthropic
-    llm = LLMManager(provider="anthropic", model="claude-sonnet-4-20250514")
+    llm = LLMManager(provider="anthropic", model="claude-opus-5-5")
 
     # Generate
     response = llm.generate("What is Python?")
@@ -32,6 +32,26 @@ from src.monitoring.tracing import step, usage_details
 from src.utils.config import default_llm_model, load_environment
 
 logger = logging.getLogger(__name__)
+
+
+# Claude models that still take temperature/top_p/top_k. Newer ones (Claude
+# Opus 4.7 and later, Sonnet 5 and later, Fable) reject sampling parameters
+# with HTTP 400; their behaviour is steered with effort instead.
+_ANTHROPIC_SAMPLING_PREFIXES = (
+    "claude-3",
+    "claude-haiku-4",
+    "claude-sonnet-4",
+    "claude-opus-4-0",
+    "claude-opus-4-1",
+    "claude-opus-4-5",
+    "claude-opus-4-6",
+    "claude-opus-4-2025",
+)
+
+
+def anthropic_accepts_sampling(model: str) -> bool:
+    """Whether a Claude model accepts a temperature (unknown, newer models do not)."""
+    return (model or "").lower().startswith(_ANTHROPIC_SAMPLING_PREFIXES)
 
 
 @dataclass
@@ -58,7 +78,7 @@ class LLMManager:
         llm = LLMManager(provider="openai", model="gpt-4o")
 
         # Anthropic
-        llm = LLMManager(provider="anthropic", model="claude-sonnet-4-20250514")
+        llm = LLMManager(provider="anthropic", model="claude-opus-5-5")
 
         # Generate response
         response = llm.generate("What is Python?")
@@ -94,18 +114,28 @@ class LLMManager:
                 "context_window": 16385,
             },
         },
+        # Current Claude models (Anthropic model catalog, 2026-09). Claude 3.x is
+        # retired and Claude Sonnet 4 / Opus 4 are deprecated.
         "anthropic": {
-            "claude-sonnet-4-20250514": {
-                "description": "Most capable Claude model",
-                "context_window": 200000,
+            "claude-opus-5-5": {
+                "description": "Current Opus: complex reasoning and long agentic work",
+                "context_window": 1000000,
+                "max_output_tokens": 128000,
             },
-            "claude-3-5-sonnet-20241022": {
-                "description": "Previous generation Claude",
-                "context_window": 200000,
+            "claude-sonnet-5-5": {
+                "description": "Current Sonnet: speed and capability for everyday work",
+                "context_window": 1000000,
+                "max_output_tokens": 128000,
             },
-            "claude-3-haiku-20240307": {
-                "description": "Fast, affordable Claude",
+            "claude-haiku-4-5": {
+                "description": "Fastest, most affordable Claude",
                 "context_window": 200000,
+                "max_output_tokens": 64000,
+            },
+            "claude-sonnet-4-6": {
+                "description": "Previous-generation Sonnet",
+                "context_window": 1000000,
+                "max_output_tokens": 128000,
             },
         },
     }
@@ -226,9 +256,10 @@ class LLMManager:
         kwargs = {
             "model": self.config.model,
             "api_key": api_key,
-            "temperature": self.config.temperature,
             "streaming": self.config.streaming,
         }
+        if anthropic_accepts_sampling(self.config.model):
+            kwargs["temperature"] = self.config.temperature
 
         base_url = os.getenv("ANTHROPIC_BASE_URL")
         if base_url:
@@ -515,6 +546,10 @@ class LLMManager:
         if self.config.max_tokens:
             return self.config.max_tokens
 
+        model_info = self.POPULAR_MODELS.get(self.config.provider, {}).get(self.config.model, {})
+        if "max_output_tokens" in model_info:
+            return model_info["max_output_tokens"]
+
         # Default output token limits by provider
         provider_defaults = {
             "openai": 4096,
@@ -564,7 +599,7 @@ def get_openai_llm(
 
 
 def get_anthropic_llm(
-    model: str = "claude-sonnet-4-20250514",
+    model: str = "claude-opus-5-5",
     api_key: Optional[str] = None,
     temperature: float = 0.7
 ) -> LLMManager:

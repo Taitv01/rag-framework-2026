@@ -30,7 +30,7 @@ from dotenv import load_dotenv
 # uses them when DEFAULT_LLM_MODEL / DEFAULT_EMBEDDING_MODEL are unset.
 DEFAULT_LLM_MODELS = {
     "openai": "gpt-4o-mini",
-    "anthropic": "claude-sonnet-4-20250514",
+    "anthropic": "claude-opus-5-5",
     "ollama": "llama3",
 }
 DEFAULT_EMBEDDING_MODELS = {

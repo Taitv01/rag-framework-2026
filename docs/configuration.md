@@ -28,7 +28,7 @@ DEFAULT_TEMPERATURE=0.7
 `DEFAULT_LLM_MODEL` and `DEFAULT_EMBEDDING_MODEL` are optional. When unset,
 the model is chosen per provider from one table in `src/utils/config.py`
 (`DEFAULT_LLM_MODELS` / `DEFAULT_EMBEDDING_MODELS`): `gpt-4o-mini` for OpenAI,
-`claude-sonnet-4-20250514` for Anthropic, `llama3` for Ollama, and `BAAI/bge-m3`
+`claude-opus-5-5` for Anthropic, `llama3` for Ollama, and `BAAI/bge-m3`
 for HuggingFace embeddings. Pipelines (`NaiveRAG`, `AdvancedRAG`, ...) use the
 same table when `llm_model` / `embedding_model` are not passed.
 
@@ -228,11 +228,14 @@ llm = LLMManager(
 ```python
 llm = LLMManager(
     provider="anthropic",
-    model="claude-sonnet-4-20250514",  # or claude-3-5-sonnet, claude-3-haiku
+    model="claude-opus-5-5",  # or claude-sonnet-5-5, claude-haiku-4-5
     api_key="sk-ant-...",
-    temperature=0.7,
 )
 ```
+
+Current Claude models (Opus 4.7 and later, Sonnet 5 and later) reject
+`temperature`/`top_p`/`top_k`; `LLMManager` sends `temperature` only to models
+that accept it (Claude Haiku 4.5, Sonnet 4.x, Opus 4.6 and older).
 
 ### Local (Ollama)
 
