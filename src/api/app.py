@@ -15,7 +15,9 @@ Endpoints:
 - POST /ox/analyze/url - Analyze image/video URLs with Ox Alpha
 - POST /documents - Add documents
 - GET /documents - List documents
-- POST /ingest - Ingest files
+- POST /ingest - Upload files; indexed by a background job
+- GET /ingest/{job_id} - Ingestion job status
+- GET /ingest - Recent ingestion jobs
 - POST /search - Search documents
 - GET /health - Health check
 - GET /ready - Readiness check
@@ -33,7 +35,7 @@ import logging
 import os
 import sys
 import shutil
-import uuid
+import tempfile
 import asyncio
 
 # Keep Windows console output UTF-8 without replacing streams owned by pytest,
@@ -48,13 +50,15 @@ if sys.platform == "win32":
 
 from fastapi import Body, FastAPI, HTTPException, UploadFile, File, Form, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from src import __version__
 from src.core.llm import LLMManager
 from src.rag import NaiveRAG, AdvancedRAG
+from src.api.jobs import IngestJobs
 from src.auth import RateLimiter
+from src.core.document_loader import DocumentLoader
 from src.monitoring import LangfuseTracer
 from src.utils.config import Config
 
@@ -293,6 +297,18 @@ class DocumentResponse(BaseModel):
     count: Optional[int] = Field(default=None, description="Number of documents processed")
 
 
+class IngestJob(BaseModel):
+    """A background ingestion job."""
+    job_id: str
+    status: Literal["queued", "running", "succeeded", "failed"]
+    files: List[str] = Field(default_factory=list, description="Names the files are indexed under")
+    chunks: Optional[int] = Field(default=None, description="Chunks indexed, once succeeded")
+    error: Optional[str] = None
+    created_at: str
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+
+
 class HealthResponse(BaseModel):
     """Response model for health check."""
     status: str = Field(..., description="Service status")
@@ -521,6 +537,7 @@ def create_app(
         temperature=ox_temperature,
     )
     app.state.ox_configured = bool(ox_api_key)
+    app.state.ingest_jobs = IngestJobs(max_jobs=config.get_int("INGEST_JOBS_KEPT", default=100))
 
     # ========================================================================
     # Endpoints
@@ -1025,52 +1042,89 @@ def create_app(
             "num_chunks": app.state.rag.num_chunks,
         }
 
-    @app.post("/ingest", response_model=DocumentResponse, tags=["Documents"])
-    async def ingest_files(files: List[UploadFile] = File(...)):
-        """Ingest files into the knowledge base."""
-        temp_dir = Path("temp_uploads")
-        file_paths = []
+    @app.post("/ingest", response_model=IngestJob, status_code=202, tags=["Documents"])
+    async def ingest_files(
+        response: Response,
+        files: List[UploadFile] = File(...),
+        wait: bool = Query(
+            default=False,
+            description="Wait until the files are indexed (200) instead of returning the queued job (202)",
+        ),
+    ):
+        """
+        Upload files; a background job loads (OCR included), embeds and indexes them.
+
+        Each file is indexed under its name: its source is ``upload/<name>`` and
+        ``{"file_name": "<name>"}`` filters on it. Uploading a name again
+        replaces the earlier version. Poll ``GET /ingest/{job_id}`` for the
+        outcome; queries keep working while a job runs.
+        """
+        names = [_safe_upload_name(file.filename) for file in files]
+        if len(set(names)) != len(names):
+            raise HTTPException(status_code=400, detail="Duplicate file names in one upload")
+        unsupported = [
+            name for name in names
+            if Path(name).suffix.lower() not in DocumentLoader.SUPPORTED_EXTENSIONS
+        ]
+        if unsupported:
+            raise HTTPException(
+                status_code=415,
+                detail=f"Unsupported file type: {', '.join(unsupported)}",
+            )
+
+        upload_dir = Path(tempfile.mkdtemp(prefix="rag-ingest-"))
         try:
-            temp_dir.mkdir(exist_ok=True)
-
-            for file in files:
-                content = await file.read()
-                if len(content) > max_upload_size_bytes:
-                    raise HTTPException(
-                        status_code=413,
-                        detail=f"File '{file.filename}' exceeds {max_upload_size_mb} MB limit",
-                    )
-
-                safe_name = _safe_upload_name(file.filename)
-                file_path = temp_dir / f"{uuid.uuid4().hex}_{safe_name}"
-                file_path.write_bytes(content)
-                file_paths.append(str(file_path))
-
-            num_chunks = await asyncio.to_thread(
-                app.state.rag.add_documents, file_paths
-            )
-
-            return DocumentResponse(
-                status="success",
-                message=f"Ingested {len(files)} files with {num_chunks} chunks",
-                count=num_chunks,
-            )
-        except HTTPException:
+            paths = {}
+            for file, name in zip(files, names):
+                content = await _read_upload_limited(file, max_upload_size_bytes)
+                path = upload_dir / name
+                path.write_bytes(content)
+                paths[name] = path
+        except BaseException:
+            shutil.rmtree(upload_dir, ignore_errors=True)
             raise
-        except Exception as e:
-            logger.error(f"File ingestion failed: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
         finally:
-            for file_path in file_paths:
+            for file in files:
                 try:
-                    Path(file_path).unlink(missing_ok=True)
+                    await file.close()
                 except Exception:
                     pass
-            try:
-                if temp_dir.exists():
-                    shutil.rmtree(temp_dir, ignore_errors=True)
-            except Exception:
-                pass
+
+        rag = app.state.rag
+        if app.state.rag_type == "advanced":
+            def work():
+                return rag.add_files(paths)
+        else:
+            def work():
+                return rag.add_documents([str(path) for path in paths.values()])
+
+        jobs = app.state.ingest_jobs
+        job, future = jobs.submit(
+            work, names, cleanup=lambda: shutil.rmtree(upload_dir, ignore_errors=True),
+        )
+        if not wait:
+            response.headers["Location"] = f"/ingest/{job['job_id']}"
+            return job
+
+        await asyncio.wrap_future(future)
+        job = jobs.get(job["job_id"])
+        if job["status"] == "failed":
+            raise HTTPException(status_code=500, detail=job["error"])
+        response.status_code = 200
+        return job
+
+    @app.get("/ingest/{job_id}", response_model=IngestJob, tags=["Documents"])
+    async def ingest_job_status(job_id: str):
+        """Status of an ingestion job."""
+        job = app.state.ingest_jobs.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Unknown ingestion job")
+        return job
+
+    @app.get("/ingest", response_model=List[IngestJob], tags=["Documents"])
+    async def list_ingest_jobs():
+        """Recent ingestion jobs, newest first."""
+        return app.state.ingest_jobs.list()
 
     @app.post("/search", tags=["RAG"])
     def search_documents(

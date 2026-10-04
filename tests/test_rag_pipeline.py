@@ -7,42 +7,32 @@ from unittest.mock import Mock
 
 from langchain_core.documents import Document
 
+from src.utils.rwlock import ReadWriteLock
+
 
 class TestNaiveRAG:
     """Test NaiveRAG class."""
 
-    def test_add_texts(self):
-        """Test adding texts."""
-        from src.rag.naive_rag import NaiveRAG
+    def test_add_texts(self, make_rag):
+        """Raw texts are indexed like files: child chunks with parents and stable ids."""
+        rag, _ = make_rag()
+        before = rag.num_chunks
 
-        # Create RAG with mocked components
-        rag = NaiveRAG.__new__(NaiveRAG)
+        num_chunks = rag.add_texts(
+            ["Sơn Tinh dời từng dãy núi chặn dòng nước lũ của Thủy Tinh."],
+            metadatas=[{"source": "son_tinh.txt"}],
+        )
 
-        # Setup mocks
-        rag.document_loader = Mock()
-        rag.text_splitter = Mock()
-        rag.embeddings = Mock()
-        rag.vector_store = Mock()
-        rag.llm = Mock()
-        rag.retrieval_k = 4
-        rag.system_prompt = "Context: {context}\nQuestion: {question}"
-        rag._documents = []
-        rag._chunks = []
-
-        # Setup mock returns
-        sample_docs = [
-            Document(page_content="Test document 1", metadata={"source": "test1.txt"}),
-            Document(page_content="Test document 2", metadata={"source": "test2.txt"}),
-        ]
-
-        rag.text_splitter.split_documents.return_value = sample_docs
-
-        # Test add_texts
-        texts = ["Text 1", "Text 2"]
-        num_chunks = rag.add_texts(texts)
-
-        assert num_chunks == len(sample_docs)
-        rag.text_splitter.split_documents.assert_called_once()
+        assert num_chunks >= 1 and rag.num_chunks == before + num_chunks
+        added = [c for c in rag._chunks if c.metadata.get("source") == "son_tinh.txt"]
+        assert all(c.metadata.get("parent_id") and c.metadata.get("chunk_id") for c in added)
+        assert rag.retrieve("Sơn Tinh dời núi", filter={"source": "son_tinh.txt"})
+        # The same text again overwrites its chunks instead of duplicating them.
+        rag.add_texts(
+            ["Sơn Tinh dời từng dãy núi chặn dòng nước lũ của Thủy Tinh."],
+            metadatas=[{"source": "son_tinh.txt"}],
+        )
+        assert rag.num_chunks == before + num_chunks
 
     def test_query(self):
         """Test querying."""
@@ -238,6 +228,11 @@ class TestAdvancedRAG:
         rag._documents = []
         rag._chunks = []
         rag._retriever = None
+        rag._index_lock = ReadWriteLock()
+        rag._metadata_enhancer = None
+        rag._contextual_chunker = None
+        rag.text_splitter.chunk_size = 500
+        rag.text_splitter.chunk_overlap = 50
 
         # Setup mock returns
         sample_docs = [
@@ -273,6 +268,11 @@ class TestAdvancedRAG:
         rag._documents = []
         rag._chunks = []
         rag._retriever = None
+        rag._index_lock = ReadWriteLock()
+        rag._metadata_enhancer = None
+        rag._contextual_chunker = None
+        rag.text_splitter.chunk_size = 500
+        rag.text_splitter.chunk_overlap = 50
         rag._cache = None
         rag._contextual_chunker = None
         rag.use_hyde = False
@@ -320,6 +320,11 @@ class TestAdvancedRAG:
         rag._documents = []
         rag._chunks = []
         rag._retriever = None
+        rag._index_lock = ReadWriteLock()
+        rag._metadata_enhancer = None
+        rag._contextual_chunker = None
+        rag.text_splitter.chunk_size = 500
+        rag.text_splitter.chunk_overlap = 50
         rag._cache = None
         rag._contextual_chunker = None
         rag.use_hyde = False
@@ -373,6 +378,11 @@ class TestAdvancedRAG:
         rag._documents = []
         rag._chunks = []
         rag._retriever = None
+        rag._index_lock = ReadWriteLock()
+        rag._metadata_enhancer = None
+        rag._contextual_chunker = None
+        rag.text_splitter.chunk_size = 500
+        rag.text_splitter.chunk_overlap = 50
         rag._cache = None
         rag._contextual_chunker = None
         rag.use_hyde = False
@@ -423,6 +433,11 @@ class TestAdvancedRAG:
         rag._documents = []
         rag._chunks = []
         rag._retriever = None
+        rag._index_lock = ReadWriteLock()
+        rag._metadata_enhancer = None
+        rag._contextual_chunker = None
+        rag.text_splitter.chunk_size = 500
+        rag.text_splitter.chunk_overlap = 50
         rag._cache = None
         rag._contextual_chunker = None
         rag.use_hyde = False
@@ -473,6 +488,11 @@ class TestAdvancedRAG:
         rag._documents = []
         rag._chunks = []
         rag._retriever = None
+        rag._index_lock = ReadWriteLock()
+        rag._metadata_enhancer = None
+        rag._contextual_chunker = None
+        rag.text_splitter.chunk_size = 500
+        rag.text_splitter.chunk_overlap = 50
 
         # Setup mock returns
         sample_docs = [

@@ -49,6 +49,7 @@ from src.core.vector_store import VectorStoreManager
 from src.core.retriever import RetrieverManager, has_diacritics
 from src.core.llm import LLMManager
 from src.core.markdown_index import MarkdownFolderIndexer
+from src.utils.rwlock import ReadWriteLock
 from src.rag.multimodal import build_multimodal_prompt
 
 logger = logging.getLogger(__name__)
@@ -318,6 +319,10 @@ class AdvancedRAG:
         # Initialize retriever (will be created after documents are added)
         self._retriever = None
 
+        # Queries search while ingestion writes (API background jobs): searches
+        # share the index, writes to the store, chunk list and BM25 are exclusive.
+        self._index_lock = ReadWriteLock()
+
         # Persistent stores keep their chunks across restarts: reload them so
         # BM25, counts and parent lookups work without re-indexing.
         if persist_directory or vector_store_provider in ("qdrant", "chroma"):
@@ -426,7 +431,49 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
                 docs = self.document_loader.load(source, metadata=metadata)
             all_docs.extend(docs)
 
-        return self._index_loaded_documents(all_docs)
+        with self._index_lock.write():
+            return self._index_loaded_documents(all_docs)
+
+    def add_files(
+        self,
+        files: Dict[str, Union[str, Path]],
+        source_root: str = "upload",
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> int:
+        """
+        Index files under stable names; a name indexed again replaces its old chunks.
+
+        For uploads kept in temporary paths: each document is identified by
+        ``source_root`` and its name (``relative_source``), not by where the
+        file happens to be on disk, so filters, citations and chunk ids stay
+        the same when the file is uploaded again.
+
+        Args:
+            files: ``{name: path}``, e.g. ``{"tam_cam.pdf": "/tmp/x/tam_cam.pdf"}``
+            source_root: Collection the names belong to
+            metadata: Extra metadata for every document
+
+        Returns:
+            Number of chunks indexed
+        """
+        loaded = {}
+        for name, path in files.items():
+            identity = {
+                **(metadata or {}),
+                "source": f"{source_root}/{name}",
+                "source_root": source_root,
+                "relative_source": name,
+                "file_name": name,
+            }
+            docs = self.document_loader.load(Path(path), metadata=identity)
+            for doc in docs:
+                doc.metadata.pop("absolute_source", None)  # a temporary path
+            loaded[name] = docs
+
+        with self._index_lock.write():
+            for name in loaded:
+                self._drop_source_file(source_root, name)
+            return self._index_loaded_documents([doc for docs in loaded.values() for doc in docs])
 
     def refresh_markdown_directory(
         self,
@@ -445,43 +492,44 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         hold, e.g. after a restart on an in-memory store) are embedded again.
         ``force`` rebuilds the whole folder.
         """
-        directory = Path(directory).resolve()
-        root = str(directory)
-        indexer = MarkdownFolderIndexer()
-        result, current_manifest = indexer.compare(
-            directory,
-            Path(manifest_path) if manifest_path else None,
-        )
-
-        indexed = {
-            (chunk.metadata or {}).get("relative_source")
-            for chunk in self._chunks
-            if (chunk.metadata or {}).get("source_root") == root
-        }
-        missing = [name for name in result.unchanged if name not in indexed]
-        if not force and not result.changed and not missing:
-            return result.to_dict()
-
-        if force or not indexed:
-            docs = self.document_loader.load_markdown_directory(
+        with self._index_lock.write():
+            directory = Path(directory).resolve()
+            root = str(directory)
+            indexer = MarkdownFolderIndexer()
+            result, current_manifest = indexer.compare(
                 directory,
-                metadata=metadata,
-                strict=strict,
+                Path(manifest_path) if manifest_path else None,
             )
-            self._drop_source_root(root)
-        else:
-            for name in result.updated + result.removed:
-                self._drop_source_file(root, name)
-            docs = self._load_folder_files(
-                directory, result.added + result.updated + missing, metadata, strict
-            )
-        chunks_indexed = self._index_loaded_documents(docs)
-        indexer.save_manifest(Path(result.manifest_path), current_manifest)
 
-        result.documents_loaded = len(docs)
-        result.chunks_indexed = chunks_indexed
-        result.rebuilt = True
-        return result.to_dict()
+            indexed = {
+                (chunk.metadata or {}).get("relative_source")
+                for chunk in self._chunks
+                if (chunk.metadata or {}).get("source_root") == root
+            }
+            missing = [name for name in result.unchanged if name not in indexed]
+            if not force and not result.changed and not missing:
+                return result.to_dict()
+
+            if force or not indexed:
+                docs = self.document_loader.load_markdown_directory(
+                    directory,
+                    metadata=metadata,
+                    strict=strict,
+                )
+                self._drop_source_root(root)
+            else:
+                for name in result.updated + result.removed:
+                    self._drop_source_file(root, name)
+                docs = self._load_folder_files(
+                    directory, result.added + result.updated + missing, metadata, strict
+                )
+            chunks_indexed = self._index_loaded_documents(docs)
+            indexer.save_manifest(Path(result.manifest_path), current_manifest)
+
+            result.documents_loaded = len(docs)
+            result.chunks_indexed = chunks_indexed
+            result.rebuilt = True
+            return result.to_dict()
 
     def _load_folder_files(
         self,
@@ -677,28 +725,11 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         docs = []
         for i, text in enumerate(texts):
             metadata = metadatas[i] if metadatas else {}
-            docs.append(Document(page_content=text, metadata=metadata))
+            docs.append(Document(page_content=text, metadata=dict(metadata or {})))
 
-        self._documents.extend(docs)
-
-        # Split into chunks
-        chunks = self.text_splitter.split_documents(docs)
-
-        # Enhance metadata if enabled
-        if getattr(self, "_metadata_enhancer", None):
-            logger.info(f"Enhancing metadata for {len(chunks)} chunks")
-            chunks = self._metadata_enhancer.enhance(chunks)
-
-        self._chunks.extend(chunks)
-
-        # Add to vector store
-        self.vector_store.add_documents(chunks)
-        self.vector_store.persist()
-
-        # Initialize retriever
-        self._refresh_retriever()
-
-        return len(chunks)
+        # Same indexing as files: child chunks with parents, stable ids.
+        with self._index_lock.write():
+            return self._index_loaded_documents(docs)
 
     def query(
         self,
@@ -898,6 +929,16 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         2. Multi-query RRF (if enabled)
         3. Standard search
         """
+        with self._index_lock.read():
+            return self._retrieve_unlocked(query, k, use_reranking, filter)
+
+    def _retrieve_unlocked(
+        self,
+        query: str,
+        k: int,
+        use_reranking: Optional[bool],
+        filter: Optional[Dict[str, Any]],
+    ) -> List[Document]:
         if self._retriever is None:
             return self.vector_store.similarity_search(query, k=k, filter=filter)
 
@@ -1160,12 +1201,13 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         """
         k = k or self.retrieval_k
 
-        if self._retriever is None:
-            return self.vector_store.similarity_search(query, k=k, filter=filter)
+        with self._index_lock.read():
+            if self._retriever is None:
+                return self.vector_store.similarity_search(query, k=k, filter=filter)
 
-        return self._search(
-            query, k=k, use_hybrid=use_hybrid, use_reranking=use_reranking, filter=filter
-        )
+            return self._search(
+                query, k=k, use_hybrid=use_hybrid, use_reranking=use_reranking, filter=filter
+            )
 
     @property
     def num_documents(self) -> int:
