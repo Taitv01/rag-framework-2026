@@ -10,7 +10,7 @@ kỹ thuật mới khi số đo cho thấy cần.
 | 1 | Đo trước khi tối ưu (golden set + eval baseline) | 2–3 ngày | ✅ Hoàn thành |
 | 2 | Sửa lõi retrieval | 3–5 ngày | ✅ Hoàn thành (compose chờ CI kiểm chứng) |
 | 3 | Hợp nhất pipeline generation | 3–4 ngày | ✅ Hoàn thành (cache theo filter dời sang GĐ 4) |
-| 4 | API & vận hành | 2–3 ngày | ⏳ |
+| 4 | API & vận hành | 2–3 ngày | ✅ Hoàn thành (chưa thử với server Langfuse thật) |
 | 5 | Nâng cao (tùy chọn, theo số đo) | — | ⏳ |
 
 ---
@@ -346,12 +346,56 @@ Qdrant, parent context, hybrid + rerank (fp32), `query_rewrite="auto"`,
 - **Chưa đo:** AgenticRAG và AdaptiveRAG chưa chạy trên golden set. AgenticRAG cần
   model có tool calling, còn `AgentLLM` chưa hỗ trợ.
 
-## Giai đoạn 4: API & vận hành
-- Stream bất đồng bộ thật, retrieve một lần, gửi đúng sources đã dùng.
-- Langfuse trace cho từng bước (retrieve, rerank, grade, generate) kèm token và
-  chi phí.
-- Ingest/OCR chạy nền; filter metadata trong `QueryRequest`, kèm key cache theo
-  filter (dời từ Giai đoạn 3).
+## Giai đoạn 4: API & vận hành ✅
+
+- [x] **API dùng đúng mặc định đã đo.** `QueryRequest` từng đặt mặc định
+      `transform_query=True` và `grade_documents=True`. Vì thế API vẫn viết lại mọi
+      câu hỏi và chấm tài liệu bằng thêm một lời gọi LLM, bỏ qua kết quả Giai đoạn 3.
+      Nay mặc định theo cấu hình pipeline; `k` theo `RETRIEVAL_K` (1–50).
+- [x] **Filter metadata** trong `QueryRequest.filter` và trong body của `/search`
+      (so khớp bằng nhau; giá trị là list thì khớp với một trong các phần tử). Filter
+      đi qua hybrid, BM25, HyDE và multi-query. Cache semantic giữ scope
+      (k, filter, rerank) cho từng mục, nên không trả nhầm câu trả lời của filter khác.
+- [x] **Stream bất đồng bộ thật.** `/query/stream` trước đây retrieve hai lần (nguồn
+      gửi đi có thể khác nguồn đã dùng), bỏ qua `k`, và lặp generator token đồng bộ
+      ngay trên event loop, nên chặn mọi request khác. Nay `AdvancedRAG.prepare()`
+      chạy trong worker thread và gửi đúng các nguồn trong prompt. Token được đọc qua
+      worker thread; client ngắt kết nối thì luồng LLM đóng ngay. Có test chứng minh
+      `/health` vẫn trả lời trong lúc LLM đang chờ token đầu (test này hỏng với code cũ).
+- [x] **Ingest chạy nền.** `POST /ingest` trả job (HTTP 202); `GET /ingest/{id}` báo
+      trạng thái, số chunk và lỗi; `?wait=true` giữ cách cũ. Các job chạy lần lượt
+      trên một thread. File upload được index theo tên (`upload/<tên>`), lọc được
+      theo `file_name`, upload lại thì thay bản cũ. File tạm nằm trong thư mục temp
+      của hệ thống, không còn ghi vào thư mục làm việc.
+- [x] **Query và ghi index thay phiên nhau** bằng khoá đọc/ghi trong AdvancedRAG.
+      Trước đây một query chạy giữa lúc ingest có thể đọc index FAISS đang cập nhật
+      dở. Nạp file và OCR nằm ngoài khoá, nên query vẫn chạy trong lúc đó; bước
+      embed các chunk mới thì vẫn chặn query.
+- [x] **`/documents` (add_texts)** index giống file: có chunk con, parent và id ổn
+      định. Trước đây văn bản thô bỏ qua parent context và có id ngẫu nhiên.
+- [x] **Trace từng bước theo Langfuse SDK 4.** Tracer cũ gọi `Langfuse.trace()`, hàm
+      này đã bị bỏ từ SDK 3, nên với bản langfuse hiện hành (4.16) tracing hỏng âm
+      thầm. Nay mỗi request là một trace gồm rewrite, retrieve (nguồn + điểm), rerank,
+      grade, web_search, generate, verify. Mỗi lời gọi LLM là một generation có model
+      và token, để Langfuse tự tính chi phí. Các bước chạy trong worker thread vẫn
+      nằm dưới trace của request. Không có Langfuse thì `query_detailed()` vẫn trả
+      `steps` kèm thời gian. Test chạy SDK thật với exporter OpenTelemetry trong bộ
+      nhớ; CI cài extra `monitoring`.
+
+### Kiểm chứng
+
+- 267 test pass (2 test Qdrant server chỉ chạy trong CI), ruff sạch.
+- Phát lại phép đo câu trả lời bằng model thật (Qdrant, bge-m3, reranker fp32) cho
+  kết quả trùng khớp baseline Giai đoạn 3: không có prompt mới, mọi chỉ số giữ
+  nguyên, p50 790 ms (so với 804 ms).
+- **Chưa kiểm chứng:** gửi trace lên một server Langfuse thật (chưa có key);
+  `docker compose` vẫn chưa chạy thật.
+- **Hạn chế còn lại:**
+  - API giả định **một process** (Dockerfile đang chạy uvicorn một worker). BM25,
+    danh sách chunk, cache và job đều nằm trong bộ nhớ của process. Nếu chạy nhiều
+    worker, file ingest ở worker này sẽ không hiện ra ở BM25 của worker khác.
+  - Trong lúc embed chunk mới, query phải chờ, vì bước embed nằm trong khoá ghi.
+  - Bản ghi job chỉ nằm trong bộ nhớ, restart là mất; tài liệu đã index thì không mất.
 
 ## Giai đoạn 5: Nâng cao (theo số đo)
 - BGE-M3 sparse/multi-vector; contextual retrieval cho corpus truyện.

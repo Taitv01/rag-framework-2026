@@ -44,7 +44,9 @@ Hệ thống được tối ưu hóa đặc biệt cho **Tiếng Việt**, hỗ 
 - **Library Manifest & Tagging**: Quản lý kho tri thức tại `library/` với file `.rag_library_manifest.json` theo dõi metadata, tóm tắt tự động, và tìm kiếm theo tag.
 
 ### 6. 📊 Production Tracing & Monitoring (Langfuse & Docker)
-- **Langfuse Integration**: Đo lường chi phí token, độ trễ từng bước truy xuất, versioning prompt.
+- **Langfuse Integration** (SDK 4, extra `monitoring`): mỗi request là một trace; các bước rewrite, retrieve,
+  rerank, grade, generate nằm bên trong, mỗi lời gọi LLM ghi model và số token để Langfuse tính chi phí.
+  Không có Langfuse thì `query_detailed()` vẫn trả `steps` kèm thời gian từng bước.
 - **Graceful Fallback**: Tự động chuyển sang ghi log nội bộ mượt mà khi không cấu hình khóa Langfuse.
 - **Containerization**: `docker-compose.yml` sẵn sàng với 3 dịch vụ: FastAPI Server (`rag-api`), Qdrant Vector Store (`rag-qdrant`), và Redis Cache (`rag-redis`).
 
@@ -252,6 +254,26 @@ uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
 curl -X POST "http://localhost:8000/query/stream" \
      -H "Content-Type: application/json" \
      -d '{"question": "Tóm tắt quy trình xử lý Tiếng Việt trong RAG"}'
+```
+
+Sự kiện đầu tiên (`"status": "sources"`) chứa đúng các đoạn đã đưa vào prompt,
+gắn nhãn `[S1]`, `[S2]`... như trong câu trả lời; sự kiện `done` liệt kê các nguồn
+câu trả lời thực sự trích.
+
+**Lọc theo metadata** (`/query`, `/query/stream`; với `/search` gửi body `{"filter": ...}`).
+Giá trị là list thì khớp với bất kỳ phần tử nào:
+
+```bash
+curl -X POST "http://localhost:8000/query" -H "Content-Type: application/json"      -d '{"question": "Tấm gọi bống thế nào?", "filter": {"file_name": ["tam_cam.md", "tam_cam.pdf"]}}'
+```
+
+**Ingest chạy nền**: `/ingest` trả về job ngay (HTTP 202). Mỗi file được index theo
+tên (`upload/<tên file>`), upload lại cùng tên thì thay bản cũ:
+
+```bash
+curl -X POST "http://localhost:8000/ingest" -F "files=@tam_cam.pdf"   # {"job_id": "...", "status": "queued", ...}
+curl "http://localhost:8000/ingest/<job_id>"                           # queued | running | succeeded | failed
+curl -X POST "http://localhost:8000/ingest?wait=true" -F "files=@tam_cam.pdf"  # chờ index xong
 ```
 
 ### 3. Chạy Bằng Docker Compose (Production)
