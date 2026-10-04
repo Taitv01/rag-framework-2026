@@ -78,7 +78,7 @@ ocr = [
     "pdf2image>=1.17.0",
 ]
 monitoring = [
-    "langfuse>=2.0.0",
+    "langfuse>=4.0,<5",  # OpenTelemetry-based SDK: start_as_current_observation
 ]
 # Third-party evaluation frameworks (the built-in src.evaluation needs none).
 eval = [

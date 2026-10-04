@@ -32,6 +32,8 @@ from dataclasses import dataclass, field
 
 from langchain_core.documents import Document
 
+from src.monitoring.tracing import step
+
 logger = logging.getLogger(__name__)
 
 
@@ -492,7 +494,13 @@ class RetrieverManager:
             return []
 
         pairs = [(query, doc.page_content) for doc in candidates]
-        scores = self._predict(pairs)
+        with step(
+            "rerank",
+            input={"query": query, "candidates": len(candidates)},
+            metadata={"model": getattr(self, "active_reranker_model", None)},
+        ) as rerank_step:
+            scores = self._predict(pairs)
+            rerank_step.update(output={"top_scores": sorted((float(s) for s in scores), reverse=True)[:k]})
 
         scored_candidates = list(zip(candidates, scores))
         scored_candidates.sort(key=lambda x: x[1], reverse=True)

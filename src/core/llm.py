@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_core.language_models import BaseChatModel
 
+from src.monitoring.tracing import step, usage_details
 from src.utils.config import default_llm_model, load_environment
 
 logger = logging.getLogger(__name__)
@@ -271,8 +272,22 @@ class LLMManager:
             Generated text
         """
         messages = self._create_messages(prompt, system_prompt)
-        response = self.llm.invoke(messages, **kwargs)
-        return self._content_to_text(response.content)
+        with self._generation(prompt) as generation:
+            response = self.llm.invoke(messages, **kwargs)
+            text = self._content_to_text(response.content)
+            generation.update(output=text, usage=usage_details(response))
+        return text
+
+    def _generation(self, prompt: Any, current: bool = True):
+        """Trace step for one LLM call (see src.monitoring.tracing)."""
+        return step(
+            "llm",
+            as_type="generation",
+            input=prompt,
+            model=self.config.model,
+            metadata={"provider": self.config.provider},
+            current=current,
+        )
 
     def generate_multimodal(
         self,
@@ -318,8 +333,12 @@ class LLMManager:
             messages.append(SystemMessage(content=system_prompt))
         messages.append(HumanMessage(content=content))
 
-        response = self.llm.invoke(messages, **kwargs)
-        return self._content_to_text(response.content)
+        # Media can be large data URLs: trace the prompt and a count only.
+        with self._generation({"prompt": prompt, "media": len(media)}) as generation:
+            response = self.llm.invoke(messages, **kwargs)
+            text = self._content_to_text(response.content)
+            generation.update(output=text, usage=usage_details(response))
+        return text
 
     @staticmethod
     def _content_to_text(content: Any) -> str:
@@ -367,7 +386,9 @@ class LLMManager:
             else:
                 lc_messages.append(HumanMessage(content=content))
 
-        response = self.llm.invoke(lc_messages, **kwargs)
+        with self._generation(messages) as generation:
+            response = self.llm.invoke(lc_messages, **kwargs)
+            generation.update(output=response.content, usage=usage_details(response))
         return response.content
 
     def stream(
@@ -389,8 +410,14 @@ class LLMManager:
         """
         messages = self._create_messages(prompt, system_prompt)
 
-        for chunk in self.llm.stream(messages, **kwargs):
-            yield chunk.content
+        # Consumers may resume this generator in other threads: not a parent step.
+        with self._generation(prompt, current=False) as generation:
+            parts, usage = [], None
+            for chunk in self.llm.stream(messages, **kwargs):
+                usage = usage_details(chunk) or usage
+                parts.append(self._content_to_text(chunk.content))
+                yield chunk.content
+            generation.update(output="".join(parts), usage=usage)
 
     def _create_messages(
         self,

@@ -52,6 +52,6 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       # Lightweight core + Qdrant client: tests mock models, so torch is not installed.
-      - run: pip install -e ".[dev,api,qdrant]"
+      - run: pip install -e ".[dev,api,qdrant,monitoring]"
       - run: python -m compileall -q src tests examples scripts
       - run: python -m pytest -q

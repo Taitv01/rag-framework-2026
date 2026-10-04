@@ -26,6 +26,7 @@ Usage:
     uvicorn src.api.app:app --host 0.0.0.0 --port 8000
 """
 
+from contextlib import aclosing
 from typing import List, Optional, Dict, Any, Literal
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -599,52 +600,50 @@ def create_app(
         """
         Query the RAG system synchronously.
         """
-        trace = app.state.tracer.start_trace(
-            name="query_rag",
-            input_data={"question": request.question, "k": request.k, "filter": request.filter},
-        )
-        try:
-            if app.state.rag_type == "advanced":
-                result = app.state.rag.query_detailed(
-                    question=request.question,
-                    k=request.k,
-                    transform_query=request.transform_query,
-                    grade_documents=request.grade_documents,
-                    filter=request.filter,
-                )
-                res = QueryResponse(
-                    answer=result["answer"],
-                    sources=result["relevant_docs"],
-                    citations=result.get("citations", result["relevant_docs"]),
-                    transformed_query=result.get("transformed_query"),
-                    abstained=bool(result.get("abstained")),
-                )
-            else:
-                result = app.state.rag.query_with_sources(
-                    question=request.question,
-                    k=request.k,
-                    filter=request.filter,
-                )
-                citations = [
-                    {
-                        "source_id": f"S{i}",
-                        "source": source.get("metadata", {}).get("source", f"Document {i}"),
-                        **source,
-                    }
-                    for i, source in enumerate(result["sources"], 1)
-                ]
-                res = QueryResponse(
-                    answer=result["answer"],
-                    sources=result["sources"],
-                    citations=citations,
-                )
+        trace_input = {"question": request.question, "k": request.k, "filter": request.filter}
+        with app.state.tracer.trace("query", input=trace_input) as trace:
+            try:
+                if app.state.rag_type == "advanced":
+                    result = app.state.rag.query_detailed(
+                        question=request.question,
+                        k=request.k,
+                        transform_query=request.transform_query,
+                        grade_documents=request.grade_documents,
+                        filter=request.filter,
+                    )
+                    res = QueryResponse(
+                        answer=result["answer"],
+                        sources=result["relevant_docs"],
+                        citations=result.get("citations", result["relevant_docs"]),
+                        transformed_query=result.get("transformed_query"),
+                        abstained=bool(result.get("abstained")),
+                    )
+                else:
+                    result = app.state.rag.query_with_sources(
+                        question=request.question,
+                        k=request.k,
+                        filter=request.filter,
+                    )
+                    citations = [
+                        {
+                            "source_id": f"S{i}",
+                            "source": source.get("metadata", {}).get("source", f"Document {i}"),
+                            **source,
+                        }
+                        for i, source in enumerate(result["sources"], 1)
+                    ]
+                    res = QueryResponse(
+                        answer=result["answer"],
+                        sources=result["sources"],
+                        citations=citations,
+                    )
 
-            app.state.tracer.end_trace(trace, output=res.answer)
-            return res
-        except Exception as e:
-            logger.error(f"Query failed: {e}")
-            app.state.tracer.end_trace(trace, output=str(e))
-            raise HTTPException(status_code=500, detail=str(e))
+                trace.update(output=res.answer)
+                return res
+            except Exception as e:
+                logger.error(f"Query failed: {e}")
+                trace.update(output=f"error: {type(e).__name__}")
+                raise HTTPException(status_code=500, detail=str(e))
 
     @app.post("/query/stream", tags=["RAG"])
     async def query_rag_stream(request: QueryRequest):
@@ -662,13 +661,19 @@ def create_app(
         Retrieval runs once, in a worker thread, with the same options as /query;
         tokens are read in worker threads too, so the event loop never blocks.
         """
-        trace = app.state.tracer.start_trace(
-            name="query_rag_stream",
-            input_data={"question": request.question, "k": request.k, "filter": request.filter},
-        )
+        trace_input = {"question": request.question, "k": request.k, "filter": request.filter}
         rag = app.state.rag
 
         async def sse_event_generator():
+            # Opened inside the generator: steps run in worker threads during
+            # the stream (retrieval, the LLM call) nest under this trace.
+            with app.state.tracer.trace("query_stream", input=trace_input) as trace:
+                # aclosing: a client that goes away closes the token stream at once.
+                async with aclosing(stream_events(trace)) as events:
+                    async for event in events:
+                        yield event
+
+        async def stream_events(trace):
             try:
                 if app.state.rag_type == "advanced":
                     prepared = await asyncio.to_thread(
@@ -704,11 +709,11 @@ def create_app(
                     citations, invalid = sources, []
 
                 yield _sse({"status": "done", "citations": citations, "invalid_citations": invalid})
-                app.state.tracer.end_trace(trace, output=answer)
+                trace.update(output=answer)
             except Exception as e:
                 logger.error(f"Streaming error: {e}")
                 yield _sse({"status": "error", "detail": str(e)})
-                app.state.tracer.end_trace(trace, output=str(e))
+                trace.update(output=f"error: {type(e).__name__}")
 
         return StreamingResponse(sse_event_generator(), media_type="text/event-stream")
 

@@ -49,6 +49,7 @@ from src.core.vector_store import VectorStoreManager
 from src.core.retriever import RetrieverManager, has_diacritics
 from src.core.llm import LLMManager
 from src.core.markdown_index import MarkdownFolderIndexer
+from src.monitoring.tracing import record_steps, step
 from src.utils.rwlock import ReadWriteLock
 from src.rag.multimodal import build_multimodal_prompt
 
@@ -62,6 +63,17 @@ NO_CONTEXT_ANSWER = (
 
 QUERY_REWRITE_MODES = ("auto", "always", "never")
 GRADING_MODES = ("none", "llm", "reranker")
+
+
+def _trace_sources(docs: List[Document]) -> List[Dict[str, Any]]:
+    """What a trace shows of retrieved passages: source and score, not the text."""
+    return [
+        {
+            "source": (doc.metadata or {}).get("source"),
+            "score": (doc.metadata or {}).get("relevance_score"),
+        }
+        for doc in docs
+    ]
 
 
 @dataclass
@@ -764,8 +776,13 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         prepared = self._prepare(question, k, transform_query, grade_documents, use_reranking, filter)
         if prepared.answer is not None:
             return prepared.answer
-        answer = self.llm.generate(prepared.prompt, **kwargs)
-        return self._finish(prepared, answer)
+        return self._finish(prepared, self._generate(prepared, **kwargs))
+
+    def _generate(self, prepared: PreparedQuery, **kwargs) -> str:
+        with step("generate", input={"question": prepared.question, "sources": len(prepared.docs)}) as s:
+            answer = self.llm.generate(prepared.prompt, **kwargs)
+            s.update(output=answer)
+        return answer
 
     def _prepare(
         self,
@@ -798,8 +815,10 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         if self._web_searcher and self._is_retrieval_quality_poor(docs, question):
             logger.info("Retrieval quality poor, falling back to web search")
             try:
-                web_results = self._web_searcher.search(search_query, num_results=3)
-                prepared.web_docs = self._web_searcher.to_documents(web_results)
+                with step("web_search", input=search_query) as web_step:
+                    web_results = self._web_searcher.search(search_query, num_results=3)
+                    prepared.web_docs = self._web_searcher.to_documents(web_results)
+                    web_step.update(output={"results": len(prepared.web_docs)})
                 logger.info(f"Web search returned {len(prepared.web_docs)} results")
             except Exception as e:
                 logger.warning(f"Web search fallback failed: {e}")
@@ -826,7 +845,9 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         all_docs = prepared.docs + prepared.web_docs
         if verify and self._hallucination_grader and all_docs:
             context = self._build_context(all_docs)
-            grade = self._hallucination_grader.grade(answer=answer, context=context)
+            with step("verify") as verify_step:
+                grade = self._hallucination_grader.grade(answer=answer, context=context)
+                verify_step.update(output={"grounded": grade.is_grounded, "score": grade.grounded_score})
             if not grade.is_grounded and grade.grounded_score < self._hallucination_grader.grounded_threshold:
                 logger.warning(
                     f"Hallucination detected (score={grade.grounded_score:.2f}), "
@@ -874,7 +895,12 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         if transform_query is None:
             mode = self.query_rewrite
             transform_query = mode == "always" or (mode == "auto" and not has_diacritics(question))
-        return self._transform_query(question) if transform_query else question
+        if not transform_query:
+            return question
+        with step("rewrite", input=question) as s:
+            rewritten = self._transform_query(question)
+            s.update(output=rewritten)
+        return rewritten
 
     def _grade(
         self,
@@ -888,15 +914,19 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         mode = self.grading
         if grade_documents and mode == "none":
             mode = "llm"
-        if mode == "llm":
-            return self._grade_documents(question, docs)
-        if mode == "reranker" and self.min_relevance_score is not None:
-            return [
-                doc for doc in docs
-                if (doc.metadata or {}).get("relevance_score", self.min_relevance_score)
-                >= self.min_relevance_score
-            ]
-        return docs
+        if mode == "none" or (mode == "reranker" and self.min_relevance_score is None):
+            return docs
+        with step("grade", input={"mode": mode, "documents": len(docs)}) as s:
+            if mode == "llm":
+                kept = self._grade_documents(question, docs)
+            else:
+                kept = [
+                    doc for doc in docs
+                    if (doc.metadata or {}).get("relevance_score", self.min_relevance_score)
+                    >= self.min_relevance_score
+                ]
+            s.update(output={"kept": len(kept)})
+        return kept
 
     def _is_retrieval_quality_poor(self, docs: List[Document], question: str) -> bool:
         """
@@ -929,8 +959,11 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         2. Multi-query RRF (if enabled)
         3. Standard search
         """
-        with self._index_lock.read():
-            return self._retrieve_unlocked(query, k, use_reranking, filter)
+        with step("retrieve", as_type="retriever", input={"query": query, "k": k, "filter": filter}) as s:
+            with self._index_lock.read():
+                docs = self._retrieve_unlocked(query, k, use_reranking, filter)
+            s.update(output=_trace_sources(docs))
+        return docs
 
     def _retrieve_unlocked(
         self,
@@ -1010,15 +1043,19 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
 
         Returns:
             Dict with the answer, the search query, ``relevant_docs`` (every
-            source given to the LLM) and ``citations`` (the sources the answer
-            actually cites; all of them when it cites none)
+            source given to the LLM), ``citations`` (the sources the answer
+            actually cites; all of them when it cites none) and ``steps``
+            (each stage with its duration in ms, LLM calls with token usage)
         """
-        prepared = self._prepare(question, k, transform_query, grade_documents, use_reranking, filter)
-        if prepared.answer is None:
-            answer = self._finish(prepared, self.llm.generate(prepared.prompt, **kwargs))
-        else:
-            answer = prepared.answer
-        return self._detailed_result(prepared, answer)
+        with record_steps() as steps:
+            prepared = self._prepare(question, k, transform_query, grade_documents, use_reranking, filter)
+            if prepared.answer is None:
+                answer = self._finish(prepared, self._generate(prepared, **kwargs))
+            else:
+                answer = prepared.answer
+        result = self._detailed_result(prepared, answer)
+        result["steps"] = steps
+        return result
 
     def _detailed_result(self, prepared: PreparedQuery, answer: str) -> Dict[str, Any]:
         sources = self.sources_for(prepared)
@@ -1201,13 +1238,16 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         """
         k = k or self.retrieval_k
 
-        with self._index_lock.read():
-            if self._retriever is None:
-                return self.vector_store.similarity_search(query, k=k, filter=filter)
-
-            return self._search(
-                query, k=k, use_hybrid=use_hybrid, use_reranking=use_reranking, filter=filter
-            )
+        with step("retrieve", as_type="retriever", input={"query": query, "k": k, "filter": filter}) as s:
+            with self._index_lock.read():
+                if self._retriever is None:
+                    docs = self.vector_store.similarity_search(query, k=k, filter=filter)
+                else:
+                    docs = self._search(
+                        query, k=k, use_hybrid=use_hybrid, use_reranking=use_reranking, filter=filter
+                    )
+            s.update(output=_trace_sources(docs))
+        return docs
 
     @property
     def num_documents(self) -> int:
