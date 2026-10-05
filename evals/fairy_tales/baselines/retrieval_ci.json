@@ -1,0 +1,2329 @@
+{
+  "kind": "retrieval",
+  "created_at": "2026-10-05T15:17:41+00:00",
+  "git_revision": "ac439a7",
+  "python": "3.13.5",
+  "settings": {
+    "eval_dir": "evals/fairy_tales",
+    "k": 5,
+    "chunk_size": 500,
+    "chunk_overlap": 50,
+    "embedding_model": "BAAI/bge-m3",
+    "embedding_device": "cpu",
+    "vector_store": "qdrant",
+    "parent_context": true,
+    "parent_fanout": 3,
+    "reranker_precision": "float32",
+    "reranker_model": null,
+    "documents": 10,
+    "retrieval_chunks": 211,
+    "index_seconds": 30.94,
+    "query_rewrite": "never"
+  },
+  "configs": {
+    "hybrid": {
+      "summary": {
+        "cases": 87,
+        "k": 5,
+        "precision_at_k": 0.774712643678161,
+        "recall_at_k": 0.9789272030651341,
+        "mrr": 0.9865900383141762,
+        "ndcg": 0.9733817376402571,
+        "evidence_recall": 0.9090038314176244,
+        "context_chars": 1823.2643678160919,
+        "latency_p50_ms": 95.52,
+        "latency_p95_ms": 138.197,
+        "errors": 0
+      },
+      "by_tag": {
+        "character": {
+          "cases": 7,
+          "precision_at_k": 0.9142857142857144,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 0.8095238095238095
+        },
+        "creative": {
+          "cases": 9,
+          "precision_at_k": 0.9555555555555555,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0
+        },
+        "fact": {
+          "cases": 42,
+          "precision_at_k": 0.7619047619047619,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0
+        },
+        "moral": {
+          "cases": 6,
+          "precision_at_k": 0.6666666666666666,
+          "recall_at_k": 0.9166666666666666,
+          "mrr": 0.8888888888888888,
+          "ndcg": 0.8844289327304549,
+          "evidence_recall": 0.9166666666666666
+        },
+        "motif": {
+          "cases": 7,
+          "precision_at_k": 0.7428571428571429,
+          "recall_at_k": 0.8095238095238095,
+          "mrr": 0.9285714285714286,
+          "ndcg": 0.7797023984530647,
+          "evidence_recall": 0.5238095238095238
+        },
+        "multi_hop": {
+          "cases": 2,
+          "precision_at_k": 0.8,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 0.4583333333333333
+        },
+        "multi_source": {
+          "cases": 9,
+          "precision_at_k": 0.6666666666666666,
+          "recall_at_k": 0.7962962962962963,
+          "mrr": 0.8703703703703703,
+          "ndcg": 0.7426901305224854,
+          "evidence_recall": 0.5740740740740741
+        },
+        "no_diacritics": {
+          "cases": 5,
+          "precision_at_k": 0.6,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 0.6
+        },
+        "paraphrase": {
+          "cases": 4,
+          "precision_at_k": 0.55,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0
+        },
+        "sequence": {
+          "cases": 12,
+          "precision_at_k": 0.9166666666666666,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 0.9375
+        }
+      },
+      "cases": [
+        {
+          "id": "q001",
+          "question": "Gia tài của Thạch Sanh khi sống một mình dưới gốc đa là gì?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "thach_sanh"
+          ],
+          "retrieved_sources": [
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1597,
+          "latency_ms": 117.25,
+          "error": null
+        },
+        {
+          "id": "q002",
+          "question": "Ai dạy võ nghệ và phép thần thông cho Thạch Sanh?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "thach_sanh"
+          ],
+          "retrieved_sources": [
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1853,
+          "latency_ms": 105.22,
+          "error": null
+        },
+        {
+          "id": "q003",
+          "question": "Lý Thông làm nghề gì trước khi kết nghĩa với Thạch Sanh?",
+          "tags": [
+            "character"
+          ],
+          "expected_sources": [
+            "thach_sanh"
+          ],
+          "retrieved_sources": [
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1854,
+          "latency_ms": 91.2,
+          "error": null
+        },
+        {
+          "id": "q004",
+          "question": "Lý Thông đã nói dối thế nào để Thạch Sanh đi canh miếu thay mình?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "thach_sanh"
+          ],
+          "retrieved_sources": [
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1854,
+          "latency_ms": 94.11,
+          "error": null
+        },
+        {
+          "id": "q005",
+          "question": "Sau khi bị giết, chằn tinh hiện nguyên hình là con gì và để lại vật gì?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "thach_sanh"
+          ],
+          "retrieved_sources": [
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "con_rong_chau_tien",
+            "ho_guom_kich_ban"
+          ],
+          "precision_at_k": 0.6,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 2126,
+          "latency_ms": 96.71,
+          "error": null
+        },
+        {
+          "id": "q006",
+          "question": "Lý Thông được vua ban chức gì sau khi nộp đầu chằn tinh?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "thach_sanh"
+          ],
+          "retrieved_sources": [
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1732,
+          "latency_ms": 86.29,
+          "error": null
+        },
+        {
+          "id": "q007",
+          "question": "Vì sao Thạch Sanh tìm được hang của đại bàng?",
+          "tags": [
+            "sequence"
+          ],
+          "expected_sources": [
+            "thach_sanh"
+          ],
+          "retrieved_sources": [
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1656,
+          "latency_ms": 84.76,
+          "error": null
+        },
+        {
+          "id": "q008",
+          "question": "Sau khi Thạch Sanh đưa công chúa lên khỏi hang, Lý Thông đã làm gì?",
+          "tags": [
+            "sequence"
+          ],
+          "expected_sources": [
+            "thach_sanh"
+          ],
+          "retrieved_sources": [
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1454,
+          "latency_ms": 91.46,
+          "error": null
+        },
+        {
+          "id": "q009",
+          "question": "Thạch Sanh xin vua Thủy Tề món quà gì?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "thach_sanh"
+          ],
+          "retrieved_sources": [
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1448,
+          "latency_ms": 86.92,
+          "error": null
+        },
+        {
+          "id": "q010",
+          "question": "Vì sao Thạch Sanh bị bắt giam vào ngục?",
+          "tags": [
+            "sequence"
+          ],
+          "expected_sources": [
+            "thach_sanh"
+          ],
+          "retrieved_sources": [
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1853,
+          "latency_ms": 83.69,
+          "error": null
+        },
+        {
+          "id": "q011",
+          "question": "Tiếng đàn của Thạch Sanh trong ngục nói gì?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "thach_sanh"
+          ],
+          "retrieved_sources": [
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 2013,
+          "latency_ms": 84.56,
+          "error": null
+        },
+        {
+          "id": "q012",
+          "question": "Mẹ con Lý Thông có kết cục ra sao?",
+          "tags": [
+            "character"
+          ],
+          "expected_sources": [
+            "thach_sanh"
+          ],
+          "retrieved_sources": [
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1476,
+          "latency_ms": 80.87,
+          "error": null
+        },
+        {
+          "id": "q013",
+          "question": "Thạch Sanh đã làm gì để quân mười tám nước chư hầu xin hàng?",
+          "tags": [
+            "sequence"
+          ],
+          "expected_sources": [
+            "thach_sanh"
+          ],
+          "retrieved_sources": [
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1921,
+          "latency_ms": 87.71,
+          "error": null
+        },
+        {
+          "id": "q014",
+          "question": "Niêu cơm thần trong truyện có gì đặc biệt?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "thach_sanh"
+          ],
+          "retrieved_sources": [
+            "thach_sanh",
+            "banh_chung_banh_giay",
+            "banh_chung_banh_giay",
+            "banh_chung_banh_giay",
+            "banh_chung_banh_giay"
+          ],
+          "precision_at_k": 0.2,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1765,
+          "latency_ms": 84.57,
+          "error": null
+        },
+        {
+          "id": "q015",
+          "question": "Dì ghẻ hứa thưởng gì cho đứa bắt được đầy giỏ tép?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "tam_cam"
+          ],
+          "retrieved_sources": [
+            "tam_cam",
+            "tam_cam",
+            "tam_cam",
+            "cay_khe",
+            "tam_cam"
+          ],
+          "precision_at_k": 0.8,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 2033,
+          "latency_ms": 85.99,
+          "error": null
+        },
+        {
+          "id": "q016",
+          "question": "Cám đã lừa Tấm bằng câu nói nào để lấy giỏ tép?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "tam_cam"
+          ],
+          "retrieved_sources": [
+            "tam_cam",
+            "tam_cam",
+            "tam_cam",
+            "tam_cam",
+            "tam_cam"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1524,
+          "latency_ms": 90.45,
+          "error": null
+        },
+        {
+          "id": "q017",
+          "question": "Tấm gọi cá bống lên ăn bằng câu gì?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "tam_cam"
+          ],
+          "retrieved_sources": [
+            "tam_cam",
+            "tam_cam",
+            "cay_khe",
+            "tam_cam",
+            "cay_khe"
+          ],
+          "precision_at_k": 0.6,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1939,
+          "latency_ms": 132.98,
+          "error": null
+        },
+        {
+          "id": "q018",
+          "question": "Bụt bảo Tấm làm gì với xương cá bống?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "tam_cam"
+          ],
+          "retrieved_sources": [
+            "tam_cam",
+            "tam_cam",
+            "tam_cam",
+            "tam_cam",
+            "tam_cam"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1890,
+          "latency_ms": 113.51,
+          "error": null
+        },
+        {
+          "id": "q019",
+          "question": "Con vật nào giúp Tấm nhặt thóc lẫn trong gạo để đi xem hội?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "tam_cam"
+          ],
+          "retrieved_sources": [
+            "tam_cam",
+            "tam_cam",
+            "tam_cam",
+            "tam_cam",
+            "thanh_giong"
+          ],
+          "precision_at_k": 0.8,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1769,
+          "latency_ms": 93.29,
+          "error": null
+        },
+        {
+          "id": "q020",
+          "question": "Nhờ đâu nhà vua tìm được Tấm?",
+          "tags": [
+            "sequence"
+          ],
+          "expected_sources": [
+            "tam_cam"
+          ],
+          "retrieved_sources": [
+            "tam_cam",
+            "tam_cam",
+            "tam_cam",
+            "thach_sanh",
+            "ho_guom_kich_ban"
+          ],
+          "precision_at_k": 0.6,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 2037,
+          "latency_ms": 85.46,
+          "error": null
+        },
+        {
+          "id": "q021",
+          "question": "Tấm bị hại chết lần đầu như thế nào?",
+          "tags": [
+            "sequence"
+          ],
+          "expected_sources": [
+            "tam_cam"
+          ],
+          "retrieved_sources": [
+            "tam_cam",
+            "tam_cam",
+            "tam_cam",
+            "tam_cam",
+            "tam_cam"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1343,
+          "latency_ms": 88.44,
+          "error": null
+        },
+        {
+          "id": "q022",
+          "question": "Kể theo thứ tự các lần hóa thân của Tấm sau khi chết.",
+          "tags": [
+            "sequence",
+            "multi_hop"
+          ],
+          "expected_sources": [
+            "tam_cam"
+          ],
+          "retrieved_sources": [
+            "tam_cam",
+            "tam_cam",
+            "tam_cam",
+            "tam_cam",
+            "tam_cam"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 0.25,
+          "context_chars": 1343,
+          "latency_ms": 97.09,
+          "error": null
+        },
+        {
+          "id": "q023",
+          "question": "Vì sao nhà vua nhận ra Tấm ở quán nước của bà lão?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "tam_cam"
+          ],
+          "retrieved_sources": [
+            "tam_cam",
+            "tam_cam",
+            "tam_cam",
+            "ho_guom_kich_ban",
+            "tam_cam"
+          ],
+          "precision_at_k": 0.8,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1806,
+          "latency_ms": 91.49,
+          "error": null
+        },
+        {
+          "id": "q024",
+          "question": "Khung cửi kêu câu gì khi Cám ngồi dệt?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "tam_cam"
+          ],
+          "retrieved_sources": [
+            "tam_cam",
+            "tam_cam",
+            "tam_cam",
+            "so_dua",
+            "tam_cam"
+          ],
+          "precision_at_k": 0.8,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1807,
+          "latency_ms": 89.68,
+          "error": null
+        },
+        {
+          "id": "q025",
+          "question": "Vì sao mẹ Sọ Dừa mang thai?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "so_dua"
+          ],
+          "retrieved_sources": [
+            "so_dua",
+            "so_dua",
+            "so_dua",
+            "so_dua",
+            "so_dua"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1679,
+          "latency_ms": 132.59,
+          "error": null
+        },
+        {
+          "id": "q026",
+          "question": "Sọ Dừa làm công việc gì cho nhà phú ông?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "so_dua"
+          ],
+          "retrieved_sources": [
+            "so_dua",
+            "so_dua",
+            "so_dua",
+            "so_dua",
+            "so_dua"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1908,
+          "latency_ms": 91.42,
+          "error": null
+        },
+        {
+          "id": "q027",
+          "question": "Phú ông thách cưới những gì?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "so_dua"
+          ],
+          "retrieved_sources": [
+            "so_dua",
+            "so_dua",
+            "so_dua",
+            "banh_chung_banh_giay",
+            "ho_guom_kich_ban"
+          ],
+          "precision_at_k": 0.6,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 2073,
+          "latency_ms": 89.35,
+          "error": null
+        },
+        {
+          "id": "q028",
+          "question": "Cô út phát hiện Sọ Dừa không phải người thường nhờ chi tiết nào?",
+          "tags": [
+            "character"
+          ],
+          "expected_sources": [
+            "so_dua"
+          ],
+          "retrieved_sources": [
+            "so_dua",
+            "so_dua",
+            "so_dua",
+            "so_dua",
+            "so_dua"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1544,
+          "latency_ms": 95.22,
+          "error": null
+        },
+        {
+          "id": "q029",
+          "question": "Trước khi đi sứ, Sọ Dừa đưa cho vợ những vật gì?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "so_dua"
+          ],
+          "retrieved_sources": [
+            "so_dua",
+            "so_dua",
+            "so_dua",
+            "so_dua",
+            "so_dua"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1841,
+          "latency_ms": 90.49,
+          "error": null
+        },
+        {
+          "id": "q030",
+          "question": "Vợ Sọ Dừa thoát khỏi bụng cá kình bằng cách nào?",
+          "tags": [
+            "sequence"
+          ],
+          "expected_sources": [
+            "so_dua"
+          ],
+          "retrieved_sources": [
+            "so_dua",
+            "so_dua",
+            "so_dua",
+            "so_dua",
+            "so_dua"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1873,
+          "latency_ms": 95.52,
+          "error": null
+        },
+        {
+          "id": "q031",
+          "question": "Con gà trống gáy câu gì khi thuyền quan trạng đi qua đảo?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "so_dua"
+          ],
+          "retrieved_sources": [
+            "so_dua",
+            "so_dua",
+            "cay_khe",
+            "cay_khe",
+            "tam_cam"
+          ],
+          "precision_at_k": 0.4,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1990,
+          "latency_ms": 90.54,
+          "error": null
+        },
+        {
+          "id": "q032",
+          "question": "Hai cô chị của vợ Sọ Dừa có kết cục thế nào?",
+          "tags": [
+            "character"
+          ],
+          "expected_sources": [
+            "so_dua"
+          ],
+          "retrieved_sources": [
+            "so_dua",
+            "so_dua",
+            "so_dua",
+            "so_dua",
+            "so_dua"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 0.0,
+          "context_chars": 1773,
+          "latency_ms": 89.19,
+          "error": null
+        },
+        {
+          "id": "q033",
+          "question": "Khi chia gia tài, người em trong truyện Cây khế được những gì?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "cay_khe"
+          ],
+          "retrieved_sources": [
+            "cay_khe",
+            "cay_khe",
+            "cay_khe",
+            "so_dua",
+            "cay_khe"
+          ],
+          "precision_at_k": 0.8,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 2079,
+          "latency_ms": 87.46,
+          "error": null
+        },
+        {
+          "id": "q034",
+          "question": "Con chim lạ hứa trả ơn người em bằng câu nói nào?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "cay_khe"
+          ],
+          "retrieved_sources": [
+            "cay_khe",
+            "cay_khe",
+            "cay_khe",
+            "cay_khe",
+            "tam_cam"
+          ],
+          "precision_at_k": 0.8,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 2038,
+          "latency_ms": 88.54,
+          "error": null
+        },
+        {
+          "id": "q035",
+          "question": "Người anh may túi bao nhiêu gang và vì sao bị rơi xuống biển?",
+          "tags": [
+            "sequence"
+          ],
+          "expected_sources": [
+            "cay_khe"
+          ],
+          "retrieved_sources": [
+            "cay_khe",
+            "cay_khe",
+            "cay_khe",
+            "tam_cam",
+            "cay_khe"
+          ],
+          "precision_at_k": 0.8,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1901,
+          "latency_ms": 91.18,
+          "error": null
+        },
+        {
+          "id": "q036",
+          "question": "Truyện Cây khế muốn khuyên người đọc điều gì?",
+          "tags": [
+            "moral"
+          ],
+          "expected_sources": [
+            "cay_khe"
+          ],
+          "retrieved_sources": [
+            "cay_khe",
+            "cay_khe",
+            "cay_khe",
+            "ho_guom_kich_ban",
+            "cay_khe"
+          ],
+          "precision_at_k": 0.8,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 2098,
+          "latency_ms": 89.49,
+          "error": null
+        },
+        {
+          "id": "q037",
+          "question": "Vua Hùng thách những sính lễ gì khi kén rể cho Mị Nương?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "son_tinh_thuy_tinh"
+          ],
+          "retrieved_sources": [
+            "son_tinh_thuy_tinh",
+            "son_tinh_thuy_tinh",
+            "son_tinh_thuy_tinh",
+            "con_rong_chau_tien",
+            "son_tinh_thuy_tinh"
+          ],
+          "precision_at_k": 0.8,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1660,
+          "latency_ms": 91.58,
+          "error": null
+        },
+        {
+          "id": "q038",
+          "question": "Sơn Tinh có tài lạ gì?",
+          "tags": [
+            "character"
+          ],
+          "expected_sources": [
+            "son_tinh_thuy_tinh"
+          ],
+          "retrieved_sources": [
+            "son_tinh_thuy_tinh",
+            "son_tinh_thuy_tinh",
+            "son_tinh_thuy_tinh",
+            "son_tinh_thuy_tinh",
+            "son_tinh_thuy_tinh"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1626,
+          "latency_ms": 82.87,
+          "error": null
+        },
+        {
+          "id": "q039",
+          "question": "Vì sao Thủy Tinh dâng nước đánh Sơn Tinh?",
+          "tags": [
+            "sequence"
+          ],
+          "expected_sources": [
+            "son_tinh_thuy_tinh"
+          ],
+          "retrieved_sources": [
+            "son_tinh_thuy_tinh",
+            "son_tinh_thuy_tinh",
+            "son_tinh_thuy_tinh",
+            "son_tinh_thuy_tinh",
+            "son_tinh_thuy_tinh"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1626,
+          "latency_ms": 75.24,
+          "error": null
+        },
+        {
+          "id": "q040",
+          "question": "Sơn Tinh chống lại nước lũ bằng cách nào?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "son_tinh_thuy_tinh"
+          ],
+          "retrieved_sources": [
+            "son_tinh_thuy_tinh",
+            "son_tinh_thuy_tinh",
+            "con_rong_chau_tien",
+            "son_tinh_thuy_tinh",
+            "son_tinh_thuy_tinh"
+          ],
+          "precision_at_k": 0.8,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1884,
+          "latency_ms": 82.81,
+          "error": null
+        },
+        {
+          "id": "q041",
+          "question": "Truyện Sơn Tinh, Thủy Tinh giải thích hiện tượng tự nhiên nào?",
+          "tags": [
+            "moral"
+          ],
+          "expected_sources": [
+            "son_tinh_thuy_tinh"
+          ],
+          "retrieved_sources": [
+            "son_tinh_thuy_tinh",
+            "son_tinh_thuy_tinh",
+            "son_tinh_thuy_tinh",
+            "son_tinh_thuy_tinh",
+            "con_rong_chau_tien"
+          ],
+          "precision_at_k": 0.8,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1884,
+          "latency_ms": 93.84,
+          "error": null
+        },
+        {
+          "id": "q042",
+          "question": "Vì sao bà mẹ Thánh Gióng thụ thai?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "thanh_giong"
+          ],
+          "retrieved_sources": [
+            "thanh_giong",
+            "thach_sanh",
+            "so_dua",
+            "con_rong_chau_tien",
+            "thanh_giong"
+          ],
+          "precision_at_k": 0.4,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1622,
+          "latency_ms": 85.71,
+          "error": null
+        },
+        {
+          "id": "q043",
+          "question": "Câu nói đầu tiên của cậu bé làng Gióng là gì?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "thanh_giong"
+          ],
+          "retrieved_sources": [
+            "thanh_giong",
+            "thanh_giong",
+            "thanh_giong",
+            "ho_guom_kich_ban",
+            "thach_sanh"
+          ],
+          "precision_at_k": 0.6,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1978,
+          "latency_ms": 87.08,
+          "error": null
+        },
+        {
+          "id": "q044",
+          "question": "Gióng yêu cầu nhà vua chuẩn bị những gì để đánh giặc?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "thanh_giong"
+          ],
+          "retrieved_sources": [
+            "thanh_giong",
+            "thanh_giong",
+            "ho_guom_kich_ban",
+            "banh_chung_banh_giay",
+            "thanh_giong"
+          ],
+          "precision_at_k": 0.6,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 2012,
+          "latency_ms": 92.67,
+          "error": null
+        },
+        {
+          "id": "q045",
+          "question": "Khi roi sắt gãy, Gióng dùng gì để đánh giặc?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "thanh_giong"
+          ],
+          "retrieved_sources": [
+            "thanh_giong",
+            "thanh_giong",
+            "thanh_giong",
+            "thanh_giong",
+            "thach_sanh"
+          ],
+          "precision_at_k": 0.8,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 2004,
+          "latency_ms": 91.09,
+          "error": null
+        },
+        {
+          "id": "q046",
+          "question": "Sau khi đánh tan giặc, Gióng đi đâu?",
+          "tags": [
+            "sequence"
+          ],
+          "expected_sources": [
+            "thanh_giong"
+          ],
+          "retrieved_sources": [
+            "thanh_giong",
+            "ho_guom_kich_ban",
+            "thanh_giong",
+            "ho_guom_kich_ban",
+            "thanh_giong"
+          ],
+          "precision_at_k": 0.6,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 2094,
+          "latency_ms": 95.68,
+          "error": null
+        },
+        {
+          "id": "q047",
+          "question": "Những dấu tích nào còn lại sau trận đánh của Thánh Gióng?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "thanh_giong"
+          ],
+          "retrieved_sources": [
+            "thanh_giong",
+            "thanh_giong",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban"
+          ],
+          "precision_at_k": 0.4,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1704,
+          "latency_ms": 87.87,
+          "error": null
+        },
+        {
+          "id": "q048",
+          "question": "Vua phong cho Gióng danh hiệu gì?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "thanh_giong"
+          ],
+          "retrieved_sources": [
+            "thanh_giong",
+            "thanh_giong",
+            "thanh_giong",
+            "con_rong_chau_tien",
+            "thach_sanh"
+          ],
+          "precision_at_k": 0.6,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1915,
+          "latency_ms": 91.03,
+          "error": null
+        },
+        {
+          "id": "q049",
+          "question": "Vua Hùng đặt điều kiện gì cho người nối ngôi?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "banh_chung_banh_giay"
+          ],
+          "retrieved_sources": [
+            "banh_chung_banh_giay",
+            "con_rong_chau_tien",
+            "son_tinh_thuy_tinh",
+            "thach_sanh",
+            "banh_chung_banh_giay"
+          ],
+          "precision_at_k": 0.4,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1556,
+          "latency_ms": 88.55,
+          "error": null
+        },
+        {
+          "id": "q050",
+          "question": "Lang Liêu là con thứ mấy của vua Hùng và vì sao chàng thiệt thòi?",
+          "tags": [
+            "character"
+          ],
+          "expected_sources": [
+            "banh_chung_banh_giay"
+          ],
+          "retrieved_sources": [
+            "banh_chung_banh_giay",
+            "banh_chung_banh_giay",
+            "con_rong_chau_tien",
+            "banh_chung_banh_giay",
+            "banh_chung_banh_giay"
+          ],
+          "precision_at_k": 0.8,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1841,
+          "latency_ms": 106.78,
+          "error": null
+        },
+        {
+          "id": "q051",
+          "question": "Vị thần báo mộng cho Lang Liêu điều gì?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "banh_chung_banh_giay"
+          ],
+          "retrieved_sources": [
+            "banh_chung_banh_giay",
+            "banh_chung_banh_giay",
+            "banh_chung_banh_giay",
+            "banh_chung_banh_giay",
+            "con_rong_chau_tien"
+          ],
+          "precision_at_k": 0.8,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1713,
+          "latency_ms": 102.61,
+          "error": null
+        },
+        {
+          "id": "q052",
+          "question": "Hình dáng bánh chưng và bánh giầy tượng trưng cho điều gì?",
+          "tags": [
+            "moral"
+          ],
+          "expected_sources": [
+            "banh_chung_banh_giay"
+          ],
+          "retrieved_sources": [
+            "banh_chung_banh_giay",
+            "banh_chung_banh_giay",
+            "son_tinh_thuy_tinh",
+            "banh_chung_banh_giay",
+            "banh_chung_banh_giay"
+          ],
+          "precision_at_k": 0.8,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1658,
+          "latency_ms": 113.1,
+          "error": null
+        },
+        {
+          "id": "q053",
+          "question": "Lạc Long Quân đã diệt trừ những yêu quái nào?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "con_rong_chau_tien"
+          ],
+          "retrieved_sources": [
+            "con_rong_chau_tien",
+            "con_rong_chau_tien",
+            "con_rong_chau_tien",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban"
+          ],
+          "precision_at_k": 0.6,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 2020,
+          "latency_ms": 102.48,
+          "error": null
+        },
+        {
+          "id": "q054",
+          "question": "Âu Cơ sinh ra những gì?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "con_rong_chau_tien"
+          ],
+          "retrieved_sources": [
+            "con_rong_chau_tien",
+            "con_rong_chau_tien",
+            "con_rong_chau_tien",
+            "con_rong_chau_tien",
+            "ho_guom_kich_ban"
+          ],
+          "precision_at_k": 0.8,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1777,
+          "latency_ms": 104.58,
+          "error": null
+        },
+        {
+          "id": "q055",
+          "question": "Lạc Long Quân và Âu Cơ chia con như thế nào?",
+          "tags": [
+            "sequence"
+          ],
+          "expected_sources": [
+            "con_rong_chau_tien"
+          ],
+          "retrieved_sources": [
+            "con_rong_chau_tien",
+            "con_rong_chau_tien",
+            "con_rong_chau_tien",
+            "con_rong_chau_tien",
+            "con_rong_chau_tien"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1810,
+          "latency_ms": 137.21,
+          "error": null
+        },
+        {
+          "id": "q056",
+          "question": "Nước Văn Lang đóng đô ở đâu?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "con_rong_chau_tien"
+          ],
+          "retrieved_sources": [
+            "con_rong_chau_tien",
+            "ho_guom_kich_ban",
+            "con_rong_chau_tien",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban"
+          ],
+          "precision_at_k": 0.4,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 2134,
+          "latency_ms": 95.75,
+          "error": null
+        },
+        {
+          "id": "q057",
+          "question": "Vì sao người Việt gọi nhau là đồng bào?",
+          "tags": [
+            "moral"
+          ],
+          "expected_sources": [
+            "con_rong_chau_tien"
+          ],
+          "retrieved_sources": [
+            "con_rong_chau_tien",
+            "son_tinh_thuy_tinh",
+            "con_rong_chau_tien",
+            "ho_guom_kich_ban",
+            "cay_khe"
+          ],
+          "precision_at_k": 0.4,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1338,
+          "latency_ms": 97.11,
+          "error": null
+        },
+        {
+          "id": "q058",
+          "question": "Đạo sĩ họ Lưu làm cách nào để biết ai là anh trong hai anh em họ Cao?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "su_tich_trau_cau"
+          ],
+          "retrieved_sources": [
+            "su_tich_trau_cau",
+            "su_tich_trau_cau",
+            "thach_sanh",
+            "banh_chung_banh_giay",
+            "ho_guom_kich_ban"
+          ],
+          "precision_at_k": 0.4,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1645,
+          "latency_ms": 126.06,
+          "error": null
+        },
+        {
+          "id": "q059",
+          "question": "Ba nhân vật trong Sự tích trầu cau lần lượt hóa thành gì?",
+          "tags": [
+            "character",
+            "multi_hop"
+          ],
+          "expected_sources": [
+            "su_tich_trau_cau"
+          ],
+          "retrieved_sources": [
+            "su_tich_trau_cau",
+            "su_tich_trau_cau",
+            "su_tich_trau_cau",
+            "so_dua",
+            "tam_cam"
+          ],
+          "precision_at_k": 0.6,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 0.6666666666666666,
+          "context_chars": 1585,
+          "latency_ms": 108.49,
+          "error": null
+        },
+        {
+          "id": "q060",
+          "question": "Khi nhai lá trầu, quả cau và vôi cùng nhau thì có hiện tượng gì?",
+          "tags": [
+            "fact"
+          ],
+          "expected_sources": [
+            "su_tich_trau_cau"
+          ],
+          "retrieved_sources": [
+            "su_tich_trau_cau",
+            "su_tich_trau_cau",
+            "su_tich_trau_cau",
+            "tam_cam",
+            "su_tich_trau_cau"
+          ],
+          "precision_at_k": 0.8,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1444,
+          "latency_ms": 130.43,
+          "error": null
+        },
+        {
+          "id": "q061",
+          "question": "Ai vớt được lưỡi gươm dưới sông Lương và trên lưỡi gươm có chữ gì?",
+          "tags": [
+            "fact",
+            "creative"
+          ],
+          "expected_sources": [
+            "ho_guom_kich_ban"
+          ],
+          "retrieved_sources": [
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 2191,
+          "latency_ms": 115.03,
+          "error": null
+        },
+        {
+          "id": "q062",
+          "question": "Lê Lợi tìm thấy chuôi gươm ở đâu?",
+          "tags": [
+            "fact",
+            "creative"
+          ],
+          "expected_sources": [
+            "ho_guom_kich_ban"
+          ],
+          "retrieved_sources": [
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 2038,
+          "latency_ms": 115.29,
+          "error": null
+        },
+        {
+          "id": "q063",
+          "question": "Quân sư Nguyễn Trãi đề ra chiến lược gì cho nghĩa quân Lam Sơn?",
+          "tags": [
+            "fact",
+            "creative"
+          ],
+          "expected_sources": [
+            "ho_guom_kich_ban"
+          ],
+          "retrieved_sources": [
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 2152,
+          "latency_ms": 133.13,
+          "error": null
+        },
+        {
+          "id": "q064",
+          "question": "Sau khi lên ngôi, Lê Lợi lấy hiệu là gì?",
+          "tags": [
+            "fact",
+            "creative"
+          ],
+          "expected_sources": [
+            "ho_guom_kich_ban"
+          ],
+          "retrieved_sources": [
+            "ho_guom_kich_ban",
+            "con_rong_chau_tien",
+            "ho_guom_kich_ban",
+            "banh_chung_banh_giay",
+            "ho_guom_kich_ban"
+          ],
+          "precision_at_k": 0.6,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 2265,
+          "latency_ms": 138.62,
+          "error": null
+        },
+        {
+          "id": "q065",
+          "question": "Ai được Long Vương sai đến nhận lại thanh kiếm?",
+          "tags": [
+            "fact",
+            "creative"
+          ],
+          "expected_sources": [
+            "ho_guom_kich_ban"
+          ],
+          "retrieved_sources": [
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 2252,
+          "latency_ms": 143.51,
+          "error": null
+        },
+        {
+          "id": "q066",
+          "question": "Bài học rút ra từ kịch bản Hồ Gươm là gì?",
+          "tags": [
+            "moral",
+            "creative"
+          ],
+          "expected_sources": [
+            "ho_guom_kich_ban"
+          ],
+          "retrieved_sources": [
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1864,
+          "latency_ms": 182.57,
+          "error": null
+        },
+        {
+          "id": "q067",
+          "question": "Kịch bản Hồ Gươm được viết cho độc giả nào và theo giọng văn gì?",
+          "tags": [
+            "creative"
+          ],
+          "expected_sources": [
+            "ho_guom_kich_ban"
+          ],
+          "retrieved_sources": [
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1978,
+          "latency_ms": 155.04,
+          "error": null
+        },
+        {
+          "id": "q068",
+          "question": "Bản chỉnh sửa kịch bản Hồ Gươm đã cải thiện những gì?",
+          "tags": [
+            "creative"
+          ],
+          "expected_sources": [
+            "ho_guom_kich_ban"
+          ],
+          "retrieved_sources": [
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1811,
+          "latency_ms": 132.43,
+          "error": null
+        },
+        {
+          "id": "q069",
+          "question": "Kịch bản Hồ Gươm có bao nhiêu cảnh và cảnh cuối tên là gì?",
+          "tags": [
+            "creative"
+          ],
+          "expected_sources": [
+            "ho_guom_kich_ban"
+          ],
+          "retrieved_sources": [
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1854,
+          "latency_ms": 139.87,
+          "error": null
+        },
+        {
+          "id": "q070",
+          "question": "Những truyện nào có chi tiết nhân vật hóa thân thành vật khác sau khi chết?",
+          "tags": [
+            "motif",
+            "multi_source"
+          ],
+          "expected_sources": [
+            "tam_cam",
+            "su_tich_trau_cau",
+            "thach_sanh"
+          ],
+          "retrieved_sources": [
+            "su_tich_trau_cau",
+            "su_tich_trau_cau",
+            "thach_sanh",
+            "tam_cam",
+            "thanh_giong"
+          ],
+          "precision_at_k": 0.8,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 0.9060254355346823,
+          "evidence_recall": 0.6666666666666666,
+          "context_chars": 1902,
+          "latency_ms": 101.87,
+          "error": null
+        },
+        {
+          "id": "q071",
+          "question": "Những truyện nào có kẻ tham lam hoặc độc ác bị trừng phạt?",
+          "tags": [
+            "motif",
+            "multi_source"
+          ],
+          "expected_sources": [
+            "cay_khe",
+            "thach_sanh",
+            "tam_cam",
+            "so_dua"
+          ],
+          "retrieved_sources": [
+            "thach_sanh",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "cay_khe"
+          ],
+          "precision_at_k": 0.4,
+          "recall_at_k": 0.5,
+          "mrr": 1.0,
+          "ndcg": 0.5413996682199069,
+          "evidence_recall": 0.0,
+          "context_chars": 2030,
+          "latency_ms": 132.5,
+          "error": null
+        },
+        {
+          "id": "q072",
+          "question": "Truyện nào có chi tiết thách cưới bằng sính lễ?",
+          "tags": [
+            "motif",
+            "multi_source"
+          ],
+          "expected_sources": [
+            "son_tinh_thuy_tinh",
+            "so_dua"
+          ],
+          "retrieved_sources": [
+            "so_dua",
+            "son_tinh_thuy_tinh",
+            "son_tinh_thuy_tinh",
+            "banh_chung_banh_giay",
+            "so_dua"
+          ],
+          "precision_at_k": 0.8,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1822,
+          "latency_ms": 113.45,
+          "error": null
+        },
+        {
+          "id": "q073",
+          "question": "Những truyện nào có loài chim giúp đỡ nhân vật chính?",
+          "tags": [
+            "motif",
+            "multi_source"
+          ],
+          "expected_sources": [
+            "cay_khe",
+            "tam_cam"
+          ],
+          "retrieved_sources": [
+            "cay_khe",
+            "cay_khe",
+            "cay_khe",
+            "cay_khe",
+            "con_rong_chau_tien"
+          ],
+          "precision_at_k": 0.8,
+          "recall_at_k": 0.5,
+          "mrr": 1.0,
+          "ndcg": 0.6131471927654584,
+          "evidence_recall": 0.5,
+          "context_chars": 2054,
+          "latency_ms": 97.54,
+          "error": null
+        },
+        {
+          "id": "q074",
+          "question": "Những truyện nào xảy ra vào đời Hùng Vương thứ sáu?",
+          "tags": [
+            "multi_source"
+          ],
+          "expected_sources": [
+            "thanh_giong",
+            "banh_chung_banh_giay"
+          ],
+          "retrieved_sources": [
+            "banh_chung_banh_giay",
+            "con_rong_chau_tien",
+            "thanh_giong",
+            "son_tinh_thuy_tinh",
+            "banh_chung_banh_giay"
+          ],
+          "precision_at_k": 0.6,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 0.9197207891481876,
+          "evidence_recall": 1.0,
+          "context_chars": 1703,
+          "latency_ms": 104.53,
+          "error": null
+        },
+        {
+          "id": "q075",
+          "question": "Những truyện nào kể về cuộc chiến chống giặc ngoại xâm?",
+          "tags": [
+            "motif",
+            "multi_source"
+          ],
+          "expected_sources": [
+            "thanh_giong",
+            "ho_guom_kich_ban"
+          ],
+          "retrieved_sources": [
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "thanh_giong",
+            "ho_guom_kich_ban",
+            "thanh_giong"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 0.9197207891481876,
+          "evidence_recall": 0.5,
+          "context_chars": 1721,
+          "latency_ms": 98.99,
+          "error": null
+        },
+        {
+          "id": "q076",
+          "question": "Những vật báu thần kỳ nào giúp nhân vật đánh thắng kẻ thù?",
+          "tags": [
+            "motif",
+            "multi_source"
+          ],
+          "expected_sources": [
+            "thach_sanh",
+            "thanh_giong",
+            "ho_guom_kich_ban"
+          ],
+          "retrieved_sources": [
+            "con_rong_chau_tien",
+            "thanh_giong",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban",
+            "thach_sanh"
+          ],
+          "precision_at_k": 0.8,
+          "recall_at_k": 1.0,
+          "mrr": 0.5,
+          "ndcg": 0.7122630665145961,
+          "evidence_recall": 0.6666666666666666,
+          "context_chars": 1910,
+          "latency_ms": 99.8,
+          "error": null
+        },
+        {
+          "id": "q077",
+          "question": "Thủy cung hay thế giới dưới nước xuất hiện trong những truyện nào?",
+          "tags": [
+            "motif",
+            "multi_source"
+          ],
+          "expected_sources": [
+            "thach_sanh",
+            "con_rong_chau_tien",
+            "ho_guom_kich_ban"
+          ],
+          "retrieved_sources": [
+            "con_rong_chau_tien",
+            "ho_guom_kich_ban",
+            "con_rong_chau_tien",
+            "son_tinh_thuy_tinh",
+            "son_tinh_thuy_tinh"
+          ],
+          "precision_at_k": 0.6,
+          "recall_at_k": 0.6666666666666666,
+          "mrr": 1.0,
+          "ndcg": 0.7653606369886217,
+          "evidence_recall": 0.3333333333333333,
+          "context_chars": 2028,
+          "latency_ms": 105.99,
+          "error": null
+        },
+        {
+          "id": "q078",
+          "question": "Những truyện nào giải thích nguồn gốc một phong tục của người Việt?",
+          "tags": [
+            "moral",
+            "multi_source"
+          ],
+          "expected_sources": [
+            "banh_chung_banh_giay",
+            "su_tich_trau_cau"
+          ],
+          "retrieved_sources": [
+            "son_tinh_thuy_tinh",
+            "con_rong_chau_tien",
+            "su_tich_trau_cau",
+            "con_rong_chau_tien",
+            "ho_guom_kich_ban"
+          ],
+          "precision_at_k": 0.2,
+          "recall_at_k": 0.5,
+          "mrr": 0.3333333333333333,
+          "ndcg": 0.3065735963827292,
+          "evidence_recall": 0.5,
+          "context_chars": 1522,
+          "latency_ms": 103.71,
+          "error": null
+        },
+        {
+          "id": "q079",
+          "question": "thach sanh giet chan tinh bang gi",
+          "tags": [
+            "no_diacritics"
+          ],
+          "expected_sources": [
+            "thach_sanh"
+          ],
+          "retrieved_sources": [
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh",
+            "thach_sanh"
+          ],
+          "precision_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1667,
+          "latency_ms": 110.05,
+          "error": null
+        },
+        {
+          "id": "q080",
+          "question": "tam bi di ghe hai chet nhu the nao",
+          "tags": [
+            "no_diacritics"
+          ],
+          "expected_sources": [
+            "tam_cam"
+          ],
+          "retrieved_sources": [
+            "tam_cam",
+            "cay_khe",
+            "so_dua",
+            "ho_guom_kich_ban",
+            "ho_guom_kich_ban"
+          ],
+          "precision_at_k": 0.2,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 0.0,
+          "context_chars": 1682,
+          "latency_ms": 96.55,
+          "error": null
+        },
+        {
+          "id": "q081",
+          "question": "so dua chan bo co gioi khong",
+          "tags": [
+            "no_diacritics"
+          ],
+          "expected_sources": [
+            "so_dua"
+          ],
+          "retrieved_sources": [
+            "so_dua",
+            "ho_guom_kich_ban",
+            "tam_cam",
+            "so_dua",
+            "su_tich_trau_cau"
+          ],
+          "precision_at_k": 0.4,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 0.0,
+          "context_chars": 1900,
+          "latency_ms": 85.15,
+          "error": null
+        },
+        {
+          "id": "q082",
+          "question": "son tinh thuy tinh danh nhau vi ai",
+          "tags": [
+            "no_diacritics"
+          ],
+          "expected_sources": [
+            "son_tinh_thuy_tinh"
+          ],
+          "retrieved_sources": [
+            "son_tinh_thuy_tinh",
+            "son_tinh_thuy_tinh",
+            "son_tinh_thuy_tinh",
+            "son_tinh_thuy_tinh",
+            "thach_sanh"
+          ],
+          "precision_at_k": 0.8,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1708,
+          "latency_ms": 90.54,
+          "error": null
+        },
+        {
+          "id": "q083",
+          "question": "lang lieu lam banh gi de le tien vuong",
+          "tags": [
+            "no_diacritics"
+          ],
+          "expected_sources": [
+            "banh_chung_banh_giay"
+          ],
+          "retrieved_sources": [
+            "banh_chung_banh_giay",
+            "banh_chung_banh_giay",
+            "banh_chung_banh_giay",
+            "so_dua",
+            "ho_guom_kich_ban"
+          ],
+          "precision_at_k": 0.6,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1754,
+          "latency_ms": 84.93,
+          "error": null
+        },
+        {
+          "id": "q084",
+          "question": "Nhân vật nào vốn là người nhà trời được phái xuống làm con một cặp vợ chồng nghèo hiếm muộn?",
+          "tags": [
+            "paraphrase"
+          ],
+          "expected_sources": [
+            "thach_sanh"
+          ],
+          "retrieved_sources": [
+            "thach_sanh",
+            "so_dua",
+            "thanh_giong",
+            "con_rong_chau_tien",
+            "thanh_giong"
+          ],
+          "precision_at_k": 0.2,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1798,
+          "latency_ms": 105.12,
+          "error": null
+        },
+        {
+          "id": "q085",
+          "question": "Khi cha mẹ qua đời, người anh đã đối xử bất công với em mình ra sao?",
+          "tags": [
+            "paraphrase"
+          ],
+          "expected_sources": [
+            "cay_khe"
+          ],
+          "retrieved_sources": [
+            "cay_khe",
+            "tam_cam",
+            "banh_chung_banh_giay",
+            "su_tich_trau_cau",
+            "cay_khe"
+          ],
+          "precision_at_k": 0.4,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1879,
+          "latency_ms": 102.02,
+          "error": null
+        },
+        {
+          "id": "q086",
+          "question": "Cậu bé nào ba tuổi chưa biết nói cười rồi bỗng lớn vụt lên để cứu nước?",
+          "tags": [
+            "paraphrase"
+          ],
+          "expected_sources": [
+            "thanh_giong"
+          ],
+          "retrieved_sources": [
+            "thanh_giong",
+            "thanh_giong",
+            "thanh_giong",
+            "thanh_giong",
+            "ho_guom_kich_ban"
+          ],
+          "precision_at_k": 0.8,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1805,
+          "latency_ms": 103.07,
+          "error": null
+        },
+        {
+          "id": "q087",
+          "question": "Vì sao người anh trong truyện trầu cau ngày càng xa cách em trai?",
+          "tags": [
+            "paraphrase"
+          ],
+          "expected_sources": [
+            "su_tich_trau_cau"
+          ],
+          "retrieved_sources": [
+            "su_tich_trau_cau",
+            "banh_chung_banh_giay",
+            "su_tich_trau_cau",
+            "su_tich_trau_cau",
+            "su_tich_trau_cau"
+          ],
+          "precision_at_k": 0.8,
+          "recall_at_k": 1.0,
+          "mrr": 1.0,
+          "ndcg": 1.0,
+          "evidence_recall": 1.0,
+          "context_chars": 1914,
+          "latency_ms": 102.18,
+          "error": null
+        }
+      ]
+    }
+  }
+}

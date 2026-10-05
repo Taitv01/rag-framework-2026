@@ -44,6 +44,26 @@ py scripts/eval.py answer --llm api --base-url https://openrouter.ai/api/v1 `
 
 # So sánh hai báo cáo bất kỳ
 py scripts/eval.py compare evals/fairy_tales/baselines/retrieval.json evals/fairy_tales/runs/<file>.json
+
+# Cổng chất lượng: thoát mã 1 nếu có chỉ số tụt quá ngưỡng (DEFAULT_GATE)
+py scripts/eval.py compare <baseline>.json <báo cáo mới>.json --gate
+```
+
+### Cổng chất lượng trong CI
+
+`.github/workflows/quality.yml` chạy trên mọi pull request đụng tới `src/`,
+`evals/fairy_tales/`, `scripts/eval.py` hoặc `pyproject.toml`: đo retrieval cấu
+hình `hybrid` (bge-m3 trên CPU, Qdrant trong RAM, không reranker, không LLM) rồi
+so với [`baselines/retrieval_ci.json`](baselines/retrieval_ci.json) bằng `--gate`.
+Recall, MRR, nDCG và `evidence_recall` được tụt tối đa 0,02; độ trễ và độ dài
+ngữ cảnh không tính vì phụ thuộc máy và `k`.
+
+Khi cố ý thay đổi chất lượng retrieval, tạo lại baseline bằng đúng lệnh của CI
+và commit cùng thay đổi:
+
+```powershell
+py scripts/eval.py retrieval --configs hybrid --device cpu --vector-store qdrant `
+    --cache-dir .cache/huggingface --out evals/fairy_tales/baselines/retrieval_ci.json
 ```
 
 Lần chạy đầu sẽ tải `BAAI/bge-m3` và `AITeamVN/Vietnamese_Reranker` (khoảng 4,5 GB).

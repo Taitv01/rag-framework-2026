@@ -1,0 +1,60 @@
+name: Quality gate
+
+# Retrieval quality on the fairy-tale golden set, compared with the committed
+# baseline: a pull request that makes retrieval worse beyond the tolerances in
+# src.evaluation.benchmark.DEFAULT_GATE fails. Real models on CPU (BAAI/bge-m3,
+# cached between runs); the reranker (another 2.3 GB) and the LLM are left out,
+# so this checks chunking, embeddings, BM25 and parent context.
+#
+# After an intended change in retrieval quality, regenerate the baseline with
+# the command in the "Benchmark" step and commit it with the change.
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "evals/fairy_tales/**"
+      - "scripts/eval.py"
+      - "pyproject.toml"
+      - ".github/workflows/quality.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  retrieval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RAG_DISABLE_DOTENV: "1"
+      HF_HOME: ${{ github.workspace }}/.cache/huggingface
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      # CPU-only torch: the default wheel pulls in CUDA libraries the runner cannot use.
+      - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - run: pip install -e ".[local-models,qdrant]"
+      - name: Cache embedding model
+        uses: actions/cache@v4
+        with:
+          path: .cache/huggingface
+          key: hf-bge-m3-v1
+      - name: Benchmark
+        run: >-
+          python scripts/eval.py retrieval --configs hybrid --device cpu
+          --vector-store qdrant --out retrieval-ci.json
+      - name: Compare with the baseline
+        run: >-
+          python scripts/eval.py compare evals/fairy_tales/baselines/retrieval_ci.json
+          retrieval-ci.json --gate
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: retrieval-report
+          path: retrieval-ci.json

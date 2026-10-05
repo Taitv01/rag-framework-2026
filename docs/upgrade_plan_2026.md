@@ -398,9 +398,23 @@ Qdrant, parent context, hybrid + rerank (fp32), `query_rewrite="auto"`,
   - Bản ghi job chỉ nằm trong bộ nhớ, restart là mất; tài liệu đã index thì không mất.
 
 ## Giai đoạn 5: Nâng cao (theo số đo)
-- BGE-M3 sparse/multi-vector; contextual retrieval cho corpus truyện.
-- GraphRAG có community summaries và lưu graph xuống đĩa.
-- Cập nhật catalog LLM; CI chặn merge khi chất lượng tụt quá ngưỡng.
+- [x] **Catalog Claude hiện hành.** Mặc định Anthropic từng là
+      `claude-sonnet-4-20250514` (đã deprecated), catalog còn liệt kê các model đã
+      ngừng. Nay mặc định `claude-opus-5-5`; catalog có Opus 5.5, Sonnet 5.5,
+      Haiku 4.5, Sonnet 4.6. Opus 4.7+, Sonnet 5+ và Fable trả lỗi 400 khi nhận
+      `temperature`, nên `LLMManager` chỉ gửi `temperature` cho model chấp nhận nó.
+      Catalog OpenAI giữ nguyên vì chưa kiểm chứng tên model hiện hành.
+- [x] **CI chặn merge khi chất lượng tụt.** `scripts/eval.py compare --gate` thoát
+      mã 1 khi có chỉ số tụt quá ngưỡng (`DEFAULT_GATE`: 0,02 cho recall, MRR, nDCG,
+      evidence/answer recall, faithfulness, citation, từ chối nhầm; 0 cho
+      abstention accuracy và số câu lỗi; 0,5 lời gọi LLM mỗi câu). Workflow
+      `quality.yml` đo retrieval `hybrid` trên CPU (không reranker, không LLM) và so
+      với `baselines/retrieval_ci.json`. Baseline tạo bằng đúng lệnh của CI, cho số
+      trùng khớp cấu hình `hybrid` của Giai đoạn 2 (evidence_recall 0,909). Workflow
+      chưa chạy thật vì nhánh chưa push được.
+- [ ] Câu hỏi trải trên nhiều truyện (`motif`, `multi_source`): nhóm yếu nhất.
+- [ ] BGE-M3 sparse/multi-vector; contextual retrieval cho corpus truyện.
+- [ ] GraphRAG có community summaries và lưu graph xuống đĩa.
 
 ## Quyết định đã chốt
 1. Mục đích dùng ưu tiên: **truyện cổ tích/sáng tác** (10/2026).
