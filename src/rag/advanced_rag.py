@@ -1138,7 +1138,7 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
             return []
         try:
             candidates = self._card_store.similarity_search(
-                query, k=max(8, 3 * self.max_context_cards), filter=filter
+                query, k=max(4, self.max_context_cards + 1), filter=filter
             )
             cards = self._retriever.rerank(query, candidates, k=len(candidates))
         except Exception as e:
