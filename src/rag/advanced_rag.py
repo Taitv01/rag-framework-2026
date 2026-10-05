@@ -14,6 +14,7 @@ Features:
 - HyDE (Hypothetical Document Embeddings)
 - Multi-query with RRF (Reciprocal Rank Fusion)
 - Streaming responses
+- Document cards: one LLM summary per document, for questions across documents
 
 Pipeline (one path for query, query_detailed and stream):
 1. Load and chunk documents (optionally with contextual headers)
@@ -52,6 +53,7 @@ from src.core.markdown_index import MarkdownFolderIndexer
 from src.monitoring.tracing import record_steps, step
 from src.utils.rwlock import ReadWriteLock
 from src.rag.multimodal import build_multimodal_prompt
+from src.rag.document_cards import card_document, card_id, card_prompt, content_hash, group_by_document
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +133,9 @@ class AdvancedRAG:
     _hallucination_grader = None
     use_hyde = False
     use_multi_query_rrf = False
+    use_document_cards = False
+    max_context_cards = 3
+    _card_store = None
 
     def __init__(
         self,
@@ -173,6 +178,8 @@ class AdvancedRAG:
         use_hallucination_check: bool = False,
         hallucination_threshold: float = 0.8,
         use_metadata_enhancement: bool = False,
+        use_document_cards: bool = False,
+        max_context_cards: int = 3,
     ):
         """
         Initialize Advanced RAG.
@@ -221,6 +228,14 @@ class AdvancedRAG:
             use_hallucination_check: Enable hallucination verification after generation
             hallucination_threshold: Minimum grounded score to accept answer (0-1)
             use_metadata_enhancement: Enable LLM-based metadata extraction for chunks
+            use_document_cards: Write one card per document with the LLM when it
+                is indexed (summary, characters, events, motifs), kept in a
+                ``<collection>__cards`` collection. With reranking, cards compete
+                with passages and those that would rank in the top k are given
+                to the LLM besides the k passages: questions across documents
+                ("which stories have...") need what a whole document is about.
+                Standard search only (not HyDE or multi-query).
+            max_context_cards: Most cards added to one query's context
         """
         # Initialize components
         self.document_loader = DocumentLoader()
@@ -324,6 +339,14 @@ class AdvancedRAG:
             self._metadata_enhancer = MetadataEnhancer(llm=self.llm)
             logger.info("Metadata enhancement enabled")
 
+        # Document cards live beside the chunks, in their own collection.
+        self.use_document_cards = use_document_cards
+        self.max_context_cards = max(0, max_context_cards)
+        self._cards: Dict[str, Document] = {}
+        self._card_store = (
+            self.vector_store.sibling(f"{collection_name}__cards") if use_document_cards else None
+        )
+
         # Track documents
         self._documents = []
         self._chunks = []
@@ -365,8 +388,20 @@ class AdvancedRAG:
 
         self._chunks = chunks
         self._documents = list(documents.values())
+        if self._card_store is not None:
+            try:
+                self._cards = {
+                    card.metadata["chunk_id"]: card
+                    for card in self._card_store.get_all_documents()
+                    if (card.metadata or {}).get("chunk_id")
+                }
+            except Exception as e:
+                logger.warning(f"Could not load document cards: {e}")
         self._refresh_retriever()
-        logger.info(f"Restored {len(chunks)} chunks from {len(documents)} documents")
+        logger.info(
+            f"Restored {len(chunks)} chunks from {len(documents)} documents"
+            + (f" and {len(self._cards)} document cards" if self._cards else "")
+        )
 
     def _get_default_system_prompt(self) -> str:
         """Get default system prompt (bilingual Vietnamese/English)."""
@@ -443,8 +478,10 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
                 docs = self.document_loader.load(source, metadata=metadata)
             all_docs.extend(docs)
 
+        # LLM calls stay outside the write lock: queries keep running meanwhile.
+        cards = self._write_cards(all_docs)
         with self._index_lock.write():
-            return self._index_loaded_documents(all_docs)
+            return self._index_loaded_documents(all_docs, cards)
 
     def add_files(
         self,
@@ -482,10 +519,13 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
                 doc.metadata.pop("absolute_source", None)  # a temporary path
             loaded[name] = docs
 
+        all_docs = [doc for docs in loaded.values() for doc in docs]
+        cards = self._write_cards(all_docs)
         with self._index_lock.write():
             for name in loaded:
-                self._drop_source_file(source_root, name)
-            return self._index_loaded_documents([doc for docs in loaded.values() for doc in docs])
+                # A card of unchanged text is kept; a new card replaces it by id.
+                self._drop_source_file(source_root, name, keep_card=True)
+            return self._index_loaded_documents(all_docs, cards)
 
     def refresh_markdown_directory(
         self,
@@ -530,7 +570,9 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
                 )
                 self._drop_source_root(root)
             else:
-                for name in result.updated + result.removed:
+                for name in result.updated:
+                    self._drop_source_file(root, name, keep_card=True)
+                for name in result.removed:
                     self._drop_source_file(root, name)
                 docs = self._load_folder_files(
                     directory, result.added + result.updated + missing, metadata, strict
@@ -566,8 +608,12 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
             docs.extend(loaded)
         return docs
 
-    def _drop_source_file(self, source_root: str, relative_source: str) -> None:
-        """Remove one file of a source folder from memory and the vector store."""
+    def _drop_source_file(self, source_root: str, relative_source: str, keep_card: bool = False) -> None:
+        """Remove one file of a source folder from memory and the vector store.
+
+        ``keep_card`` keeps its document card, for a file indexed again: an
+        unchanged text reuses the card, a changed one gets a new card.
+        """
         def keep(doc: Document) -> bool:
             metadata = doc.metadata or {}
             return not (
@@ -577,13 +623,61 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
 
         self._documents = [doc for doc in self._documents if keep(doc)]
         self._chunks = [chunk for chunk in self._chunks if keep(chunk)]
-        self.vector_store.delete(
-            filter={"source_root": source_root, "relative_source": relative_source}
-        )
+        file_filter = {"source_root": source_root, "relative_source": relative_source}
+        self.vector_store.delete(filter=file_filter)
         self.vector_store.persist()
+        if not keep_card:
+            self._drop_cards(keep, file_filter)
 
-    def _index_loaded_documents(self, all_docs: List[Document]) -> int:
-        """Split, index, and register already-loaded documents."""
+    def _drop_cards(self, keep, filter: Dict[str, Any]) -> None:
+        """Delete the document cards ``keep`` rejects (and ``filter`` matches in the store)."""
+        if self._card_store is None:
+            return
+        self._cards = {key: card for key, card in self._cards.items() if keep(card)}
+        self._card_store.delete(filter=filter)
+        self._card_store.persist()
+
+    def _write_cards(self, all_docs: List[Document]) -> List[Document]:
+        """
+        One card per loaded document, written by the LLM (empty when cards are off).
+
+        A document whose text has not changed keeps its card text without an
+        LLM call (its metadata is refreshed). A failed call leaves that
+        document without a card; indexing goes on.
+        """
+        if not self.use_document_cards or self._card_store is None:
+            return []
+        cards = []
+        for key, pages in group_by_document(all_docs).items():
+            existing = self._cards.get(card_id(key))
+            if existing is not None and existing.metadata.get("content_sha256") == content_hash(pages):
+                cards.append(card_document(pages, existing.page_content, existing.metadata.get("card_model")))
+                continue
+            try:
+                text = self.llm.generate(card_prompt(pages))
+            except Exception as e:
+                logger.warning(f"Document card failed for {key}: {e}")
+                continue
+            if text and text.strip():
+                cards.append(card_document(pages, text, model=self.llm.config.model))
+        return cards
+
+    def _store_cards(self, cards: List[Document]) -> None:
+        if not cards or self._card_store is None:
+            return
+        ids = [card.metadata["chunk_id"] for card in cards]
+        self._card_store.add_documents(cards, ids=ids)
+        self._card_store.persist()
+        self._cards.update(zip(ids, cards))
+
+    def _index_loaded_documents(
+        self, all_docs: List[Document], cards: Optional[List[Document]] = None
+    ) -> int:
+        """Split, index, and register already-loaded documents (and their cards).
+
+        ``cards`` are written beforehand by ``_write_cards``, outside the index
+        lock; when None they are written here.
+        """
         if not all_docs:
             self._refresh_retriever()
             return 0
@@ -636,6 +730,7 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         # Add to vector store
         self._add_chunks_to_vector_store(retrieval_chunks)
         self.vector_store.persist()
+        self._store_cards(self._write_cards(all_docs) if cards is None else cards)
 
         # Initialize retriever
         self._refresh_retriever()
@@ -654,6 +749,10 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         ]
         self.vector_store.delete(filter={"source_root": source_root})
         self.vector_store.persist()
+        self._drop_cards(
+            lambda card: (card.metadata or {}).get("source_root") != source_root,
+            {"source_root": source_root},
+        )
 
     @staticmethod
     def _parent_id(parent: Document) -> str:
@@ -1004,9 +1103,10 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
     ) -> List[Document]:
         """Hybrid/rerank search; with parent context, children are searched and parents returned."""
         if not self.use_parent_context:
-            return self._retriever.search(
+            docs = self._retriever.search(
                 query, k=k, use_hybrid=use_hybrid, use_reranking=use_reranking, filter=filter
             )
+            return docs + self._cards_for(query, docs, k, filter)
 
         reranking = self._retriever.config.use_reranking if use_reranking is None else use_reranking
         children = self._retriever.search(
@@ -1016,8 +1116,41 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         parents = self._expand_to_parents(children)
         if reranking:
             # Rerank the passages the LLM will actually read.
-            return self._retriever.rerank(query, parents, k=k)
+            docs = self._retriever.rerank(query, parents, k=k)
+            return docs + self._cards_for(query, docs, k, filter)
         return parents[:k]
+
+    def _cards_for(
+        self, query: str, docs: List[Document], k: int, filter: Optional[Dict[str, Any]] = None
+    ) -> List[Document]:
+        """
+        Document cards that would rank in the top k among the passages.
+
+        Cards and passages get the same reranker score, so a card joins only
+        when it beats a passage: questions about one detail keep their k
+        passages, questions about whole documents get their cards as well.
+        Needs reranker scores on ``docs``; returns at most ``max_context_cards``.
+        """
+        if not getattr(self, "_cards", None) or self.max_context_cards < 1 or not docs:
+            return []
+        scores = [(doc.metadata or {}).get("relevance_score") for doc in docs]
+        if any(score is None for score in scores):
+            return []
+        try:
+            candidates = self._card_store.similarity_search(
+                query, k=max(8, 3 * self.max_context_cards), filter=filter
+            )
+            cards = self._retriever.rerank(query, candidates, k=len(candidates))
+        except Exception as e:
+            logger.warning(f"Document card search failed: {e}")
+            return []
+        ranked = sorted(
+            [(score, False, doc) for score, doc in zip(scores, docs)]
+            + [(card.metadata["relevance_score"], True, card) for card in cards
+               if card.metadata.get("relevance_score") is not None],
+            key=lambda item: -item[0],
+        )
+        return [doc for _, is_card, doc in ranked[:k] if is_card][: self.max_context_cards]
 
     def query_detailed(
         self,
@@ -1165,6 +1298,8 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
                 or metadata.get("url")
                 or f"Document {i}"
             )
+            if metadata.get("document_card"):
+                source = f"{source} (document card: summary of the whole document / thẻ tóm tắt cả tài liệu)"
             context_parts.append(f"[S{i}] Source: {source}\n{doc.page_content}")
 
         context = "\n\n".join(context_parts)
@@ -1253,6 +1388,11 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
     def num_documents(self) -> int:
         """Number of loaded documents."""
         return len(self._documents)
+
+    @property
+    def num_cards(self) -> int:
+        """Document cards in the index (0 when cards are off)."""
+        return len(getattr(self, "_cards", None) or {})
 
     @property
     def num_chunks(self) -> int:

@@ -98,6 +98,11 @@ def parse_args(argv=None) -> argparse.Namespace:
                         help="Relevance grading (pipeline default: none)")
     answer.add_argument("--min-relevance-score", type=float, default=None,
                         help="Reranker cut-off for --grading reranker")
+    answer.add_argument("--document-cards", action="store_true",
+                        help="One LLM card per document at indexing; cards that outrank passages "
+                             "join the context (needs reranking)")
+    answer.add_argument("--max-context-cards", type=int, default=3,
+                        help="Most document cards added to one question's context")
     answer.add_argument("--limit", type=int, default=None, help="Only the first N questions")
     answer.add_argument("--ids", default=None, help="Comma-separated question ids")
 
@@ -132,8 +137,14 @@ def git_revision() -> str:
         return "unknown"
 
 
-def build_rag(args, use_hybrid: bool, use_reranking: bool, llm_provider="openai", llm_model=None):
-    """Index the eval corpus with AdvancedRAG; returns (rag, seconds spent indexing)."""
+def build_rag(args, use_hybrid: bool, use_reranking: bool, llm_provider="openai", llm_model=None,
+              before_index=None):
+    """
+    Index the eval corpus with AdvancedRAG; returns (rag, seconds spent indexing).
+
+    ``before_index(rag)`` runs before the corpus is indexed: document cards
+    call the LLM while indexing, so it must be set up by then.
+    """
     from src.rag.advanced_rag import AdvancedRAG
 
     reranker, reranker_model = None, None
@@ -168,7 +179,11 @@ def build_rag(args, use_hybrid: bool, use_reranking: bool, llm_provider="openai"
         parent_fanout=args.parent_fanout,
         reranker=reranker,
         reranker_model=reranker_model,
+        use_document_cards=getattr(args, "document_cards", False),
+        max_context_cards=getattr(args, "max_context_cards", 3),
     )
+    if before_index:
+        before_index(rag)
 
     start = time.perf_counter()
     rag.add_documents(args.eval_dir / "corpus")
@@ -197,6 +212,8 @@ def pipeline_settings(args, rag, index_seconds: float) -> dict:
         "reranker_model": retriever.active_reranker_model if retriever else None,
         "documents": rag.num_documents,
         "retrieval_chunks": rag.num_chunks,
+        "document_cards": rag.num_cards if rag.use_document_cards else None,
+        "max_context_cards": rag.max_context_cards if rag.use_document_cards else None,
         "index_seconds": round(index_seconds, 2),
     }
 
@@ -358,14 +375,29 @@ def cmd_answer(args) -> int:
         cases = cases[:args.limit]
 
     options = RETRIEVAL_CONFIGS[args.config]
+    agents = []
+
+    def set_up_llm(rag):
+        """Before indexing: document cards are written by the same LLM."""
+        if args.llm == "agent":
+            # Whichever model runs this command answers every prompt; no API is called.
+            agents.append(attach_agent(rag, args))
+        else:
+            # The chat client is created lazily, so these still apply.
+            rag.llm.config.temperature = args.temperature
+            if args.base_url:
+                rag.llm.config.base_url = args.base_url
+
     rag, index_seconds = build_rag(
-        args, llm_provider=args.llm_provider, llm_model=args.llm_model, **options,
+        args, llm_provider=args.llm_provider, llm_model=args.llm_model,
+        before_index=set_up_llm, **options,
     )
 
-    agent = None
-    if args.llm == "agent":
-        # Whichever model runs this command answers every prompt; no API is called.
-        agent = attach_agent(rag, args)
+    agent = agents[0] if agents else None
+    if agent:
+        if agent.pending:
+            # Document cards first: questions asked over placeholder cards would be wasted.
+            return request_agent_answers(agent)
         judge_llm = agent
 
         # The grading prompts of one question do not depend on each other: ask them in one run.
@@ -377,10 +409,6 @@ def cmd_answer(args) -> int:
 
         rag._grade_documents = grade_independently
     else:
-        # The chat client is created lazily, so these still apply.
-        rag.llm.config.temperature = args.temperature
-        if args.base_url:
-            rag.llm.config.base_url = args.base_url
         judge_llm = LLMManager(
             provider=args.llm_provider, model=rag.llm.config.model,
             base_url=args.base_url, temperature=0.0,

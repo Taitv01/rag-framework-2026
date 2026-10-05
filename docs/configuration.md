@@ -94,6 +94,7 @@ RETRIEVAL_K=5
 ENABLE_HYBRID_SEARCH=true
 ENABLE_RERANKING=true
 ENABLE_PARENT_CONTEXT=true   # return parent chunks (about 2x context, much better recall)
+ENABLE_DOCUMENT_CARDS=false  # one LLM card per document at ingest, for questions across documents
 ```
 
 ### Caching

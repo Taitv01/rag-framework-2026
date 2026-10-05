@@ -130,6 +130,27 @@ class VectorStoreManager:
 
         self.embeddings = embeddings
         self._store = None
+        self._client_owner: Optional["VectorStoreManager"] = None
+
+    def sibling(self, collection_name: str) -> "VectorStoreManager":
+        """
+        Another collection on the same backend and location.
+
+        Qdrant siblings share this manager's client: an embedded store can be
+        opened by one client only. FAISS siblings are separate index files in
+        the same directory.
+        """
+        other = VectorStoreManager(
+            provider=self.config.provider,
+            embeddings=self.embeddings,
+            collection_name=collection_name,
+            persist_directory=self.config.persist_directory,
+            url=self.config.url,
+            api_key=self.config.api_key,
+        )
+        if self.config.provider == "qdrant":
+            other._client_owner = self
+        return other
 
     @property
     def store(self):
@@ -197,6 +218,8 @@ class VectorStoreManager:
         """Client for the configured Qdrant mode: memory, server or embedded on disk."""
         from qdrant_client import QdrantClient
 
+        if self._client_owner is not None:
+            return self._client_owner.store.client
         api_key = self.config.api_key or os.getenv("QDRANT_API_KEY") or None
         if self.config.url == ":memory:":
             return QdrantClient(location=":memory:")
@@ -454,7 +477,8 @@ class VectorStoreManager:
     def close(self) -> None:
         """Release the backend (an embedded Qdrant store locks its directory)."""
         client = getattr(self._store, "client", None)
-        if client is not None and hasattr(client, "close"):
+        # A sibling's client belongs to the manager it was made from.
+        if client is not None and hasattr(client, "close") and self._client_owner is None:
             client.close()
         self._store = None
 

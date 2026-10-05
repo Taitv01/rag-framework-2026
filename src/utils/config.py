@@ -141,6 +141,8 @@ class Config:
         "ENABLE_RERANKING": "true",
         # Search small chunks, give the LLM their surrounding parent passage.
         "ENABLE_PARENT_CONTEXT": "true",
+        # One LLM-written card per document at ingest, for questions across documents.
+        "ENABLE_DOCUMENT_CARDS": "false",
         "ENABLE_CACHE": "true",
         "ENABLE_API_AUTH": "false",
         "API_KEYS": "",
