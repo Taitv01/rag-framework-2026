@@ -413,6 +413,19 @@ Qdrant, parent context, hybrid + rerank (fp32), `query_rewrite="auto"`,
       trùng khớp cấu hình `hybrid` của Giai đoạn 2 (evidence_recall 0,909). Workflow
       chưa chạy thật vì nhánh chưa push được.
 - [ ] Câu hỏi trải trên nhiều truyện (`motif`, `multi_source`): nhóm yếu nhất.
+      **Đã thử, không dùng: đa dạng hoá nguồn.** Lấy pool ứng viên (15 hoặc 40 chunk
+      con, khoảng 12–30 parent) kèm điểm reranker cho cả 87 câu, rồi so các cách
+      chọn 5 parent: giới hạn 1–3 parent mỗi truyện, giữ top 2–3 rồi lấy truyện
+      mới, phạt theo số đoạn đã lấy từ cùng truyện, và chỉ áp dụng cho câu dạng
+      "những truyện nào". Mọi cách đều làm `evidence_recall` thấp hơn top-5 theo
+      reranker (0,941 → 0,885–0,939), kể cả nhóm `multi_source` (0,713 → 0,657–0,750).
+      Tăng `k` lên 10 (ngữ cảnh gấp đôi) cũng chỉ đưa `motif` từ 0,631 lên 0,726.
+      **Nguyên nhân:** đoạn chứa đáp án không nằm trong pool hoặc xếp rất sâu
+      (q071: hạng 19 và 26 trong 30, một cụm không có; q075: không có; q077:
+      hạng 15). Câu hỏi nói về mô-típ ("kẻ tham lam bị trừng phạt") còn đoạn văn
+      kể sự việc cụ thể ("người anh… rơi xuống biển"). Muốn sửa phải làm giàu
+      index (thẻ tóm tắt từng truyện hoặc contextual retrieval), không phải đổi
+      cách chọn đoạn.
 - [ ] BGE-M3 sparse/multi-vector; contextual retrieval cho corpus truyện.
 - [ ] GraphRAG có community summaries và lưu graph xuống đĩa.
 
