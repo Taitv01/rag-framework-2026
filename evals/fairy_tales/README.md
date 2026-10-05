@@ -38,6 +38,9 @@ py scripts/eval.py retrieval --cache-dir .cache/huggingface --device cpu `
 # model trả lời vào agent_answers.json rồi chạy lại, cho tới khi in báo cáo.
 py scripts/eval.py answer --judge --device cpu
 
+# Thêm thẻ tài liệu (mỗi tài liệu 1 prompt lúc index, cũng do model gọi RAG trả lời)
+py scripts/eval.py answer --judge --device cpu --vector-store qdrant --document-cards
+
 # Hoặc gọi một API OpenAI-compatible (tốn credit)
 py scripts/eval.py answer --llm api --base-url https://openrouter.ai/api/v1 `
     --llm-model openai/gpt-4o-mini --limit 20

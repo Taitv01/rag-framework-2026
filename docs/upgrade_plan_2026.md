@@ -11,7 +11,7 @@ kỹ thuật mới khi số đo cho thấy cần.
 | 2 | Sửa lõi retrieval | 3–5 ngày | ✅ Hoàn thành (compose chờ CI kiểm chứng) |
 | 3 | Hợp nhất pipeline generation | 3–4 ngày | ✅ Hoàn thành (cache theo filter dời sang GĐ 4) |
 | 4 | API & vận hành | 2–3 ngày | ✅ Hoàn thành (chưa thử với server Langfuse thật) |
-| 5 | Nâng cao (tùy chọn, theo số đo) | — | ⏳ |
+| 5 | Nâng cao (tùy chọn, theo số đo) | — | ⏳ Đang làm (catalog LLM, cổng chất lượng CI, thẻ truyện) |
 
 ---
 
@@ -412,7 +412,7 @@ Qdrant, parent context, hybrid + rerank (fp32), `query_rewrite="auto"`,
       với `baselines/retrieval_ci.json`. Baseline tạo bằng đúng lệnh của CI, cho số
       trùng khớp cấu hình `hybrid` của Giai đoạn 2 (evidence_recall 0,909). Workflow
       chưa chạy thật vì nhánh chưa push được.
-- [ ] Câu hỏi trải trên nhiều truyện (`motif`, `multi_source`): nhóm yếu nhất.
+- [x] **Câu hỏi trải trên nhiều truyện (`motif`, `multi_source`): thẻ truyện.**
       **Đã thử, không dùng: đa dạng hoá nguồn.** Lấy pool ứng viên (15 hoặc 40 chunk
       con, khoảng 12–30 parent) kèm điểm reranker cho cả 87 câu, rồi so các cách
       chọn 5 parent: giới hạn 1–3 parent mỗi truyện, giữ top 2–3 rồi lấy truyện
@@ -423,9 +423,44 @@ Qdrant, parent context, hybrid + rerank (fp32), `query_rewrite="auto"`,
       **Nguyên nhân:** đoạn chứa đáp án không nằm trong pool hoặc xếp rất sâu
       (q071: hạng 19 và 26 trong 30, một cụm không có; q075: không có; q077:
       hạng 15). Câu hỏi nói về mô-típ ("kẻ tham lam bị trừng phạt") còn đoạn văn
-      kể sự việc cụ thể ("người anh… rơi xuống biển"). Muốn sửa phải làm giàu
-      index (thẻ tóm tắt từng truyện hoặc contextual retrieval), không phải đổi
-      cách chọn đoạn.
+      kể sự việc cụ thể ("người anh… rơi xuống biển").
+
+      **Đã làm: thẻ tài liệu** (`use_document_cards`, `ENABLE_DOCUMENT_CARDS`, mặc
+      định tắt; `src/rag/document_cards.py`). Lúc index, LLM viết cho mỗi tài liệu một
+      thẻ tối đa 200 từ (tóm tắt, nhân vật, sự kiện chính, mô-típ, bối cảnh). Thẻ nằm
+      trong collection `<collection>__cards` (Qdrant dùng chung client), mang metadata
+      của tài liệu nên filter vẫn áp dụng, chỉ viết lại khi nội dung tài liệu đổi, và
+      bị xoá cùng file. Lúc query, thẻ được rerank cùng các đoạn văn: thẻ nào lọt top
+      k thì được thêm vào ngữ cảnh, bên cạnh k đoạn văn (tối đa 3 thẻ), có nhãn "thẻ
+      tóm tắt cả tài liệu".
+      - **Dùng thẻ để chọn truyện rồi lấy đoạn tốt nhất trong từng truyện thì không
+        giúp được.** Thẻ xếp hạng truyện khá đúng (q071: điểm dense đưa đúng 4 truyện
+        lên top 4), nhưng ngay trong từng truyện, câu hỏi mô-típ vẫn không khớp đoạn
+        kể sự việc. `evidence_recall` không đổi.
+      - **Đưa thẻ vào ngữ cảnh thì giúp được**, đo bằng câu trả lời (`answer_cards.json`,
+        so với `answer_stage3.json` và đối chứng `answer_k8.json` có cùng lượng chữ
+        thêm vào):
+
+        | Cấu hình | answer_recall | faithfulness | motif | multi_source | moral | p50 | ký tự thêm/câu |
+        |----------|------:|------:|------:|------:|------:|------:|------:|
+        | k=5 (Giai đoạn 3) | 0,920 | 0,993 | 0,754 | 0,809 | 0,868 | 804 ms | 0 |
+        | k=5 + thẻ | **0,934** | **0,998** | **0,818** | **0,858** | **0,931** | 1406 ms | ~1060 |
+        | k=8 (đối chứng) | 0,924 | 0,993 | 0,754 | 0,809 | 0,868 | 1292 ms | ~1150 |
+
+        Thẻ cải thiện 6 câu và không làm câu nào tệ đi: q071 (0,36 → 0,71: kết cục của
+        người anh, mẹ con Lý Thông, mẹ con Cám), q036 (bài học "tham thì thâm", 0,62 → 1,0),
+        q022, q059, q070, q076. k=8 chỉ giúp hai câu trong một truyện (q022, q059), không
+        giúp câu mô-típ nào. Faithfulness tăng vì hai câu trước phải suy luận (q036 bài
+        học, q069 số cảnh) nay có thẻ nói rõ.
+      - **Chi phí:** 1 lời gọi LLM mỗi tài liệu lúc index (10 lời gọi với corpus này,
+        không phải mỗi chunk); ~1060 ký tự ngữ cảnh mỗi câu (88/95 câu có ít nhất 1
+        thẻ); độ trễ retrieval +600 ms trên GTX 1650 vì reranker chấm thêm 4 thẻ dài.
+        Trước khi giảm số ứng viên từ 9 xuống 4, độ trễ là +1150 ms với cùng chất lượng.
+      - **Có thể bị chệch:** cùng một model (`claude-opus-5-5`) đã viết golden set, viết
+        thẻ (chỉ từ nội dung tài liệu, không dùng cách diễn đạt của câu hỏi), trả lời và
+        tự chấm. Nên xem mức tăng là ước lượng lạc quan; với model khác cần đo lại.
+      - **Chưa làm:** bật mặc định (cần chủ dự án quyết vì tốn LLM lúc ingest); thẻ cho
+        HyDE và multi-query; viết thẻ song song khi corpus lớn.
 - [ ] BGE-M3 sparse/multi-vector; contextual retrieval cho corpus truyện.
 - [ ] GraphRAG có community summaries và lưu graph xuống đĩa.
 
