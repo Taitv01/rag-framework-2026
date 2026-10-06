@@ -23,6 +23,10 @@ from langchain_core.documents import Document
 # Long documents are cut: the card is a summary, not a copy.
 DEFAULT_CARD_MAX_CHARS = 20000
 
+# A batch stops asking for cards after this many failed calls in a row
+# (no API key, provider down) instead of failing once per document.
+MAX_CONSECUTIVE_CARD_FAILURES = 3
+
 # Page- and chunk-level metadata a card (one per document) must not inherit.
 _NOT_DOCUMENT_LEVEL = {"page", "start_index", "parent_id", "parent_text", "chunk_id", "relevance_score"}
 

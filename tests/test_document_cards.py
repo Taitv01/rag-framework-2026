@@ -100,7 +100,18 @@ def test_card_keeps_document_metadata_but_not_page_metadata():
     assert card.metadata["card_model"] == "m"
 
 
-def test_cards_are_off_by_default(monkeypatch, tmp_path):
+def test_cards_are_on_by_default(monkeypatch, tmp_path):
+    monkeypatch.setattr("src.rag.advanced_rag.EmbeddingsManager", lambda **_: fake_embeddings_manager())
+    from src.rag.advanced_rag import AdvancedRAG
+
+    rag = AdvancedRAG(vector_store_provider="faiss", persist_directory=str(tmp_path / "store"))
+    rag.llm._llm = ScriptedChat(card_reply)
+    rag.add_documents(write_corpus(tmp_path / "docs"))
+
+    assert rag.use_document_cards and rag.num_cards == 2
+
+
+def test_cards_can_be_turned_off(monkeypatch, tmp_path):
     rag, chat = make_rag(monkeypatch, tmp_path, use_document_cards=False)
     rag.add_documents(write_corpus(tmp_path / "docs"))
 
@@ -184,6 +195,23 @@ def test_failed_card_does_not_stop_indexing(monkeypatch, tmp_path):
 
     assert chunks > 0 and rag.num_documents == 2
     assert [card.metadata["file_name"] for card in rag._cards.values()] == ["thach_sanh.md"]
+
+
+def test_a_dead_provider_stops_card_calls_for_the_rest_of_the_batch(monkeypatch, tmp_path):
+    from src.rag.document_cards import MAX_CONSECUTIVE_CARD_FAILURES
+
+    stories = {f"truyen_{i}.md": f"# Truyện {i}\n\nChuyện thứ {i}." for i in range(6)}
+    calls = []
+
+    def reply(prompt):
+        calls.append(prompt)
+        raise RuntimeError("no API key")
+
+    rag, _ = make_rag(monkeypatch, tmp_path, reply=reply)
+    chunks = rag.add_documents(write_corpus(tmp_path / "docs", stories))
+
+    assert chunks > 0 and rag.num_documents == 6 and rag.num_cards == 0
+    assert len(calls) == MAX_CONSECUTIVE_CARD_FAILURES
 
 
 def test_cards_join_only_when_they_outrank_passages(monkeypatch, tmp_path):

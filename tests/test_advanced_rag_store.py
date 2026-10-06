@@ -43,7 +43,7 @@ def make_rag(monkeypatch, tmp_path, provider, **kwargs):
         retrieval_k=2,
         use_hybrid=True,
         use_reranking=False,
-        **kwargs,
+        **{"use_document_cards": False, **kwargs},  # cards: test_document_cards.py
     )
 
 
@@ -130,7 +130,8 @@ def test_unchanged_folder_is_indexed_when_the_store_is_empty(monkeypatch, tmp_pa
     monkeypatch.setattr("src.rag.advanced_rag.EmbeddingsManager", lambda **_: fake_embeddings_manager())
     from src.rag.advanced_rag import AdvancedRAG
 
-    fresh = AdvancedRAG(vector_store_provider="faiss", chunk_size=160, chunk_overlap=20, use_reranking=False)
+    fresh = AdvancedRAG(vector_store_provider="faiss", chunk_size=160, chunk_overlap=20, use_reranking=False,
+                        use_document_cards=False)
     result = fresh.refresh_markdown_directory(corpus, manifest_path=manifest)
 
     assert result["unchanged"] == ["tam_cam.md", "thach_sanh.md"]

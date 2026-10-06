@@ -53,7 +53,14 @@ from src.core.markdown_index import MarkdownFolderIndexer
 from src.monitoring.tracing import record_steps, step
 from src.utils.rwlock import ReadWriteLock
 from src.rag.multimodal import build_multimodal_prompt
-from src.rag.document_cards import card_document, card_id, card_prompt, content_hash, group_by_document
+from src.rag.document_cards import (
+    MAX_CONSECUTIVE_CARD_FAILURES,
+    card_document,
+    card_id,
+    card_prompt,
+    content_hash,
+    group_by_document,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +140,7 @@ class AdvancedRAG:
     _hallucination_grader = None
     use_hyde = False
     use_multi_query_rrf = False
-    use_document_cards = False
+    use_document_cards = True
     max_context_cards = 3
     _card_store = None
 
@@ -178,7 +185,7 @@ class AdvancedRAG:
         use_hallucination_check: bool = False,
         hallucination_threshold: float = 0.8,
         use_metadata_enhancement: bool = False,
-        use_document_cards: bool = False,
+        use_document_cards: bool = True,
         max_context_cards: int = 3,
     ):
         """
@@ -234,7 +241,8 @@ class AdvancedRAG:
                 with passages and those that would rank in the top k are given
                 to the LLM besides the k passages: questions across documents
                 ("which stories have...") need what a whole document is about.
-                Standard search only (not HyDE or multi-query).
+                Standard search only (not HyDE or multi-query). On by default:
+                one LLM call per new or changed document at indexing.
             max_context_cards: Most cards added to one query's context
         """
         # Initialize components
@@ -643,23 +651,36 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
 
         A document whose text has not changed keeps its card text without an
         LLM call (its metadata is refreshed). A failed call leaves that
-        document without a card; indexing goes on.
+        document without a card; indexing goes on. After
+        ``MAX_CONSECUTIVE_CARD_FAILURES`` failed calls in a row (no API key,
+        provider down) the rest of the batch is indexed without new cards.
         """
         if not self.use_document_cards or self._card_store is None:
             return []
         cards = []
+        failures = skipped = 0
         for key, pages in group_by_document(all_docs).items():
             existing = self._cards.get(card_id(key))
             if existing is not None and existing.metadata.get("content_sha256") == content_hash(pages):
                 cards.append(card_document(pages, existing.page_content, existing.metadata.get("card_model")))
                 continue
+            if failures >= MAX_CONSECUTIVE_CARD_FAILURES:
+                skipped += 1
+                continue
             try:
                 text = self.llm.generate(card_prompt(pages))
             except Exception as e:
+                failures += 1
                 logger.warning(f"Document card failed for {key}: {e}")
                 continue
+            failures = 0
             if text and text.strip():
                 cards.append(card_document(pages, text, model=self.llm.config.model))
+        if skipped:
+            logger.warning(
+                f"{failures} document cards failed in a row: {skipped} more documents "
+                "indexed without a card (they get one when indexed again)"
+            )
         return cards
 
     def _store_cards(self, cards: List[Document]) -> None:

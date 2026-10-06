@@ -52,6 +52,8 @@ def make_rag(monkeypatch, tmp_path):
         corpus.mkdir(exist_ok=True)
         for name, text in STORIES.items():
             (corpus / name).write_text(text, encoding="utf-8")
+        # Document cards (an LLM call per story) have their own tests.
+        kwargs.setdefault("use_document_cards", False)
         rag = AdvancedRAG(vector_store_provider="faiss", chunk_size=160, chunk_overlap=20,
                           retrieval_k=2, use_reranking=False, **kwargs)
         rag.add_documents(corpus)

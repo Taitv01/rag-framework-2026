@@ -36,10 +36,12 @@ py scripts/eval.py retrieval --cache-dir .cache/huggingface --device cpu `
 # chạy lệnh (Claude, Codex, ...) trả lời qua AgentLLM, không gọi API nào.
 # Mỗi lần chạy ghi các prompt còn thiếu vào runs/agent_requests.json và thoát mã 3;
 # model trả lời vào agent_answers.json rồi chạy lại, cho tới khi in báo cáo.
-py scripts/eval.py answer --judge --device cpu
+# Như pipeline mặc định, có thẻ tài liệu: mỗi tài liệu 1 prompt lúc index, cũng do
+# model gọi RAG trả lời.
+py scripts/eval.py answer --judge --device cpu --vector-store qdrant
 
-# Thêm thẻ tài liệu (mỗi tài liệu 1 prompt lúc index, cũng do model gọi RAG trả lời)
-py scripts/eval.py answer --judge --device cpu --vector-store qdrant --document-cards
+# Không có thẻ tài liệu (cấu hình Giai đoạn 3)
+py scripts/eval.py answer --judge --device cpu --vector-store qdrant --no-document-cards
 
 # Hoặc gọi một API OpenAI-compatible (tốn credit)
 py scripts/eval.py answer --llm api --base-url https://openrouter.ai/api/v1 `

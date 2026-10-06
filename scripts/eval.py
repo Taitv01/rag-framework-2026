@@ -98,9 +98,9 @@ def parse_args(argv=None) -> argparse.Namespace:
                         help="Relevance grading (pipeline default: none)")
     answer.add_argument("--min-relevance-score", type=float, default=None,
                         help="Reranker cut-off for --grading reranker")
-    answer.add_argument("--document-cards", action="store_true",
+    answer.add_argument("--document-cards", action=argparse.BooleanOptionalAction, default=True,
                         help="One LLM card per document at indexing; cards that outrank passages "
-                             "join the context (needs reranking)")
+                             "join the context (needs reranking; pipeline default: on)")
     answer.add_argument("--max-context-cards", type=int, default=3,
                         help="Most document cards added to one question's context")
     answer.add_argument("--limit", type=int, default=None, help="Only the first N questions")

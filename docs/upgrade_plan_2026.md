@@ -425,14 +425,14 @@ Qdrant, parent context, hybrid + rerank (fp32), `query_rewrite="auto"`,
       hạng 15). Câu hỏi nói về mô-típ ("kẻ tham lam bị trừng phạt") còn đoạn văn
       kể sự việc cụ thể ("người anh… rơi xuống biển").
 
-      **Đã làm: thẻ tài liệu** (`use_document_cards`, `ENABLE_DOCUMENT_CARDS`, mặc
-      định tắt; `src/rag/document_cards.py`). Lúc index, LLM viết cho mỗi tài liệu một
-      thẻ tối đa 200 từ (tóm tắt, nhân vật, sự kiện chính, mô-típ, bối cảnh). Thẻ nằm
-      trong collection `<collection>__cards` (Qdrant dùng chung client), mang metadata
-      của tài liệu nên filter vẫn áp dụng, chỉ viết lại khi nội dung tài liệu đổi, và
-      bị xoá cùng file. Lúc query, thẻ được rerank cùng các đoạn văn: thẻ nào lọt top
-      k thì được thêm vào ngữ cảnh, bên cạnh k đoạn văn (tối đa 3 thẻ), có nhãn "thẻ
-      tóm tắt cả tài liệu".
+      **Đã làm: thẻ tài liệu** (`use_document_cards`, `ENABLE_DOCUMENT_CARDS`, bật
+      mặc định từ 06/10/2026; `src/rag/document_cards.py`). Lúc index, LLM viết cho
+      mỗi tài liệu một thẻ tối đa 200 từ (tóm tắt, nhân vật, sự kiện chính, mô-típ,
+      bối cảnh). Thẻ nằm trong collection `<collection>__cards` (Qdrant dùng chung
+      client), mang metadata của tài liệu nên filter vẫn áp dụng, chỉ viết lại khi
+      nội dung tài liệu đổi, và bị xoá cùng file. Lúc query, thẻ được rerank cùng
+      các đoạn văn: thẻ nào lọt top k thì được thêm vào ngữ cảnh, bên cạnh k đoạn văn
+      (tối đa 3 thẻ), có nhãn "thẻ tóm tắt cả tài liệu".
       - **Dùng thẻ để chọn truyện rồi lấy đoạn tốt nhất trong từng truyện thì không
         giúp được.** Thẻ xếp hạng truyện khá đúng (q071: điểm dense đưa đúng 4 truyện
         lên top 4), nhưng ngay trong từng truyện, câu hỏi mô-típ vẫn không khớp đoạn
@@ -459,8 +459,13 @@ Qdrant, parent context, hybrid + rerank (fp32), `query_rewrite="auto"`,
       - **Có thể bị chệch:** cùng một model (`claude-opus-5-5`) đã viết golden set, viết
         thẻ (chỉ từ nội dung tài liệu, không dùng cách diễn đạt của câu hỏi), trả lời và
         tự chấm. Nên xem mức tăng là ước lượng lạc quan; với model khác cần đo lại.
-      - **Chưa làm:** bật mặc định (cần chủ dự án quyết vì tốn LLM lúc ingest); thẻ cho
-        HyDE và multi-query; viết thẻ song song khi corpus lớn.
+      - **Bật mặc định** (chủ dự án quyết ngày 06/10/2026). Không có LLM lúc ingest
+        (thiếu key, provider lỗi) thì tài liệu chỉ thiếu thẻ: sau 3 lời gọi lỗi liên
+        tiếp, cả lô ngừng gọi LLM thay vì lỗi một lần cho mỗi tài liệu. Muốn tắt thì
+        đặt `ENABLE_DOCUMENT_CARDS=false`. `scripts/eval.py answer` cũng bật thẻ theo
+        mặc định (`--no-document-cards` để tắt); retrieval và CI không dùng LLM nên
+        vẫn không có thẻ.
+      - **Chưa làm:** thẻ cho HyDE và multi-query; viết thẻ song song khi corpus lớn.
 - [ ] BGE-M3 sparse/multi-vector; contextual retrieval cho corpus truyện.
 - [ ] GraphRAG có community summaries và lưu graph xuống đĩa.
 
@@ -468,4 +473,6 @@ Qdrant, parent context, hybrid + rerank (fp32), `query_rewrite="auto"`,
 1. Mục đích dùng ưu tiên: **truyện cổ tích/sáng tác** (10/2026).
 2. LLM đo đánh giá: **model đang gọi RAG** (AgentLLM), không dùng model khác (10/2026).
 3. Vector store chính: **Qdrant** (10/2026).
+4. Thẻ tài liệu **bật mặc định**, chấp nhận 1 lời gọi LLM mỗi tài liệu lúc ingest
+   (06/10/2026).
 
