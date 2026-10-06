@@ -53,6 +53,7 @@ from src.core.markdown_index import MarkdownFolderIndexer
 from src.monitoring.tracing import record_steps, step
 from src.utils.rwlock import ReadWriteLock
 from src.rag.multimodal import build_multimodal_prompt
+from src.rag.graph_index import GraphIndex, GraphUpdate
 from src.rag.document_cards import (
     MAX_CONSECUTIVE_CARD_FAILURES,
     card_document,
@@ -100,6 +101,30 @@ class PreparedQuery:
     cache_scope: Optional[str] = None  # cached answers are only reused in the same scope
 
 
+def _extra_kind(doc: Document) -> str:
+    metadata = doc.metadata or {}
+    if metadata.get("document_card"):
+        return "card"
+    if metadata.get("community_report"):
+        return "community"
+    return "entity" if metadata.get("graph_entity") else ""
+
+
+def _graph_context(entities: List[Document]) -> Document:
+    """Selected graph entities as one source: what the knowledge graph knows about them."""
+    documents = sorted({name for entity in entities for name in entity.metadata.get("documents", [])})
+    return Document(
+        page_content="\n".join(entity.page_content for entity in entities),
+        metadata={
+            "graph_context": True,
+            "source": "knowledge graph",
+            "entities": [entity.metadata.get("entity_name") for entity in entities],
+            "documents": documents,
+            "relevance_score": max(entity.metadata["relevance_score"] for entity in entities),
+        },
+    )
+
+
 class AdvancedRAG:
     """
     Advanced RAG with hybrid search and re-ranking.
@@ -143,6 +168,10 @@ class AdvancedRAG:
     use_document_cards = True
     max_context_cards = 3
     _card_store = None
+    use_graph = False
+    max_context_entities = 8
+    max_context_communities = 2
+    _graph = None
 
     def __init__(
         self,
@@ -187,6 +216,9 @@ class AdvancedRAG:
         use_metadata_enhancement: bool = False,
         use_document_cards: bool = True,
         max_context_cards: int = 3,
+        use_graph: bool = False,
+        max_context_entities: int = 8,
+        max_context_communities: int = 2,
     ):
         """
         Initialize Advanced RAG.
@@ -244,6 +276,17 @@ class AdvancedRAG:
                 Standard search only (not HyDE or multi-query). On by default:
                 one LLM call per new or changed document at indexing.
             max_context_cards: Most cards added to one query's context
+            use_graph: Build a knowledge graph when documents are indexed
+                (GraphRAG, see ``src/rag/graph_index.py``): the LLM extracts
+                entities and relationships (one call per document, or per
+                ~4000 characters of a long one), Louvain groups them into
+                communities and the LLM writes one report per community. With
+                reranking, entity profiles and community reports that would
+                rank in the top k join the context, like cards. No LLM call
+                at query time. Needs networkx (``graph`` extra).
+            max_context_entities: Most graph entities added to one query's context
+                (given as one "knowledge graph" source)
+            max_context_communities: Most community reports added to one query's context
         """
         # Initialize components
         self.document_loader = DocumentLoader()
@@ -355,6 +398,19 @@ class AdvancedRAG:
             self.vector_store.sibling(f"{collection_name}__cards") if use_document_cards else None
         )
 
+        # The knowledge graph: entity profiles and community reports, in their own collections.
+        self.use_graph = use_graph
+        self.max_context_entities = max(0, max_context_entities)
+        self.max_context_communities = max(0, max_context_communities)
+        self._graph = (
+            GraphIndex(
+                entity_store=self.vector_store.sibling(f"{collection_name}__graph"),
+                report_store=self.vector_store.sibling(f"{collection_name}__communities"),
+                llm=self.llm,
+            )
+            if use_graph else None
+        )
+
         # Track documents
         self._documents = []
         self._chunks = []
@@ -405,10 +461,14 @@ class AdvancedRAG:
                 }
             except Exception as e:
                 logger.warning(f"Could not load document cards: {e}")
+        if self._graph is not None:
+            self._graph.restore()
+            self._graph_changed()
         self._refresh_retriever()
         logger.info(
             f"Restored {len(chunks)} chunks from {len(documents)} documents"
             + (f" and {len(self._cards)} document cards" if self._cards else "")
+            + (f", a graph of {self.num_entities} entities" if self._graph is not None else "")
         )
 
     def _get_default_system_prompt(self) -> str:
@@ -488,8 +548,9 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
 
         # LLM calls stay outside the write lock: queries keep running meanwhile.
         cards = self._write_cards(all_docs)
+        graph = self._graph.prepare(all_docs) if self._graph is not None else None
         with self._index_lock.write():
-            return self._index_loaded_documents(all_docs, cards)
+            return self._index_loaded_documents(all_docs, cards, graph)
 
     def add_files(
         self,
@@ -529,11 +590,12 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
 
         all_docs = [doc for docs in loaded.values() for doc in docs]
         cards = self._write_cards(all_docs)
+        graph = self._graph.prepare(all_docs) if self._graph is not None else None
         with self._index_lock.write():
             for name in loaded:
-                # A card of unchanged text is kept; a new card replaces it by id.
+                # A card (or graph) of unchanged text is kept; a new one replaces it.
                 self._drop_source_file(source_root, name, keep_card=True)
-            return self._index_loaded_documents(all_docs, cards)
+            return self._index_loaded_documents(all_docs, cards, graph)
 
     def refresh_markdown_directory(
         self,
@@ -619,8 +681,9 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
     def _drop_source_file(self, source_root: str, relative_source: str, keep_card: bool = False) -> None:
         """Remove one file of a source folder from memory and the vector store.
 
-        ``keep_card`` keeps its document card, for a file indexed again: an
-        unchanged text reuses the card, a changed one gets a new card.
+        ``keep_card`` keeps its document card (and knowledge graph), for a
+        file indexed again: an unchanged text reuses them, a changed one gets
+        new ones.
         """
         def keep(doc: Document) -> bool:
             metadata = doc.metadata or {}
@@ -636,6 +699,7 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         self.vector_store.persist()
         if not keep_card:
             self._drop_cards(keep, file_filter)
+            self._drop_graph(keep, file_filter)
 
     def _drop_cards(self, keep, filter: Dict[str, Any]) -> None:
         """Delete the document cards ``keep`` rejects (and ``filter`` matches in the store)."""
@@ -644,6 +708,16 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         self._cards = {key: card for key, card in self._cards.items() if keep(card)}
         self._card_store.delete(filter=filter)
         self._card_store.persist()
+
+    def _drop_graph(self, keep, filter: Dict[str, Any]) -> None:
+        """Remove the documents ``keep`` rejects from the knowledge graph."""
+        if self._graph is None:
+            return
+        self._graph.drop(keep, filter)
+        self._graph_changed()
+
+    def _graph_changed(self) -> None:
+        """Called after the knowledge graph changed (GraphRAG keeps its KnowledgeGraph view)."""
 
     def _write_cards(self, all_docs: List[Document]) -> List[Document]:
         """
@@ -692,12 +766,16 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         self._cards.update(zip(ids, cards))
 
     def _index_loaded_documents(
-        self, all_docs: List[Document], cards: Optional[List[Document]] = None
+        self,
+        all_docs: List[Document],
+        cards: Optional[List[Document]] = None,
+        graph: Optional[GraphUpdate] = None,
     ) -> int:
-        """Split, index, and register already-loaded documents (and their cards).
+        """Split, index, and register already-loaded documents (their cards and graph).
 
-        ``cards`` are written beforehand by ``_write_cards``, outside the index
-        lock; when None they are written here.
+        ``cards`` and ``graph`` are written beforehand by ``_write_cards`` and
+        ``GraphIndex.prepare``, outside the index lock; when None they are
+        written here.
         """
         if not all_docs:
             self._refresh_retriever()
@@ -752,6 +830,9 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         self._add_chunks_to_vector_store(retrieval_chunks)
         self.vector_store.persist()
         self._store_cards(self._write_cards(all_docs) if cards is None else cards)
+        if self._graph is not None:
+            self._graph.apply(self._graph.prepare(all_docs) if graph is None else graph)
+            self._graph_changed()
 
         # Initialize retriever
         self._refresh_retriever()
@@ -772,6 +853,10 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         self.vector_store.persist()
         self._drop_cards(
             lambda card: (card.metadata or {}).get("source_root") != source_root,
+            {"source_root": source_root},
+        )
+        self._drop_graph(
+            lambda doc: (doc.metadata or {}).get("source_root") != source_root,
             {"source_root": source_root},
         )
 
@@ -1127,7 +1212,7 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
             docs = self._retriever.search(
                 query, k=k, use_hybrid=use_hybrid, use_reranking=use_reranking, filter=filter
             )
-            return docs + self._cards_for(query, docs, k, filter)
+            return docs + self._extras_for(query, docs, k, filter)
 
         reranking = self._retriever.config.use_reranking if use_reranking is None else use_reranking
         children = self._retriever.search(
@@ -1138,40 +1223,64 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         if reranking:
             # Rerank the passages the LLM will actually read.
             docs = self._retriever.rerank(query, parents, k=k)
-            return docs + self._cards_for(query, docs, k, filter)
+            return docs + self._extras_for(query, docs, k, filter)
         return parents[:k]
 
-    def _cards_for(
+    def _extras_for(
         self, query: str, docs: List[Document], k: int, filter: Optional[Dict[str, Any]] = None
     ) -> List[Document]:
         """
-        Document cards that would rank in the top k among the passages.
+        Document cards, community reports and graph entities that would rank in the top k.
 
-        Cards and passages get the same reranker score, so a card joins only
-        when it beats a passage: questions about one detail keep their k
-        passages, questions about whole documents get their cards as well.
-        Needs reranker scores on ``docs``; returns at most ``max_context_cards``.
+        They get the same reranker score as the passages, so they join only
+        when they beat a passage: questions about one detail keep their k
+        passages, questions about whole documents or about things spread over
+        several documents get cards, reports or entities as well. Each kind is
+        ranked against the passages on its own and has its own cap; the
+        entities that make it are given as one "knowledge graph" source.
+        Needs reranker scores on ``docs``.
         """
-        if not getattr(self, "_cards", None) or self.max_context_cards < 1 or not docs:
+        if not docs:
             return []
         scores = [(doc.metadata or {}).get("relevance_score") for doc in docs]
         if any(score is None for score in scores):
             return []
         try:
-            candidates = self._card_store.similarity_search(
-                query, k=max(4, self.max_context_cards + 1), filter=filter
-            )
-            cards = self._retriever.rerank(query, candidates, k=len(candidates))
+            groups = self._extra_candidates(query, filter)
+            candidates = [doc for _, _, found in groups for doc in found]
+            ranked = self._retriever.rerank(query, candidates, k=len(candidates)) if candidates else []
         except Exception as e:
-            logger.warning(f"Document card search failed: {e}")
+            logger.warning(f"Search for document cards or graph context failed: {e}")
             return []
-        ranked = sorted(
-            [(score, False, doc) for score, doc in zip(scores, docs)]
-            + [(card.metadata["relevance_score"], True, card) for card in cards
-               if card.metadata.get("relevance_score") is not None],
-            key=lambda item: -item[0],
-        )
-        return [doc for _, is_card, doc in ranked[:k] if is_card][: self.max_context_cards]
+        passages = [(score, False, doc) for score, doc in zip(scores, docs)]
+        extras = []
+        for kind, cap, _ in groups:
+            own = [
+                (doc.metadata["relevance_score"], True, doc) for doc in ranked
+                if _extra_kind(doc) == kind and doc.metadata.get("relevance_score") is not None
+            ]
+            top = sorted(passages + own, key=lambda item: -item[0])[:k]
+            chosen = [doc for _, is_extra, doc in top if is_extra][:cap]
+            if kind == "entity":
+                extras.extend([_graph_context(chosen)] if chosen else [])
+            else:
+                extras.extend(chosen)
+        return extras
+
+    def _extra_candidates(self, query: str, filter: Optional[Dict[str, Any]]):
+        """(kind, cap, candidates) for cards, community reports and graph entities."""
+        groups = []
+        if getattr(self, "_cards", None) and self.max_context_cards > 0:
+            groups.append(("card", self.max_context_cards, self._card_store.similarity_search(
+                query, k=max(4, self.max_context_cards + 1), filter=filter)))
+        graph = getattr(self, "_graph", None)
+        if graph is not None and self.max_context_communities > 0:
+            groups.append(("community", self.max_context_communities, graph.report_candidates(
+                query, filter, k=max(4, self.max_context_communities + 1))))
+        if graph is not None and self.max_context_entities > 0:
+            groups.append(("entity", self.max_context_entities, graph.entity_candidates(
+                query, filter, k=self.max_context_entities)))
+        return [group for group in groups if group[2]]
 
     def query_detailed(
         self,
@@ -1321,6 +1430,16 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
             )
             if metadata.get("document_card"):
                 source = f"{source} (document card: summary of the whole document / thẻ tóm tắt cả tài liệu)"
+            elif metadata.get("community_report"):
+                source = (
+                    f"{source} (report on related entities across {metadata.get('documents')} "
+                    "/ báo cáo nhóm thực thể liên quan)"
+                )
+            elif metadata.get("graph_context"):
+                source = (
+                    f"{source} (entities and relationships extracted from "
+                    f"{', '.join(metadata.get('documents') or [])} / thực thể và quan hệ trích từ tài liệu)"
+                )
             context_parts.append(f"[S{i}] Source: {source}\n{doc.page_content}")
 
         context = "\n\n".join(context_parts)
@@ -1414,6 +1533,18 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
     def num_cards(self) -> int:
         """Document cards in the index (0 when cards are off)."""
         return len(getattr(self, "_cards", None) or {})
+
+    @property
+    def num_entities(self) -> int:
+        """Entities in the knowledge graph (0 when the graph is off)."""
+        graph = getattr(self, "_graph", None)
+        return graph.num_entities if graph is not None else 0
+
+    @property
+    def num_communities(self) -> int:
+        """Community reports in the knowledge graph (0 when the graph is off)."""
+        graph = getattr(self, "_graph", None)
+        return len(graph.reports) if graph is not None else 0
 
     @property
     def num_chunks(self) -> int:

@@ -143,6 +143,8 @@ class Config:
         "ENABLE_PARENT_CONTEXT": "true",
         # One LLM-written card per document at ingest, for questions across documents.
         "ENABLE_DOCUMENT_CARDS": "true",
+        # Knowledge graph with community reports at ingest (GraphRAG, "graph" extra).
+        "ENABLE_GRAPH": "false",
         "ENABLE_CACHE": "true",
         "ENABLE_API_AUTH": "false",
         "API_KEYS": "",

@@ -95,6 +95,7 @@ ENABLE_HYBRID_SEARCH=true
 ENABLE_RERANKING=true
 ENABLE_PARENT_CONTEXT=true   # return parent chunks (about 2x context, much better recall)
 ENABLE_DOCUMENT_CARDS=true  # one LLM card per document at ingest, for questions across documents
+ENABLE_GRAPH=false          # knowledge graph + community reports at ingest (GraphRAG, "graph" extra)
 ```
 
 ### Caching

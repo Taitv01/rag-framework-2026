@@ -2,16 +2,17 @@
 Graph RAG
 =========
 
-Knowledge Graph-based RAG for structured reasoning.
-
-Inspired by LightRAG and Microsoft GraphRAG.
+Knowledge graph RAG in the spirit of Microsoft GraphRAG: AdvancedRAG with its
+knowledge graph index on.
 
 Features:
-- Entity and relationship extraction
-- Knowledge graph construction
-- Graph-based retrieval
-- Community detection
-- Hybrid retrieval (graph + vector)
+- Entity and relationship extraction (one LLM call per document, or per
+  ~4000 characters of a long one)
+- Entities merged across documents, Louvain communities, one LLM report each
+- Graph stored beside the chunks (survives restarts), filters apply to it
+- Entity profiles and community reports join the context when they outrank
+  passages; no LLM call at query time
+- KnowledgeGraph view for traversal, export and optional Neo4j sync
 
 Usage:
     rag = GraphRAG()
@@ -19,19 +20,14 @@ Usage:
     answer = rag.query("What is the relationship between X and Y?")
 """
 
-from typing import List, Optional, Dict, Any, Set, Union
-from pathlib import Path
-from dataclasses import dataclass, field
+import hashlib
 import json
 import logging
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Set
 
-from langchain_core.documents import Document
-
-from src.core.document_loader import DocumentLoader
-from src.core.text_splitter import TextSplitter
-from src.core.embeddings import EmbeddingsManager
-from src.core.vector_store import VectorStoreManager
-from src.core.llm import LLMManager
+from src.rag.advanced_rag import AdvancedRAG
+from src.rag.document_cards import document_key
 
 logger = logging.getLogger(__name__)
 
@@ -277,79 +273,44 @@ class KnowledgeGraph:
         return self._neo4j.sync_from_knowledge_graph(self)
 
 
-class GraphRAG:
+class GraphRAG(AdvancedRAG):
     """
-    Graph-based RAG using Knowledge Graphs.
+    AdvancedRAG with its knowledge graph on (``use_graph=True``).
 
-    Combines knowledge graph with vector retrieval for better reasoning.
+    Documents are indexed as passages (hybrid search, reranking, parent
+    context, document cards) and as a knowledge graph: entities and
+    relationships extracted by the LLM, merged across documents, grouped into
+    Louvain communities with one report each (``src/rag/graph_index.py``).
+    The graph is stored beside the chunks and survives restarts.
+
+    Questions go through AdvancedRAG's single pipeline, usually one LLM call:
+    graph entities and community reports join the context when they outrank
+    passages. ``knowledge_graph`` is a KnowledgeGraph view of the merged
+    graph (traversal, export, Neo4j), refreshed after every change.
 
     Example:
-        rag = GraphRAG(llm_provider="openai")
-        rag.add_documents(["docs/"])
-
-        # Query with graph reasoning
-        answer = rag.query("What is the relationship between Python and AI?")
-
-        # Get knowledge graph
-        kg = rag.get_knowledge_graph()
-        neighbors = kg.get_neighbors("Python")
+        rag = GraphRAG(llm_provider="anthropic", persist_directory="./data")
+        rag.add_documents(["stories/"])
+        answer = rag.query("Những truyện nào có thủy cung?")
+        neighbors = rag.get_knowledge_graph().get_neighbors("Thạch Sanh")
     """
 
     def __init__(
         self,
-        llm_provider: str = "openai",
-        llm_model: Optional[str] = None,
-        llm_api_key: Optional[str] = None,
-        embedding_provider: str = "huggingface",
-        embedding_model: Optional[str] = None,
-        vector_store_provider: str = "faiss",
-        chunk_size: int = 500,
-        chunk_overlap: int = 50,
-        retrieval_k: int = 5,
+        *args,
         neo4j_uri: Optional[str] = None,
         neo4j_user: str = "neo4j",
         neo4j_password: Optional[str] = None,
+        **kwargs,
     ):
         """
-        Initialize Graph RAG.
-
         Args:
-            llm_provider: LLM provider
-            llm_model: LLM model name
-            llm_api_key: LLM API key
-            embedding_provider: Embedding provider
-            embedding_model: Embedding model name
-            vector_store_provider: Vector store provider
-            chunk_size: Chunk size
-            chunk_overlap: Chunk overlap
-            retrieval_k: Number of documents to retrieve
-            neo4j_uri: Optional Neo4j bolt URI (e.g., "bolt://localhost:7687")
+            *args, **kwargs: AdvancedRAG options (``use_graph`` defaults to True)
+            neo4j_uri: Optional Neo4j bolt URI (e.g., "bolt://localhost:7687"):
+                the graph is also written there after every change
             neo4j_user: Neo4j username
             neo4j_password: Neo4j password (or from NEO4J_PASSWORD env var)
         """
-        # Initialize components
-        self.document_loader = DocumentLoader()
-        self.text_splitter = TextSplitter(
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-        )
-        self.embeddings = EmbeddingsManager(
-            provider=embedding_provider,
-            model_name=embedding_model,
-        )
-        self.vector_store = VectorStoreManager(
-            provider=vector_store_provider,
-            embeddings=self.embeddings,
-        )
-        self.llm = LLMManager(
-            provider=llm_provider,
-            model=llm_model,
-            api_key=llm_api_key,
-        )
-
-        self.retrieval_k = retrieval_k
-
-        # Knowledge graph with optional Neo4j backend
         self._neo4j_backend = None
         if neo4j_uri:
             from src.core.graph_store import Neo4jBackend
@@ -363,207 +324,66 @@ class GraphRAG:
             else:
                 logger.warning("GraphRAG: Neo4j connection failed, using NetworkX only")
                 self._neo4j_backend = None
-
         self.knowledge_graph = KnowledgeGraph(neo4j_backend=self._neo4j_backend)
+        kwargs.setdefault("use_graph", True)
+        super().__init__(*args, **kwargs)
 
-        # Track documents
-        self._documents = []
-        self._chunks = []
+    def _graph_changed(self) -> None:
+        """Rebuild the KnowledgeGraph view (and Neo4j copy) from the graph index."""
+        graph = getattr(self, "_graph", None)
+        if graph is None:
+            return
+        view = graph.view
+        knowledge_graph = KnowledgeGraph(neo4j_backend=self._neo4j_backend)
+        for entity in view.entities.values():
+            knowledge_graph.add_entity(Entity(
+                name=entity["name"],
+                entity_type=entity["type"],
+                description=" ".join(text for text in entity["descriptions"].values() if text),
+                metadata={"documents": view._document_names(sorted(entity["descriptions"]))},
+            ))
+        directed: Dict[tuple, List[str]] = {}
+        for document in view.documents.values():
+            for pair, description in sorted(document.relationships.items()):
+                directed.setdefault(pair, []).append(description)
+        for (source, target), descriptions in directed.items():
+            knowledge_graph.add_relationship(Relationship(
+                source=view.entities[source]["name"],
+                target=view.entities[target]["name"],
+                relationship_type="related_to",
+                description=" | ".join(text for text in descriptions if text),
+                weight=float(len(descriptions)),
+            ))
+        self.knowledge_graph = knowledge_graph
 
-    def add_documents(
-        self,
-        sources: Union[str, Path, List[Union[str, Path]]],
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> int:
+    def add_texts(self, texts: List[str], metadatas: Optional[List[Dict[str, Any]]] = None) -> int:
         """
-        Add documents and extract knowledge graph.
-
-        Args:
-            sources: File path(s) or directory path(s)
-            metadata: Additional metadata
-
-        Returns:
-            Number of chunks added
+        Add raw texts; a text without a source becomes its own document
+        (``document_id`` "text/<hash>"), so it gets a graph and a card.
         """
-        # Normalize to list
-        if isinstance(sources, (str, Path)):
-            sources = [sources]
+        metadatas = [dict(metadata or {}) for metadata in (metadatas or [{}] * len(texts))]
+        for text, metadata in zip(texts, metadatas):
+            if not document_key(metadata):
+                metadata["document_id"] = "text/" + hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
+        return super().add_texts(texts, metadatas)
 
-        # Load documents
-        all_docs = []
-        for source in sources:
-            source = Path(source)
-            if source.is_dir():
-                docs = self.document_loader.load_directory(source, metadata=metadata)
-            else:
-                docs = self.document_loader.load(source, metadata=metadata)
-            all_docs.extend(docs)
-
-        self._documents.extend(all_docs)
-
-        # Split into chunks
-        chunks = self.text_splitter.split_documents(all_docs)
-        self._chunks.extend(chunks)
-
-        # Add to vector store
-        self.vector_store.add_documents(chunks)
-
-        # Extract entities and relationships
-        self._extract_knowledge(chunks)
-
-        return len(chunks)
-
-    def add_texts(
-        self,
-        texts: List[str],
-        metadatas: Optional[List[Dict[str, Any]]] = None
-    ) -> int:
-        """
-        Add texts and extract knowledge graph.
-
-        Args:
-            texts: List of text strings
-            metadatas: Optional metadata for each text
-
-        Returns:
-            Number of chunks added
-        """
-        docs = []
-        for i, text in enumerate(texts):
-            metadata = metadatas[i] if metadatas else {}
-            docs.append(Document(page_content=text, metadata=metadata))
-
-        self._documents.extend(docs)
-
-        # Split into chunks
-        chunks = self.text_splitter.split_documents(docs)
-        self._chunks.extend(chunks)
-
-        # Add to vector store
-        self.vector_store.add_documents(chunks)
-
-        # Extract entities and relationships
-        self._extract_knowledge(chunks)
-
-        return len(chunks)
-
-    def _extract_knowledge(self, chunks: List[Document]) -> None:
-        """Extract entities and relationships from chunks."""
-        import logging
-        logger = logging.getLogger(__name__)
-
-        for i, chunk in enumerate(chunks):
-            try:
-                # Extract entities and relationships using LLM (bilingual prompt)
-                prompt = f"""Extract entities and relationships from the following text.
-Trích xuất các thực thể và mối quan hệ từ văn bản sau.
-
-Text / Văn bản:
-{chunk.page_content[:2000]}
-
-Return a JSON object with / Trả về đối tượng JSON với:
-- "entities": list of {{"name": "...", "type": "...", "description": "..."}}
-- "relationships": list of {{"source": "...", "target": "...", "type": "...", "description": "..."}}
-
-Return ONLY valid JSON, nothing else."""
-
-                response = self.llm.generate(prompt)
-
-                # Parse JSON
-                try:
-                    # Clean response
-                    json_str = response.strip()
-                    if json_str.startswith("```"):
-                        json_str = json_str.split("\n", 1)[1]
-                    if json_str.endswith("```"):
-                        json_str = json_str.rsplit("```", 1)[0]
-
-                    data = json.loads(json_str)
-
-                    # Add entities
-                    for e in data.get("entities", []):
-                        self.knowledge_graph.add_entity(Entity(
-                            name=e["name"],
-                            entity_type=e.get("type", "Unknown"),
-                            description=e.get("description", ""),
-                        ))
-
-                    # Add relationships
-                    for r in data.get("relationships", []):
-                        self.knowledge_graph.add_relationship(Relationship(
-                            source=r["source"],
-                            target=r["target"],
-                            relationship_type=r.get("type", "related_to"),
-                            description=r.get("description", ""),
-                        ))
-
-                except json.JSONDecodeError as e:
-                    logger.warning(f"Failed to parse entity extraction JSON for chunk {i}: {e}")
-                except KeyError as e:
-                    logger.warning(f"Missing expected key in entity extraction for chunk {i}: {e}")
-
-            except Exception as e:
-                logger.error(f"Entity extraction failed for chunk {i}: {e}")
-
-    def query(
-        self,
-        question: str,
-        k: Optional[int] = None,
-        use_graph: bool = True,
-        **kwargs
-    ) -> str:
-        """
-        Query using graph and vector retrieval.
-
-        Args:
-            question: Question to ask
-            k: Number of documents to retrieve
-            use_graph: Whether to use graph retrieval
-
-        Returns:
-            Answer string
-        """
-        k = k or self.retrieval_k
-
-        # Vector retrieval
-        vector_docs = self.vector_store.similarity_search(question, k=k)
-
-        # Graph retrieval
-        graph_context = ""
-        if use_graph:
-            graph_context = self._graph_retrieval(question)
-
-        # Build context
-        context_parts = []
-
-        if graph_context:
-            context_parts.append(f"Knowledge Graph Information:\n{graph_context}")
-
-        for i, doc in enumerate(vector_docs, 1):
-            context_parts.append(f"[Document {i}]\n{doc.page_content}")
-
-        context = "\n\n".join(context_parts)
-
-        # Generate answer (bilingual)
-        prompt = f"""You are a helpful AI assistant / Bạn là trợ lý AI hữu ích.
-Use the provided context to answer the question.
-Sử dụng ngữ cảnh để trả lời câu hỏi.
-
-The context includes knowledge graph and document excerpts.
-Ngữ cảnh bao gồm đồ thị tri thức và trích đoạn tài liệu.
-
-Rules / Quy tắc:
-1. Answer based on the provided context / Trả lời dựa trên ngữ cảnh
-2. Use knowledge graph for relationships / Sử dụng đồ thị tri thức cho mối quan hệ
-3. Be concise and accurate / Ngắn gọn và chính xác
-4. Answer in the same language as the question / Trả lời bằng ngôn ngữ của câu hỏi
-
-Context / Ngữ cảnh:
-{context}
-
-Question / Câu hỏi: {question}"""
-
-        return self.llm.generate(prompt, **kwargs)
+    def get_communities(self) -> List[Community]:
+        """Communities that have a report, largest first (``summary`` is the report)."""
+        graph = getattr(self, "_graph", None)
+        if graph is None:
+            return []
+        communities = sorted(
+            (community for community in graph.communities if community.id in graph.reports),
+            key=lambda community: (-len(community.entities), community.id),
+        )
+        return [
+            Community(
+                id=index,
+                entities=[graph.view.entities[key]["name"] for key in community.entities],
+                summary=graph.reports[community.id].page_content,
+            )
+            for index, community in enumerate(communities)
+        ]
 
     def _extract_entity_names(self, question: str) -> List[str]:
         """Extract candidate entity names from a question using the configured LLM."""
@@ -584,41 +404,6 @@ Trả về tên thực thể dưới dạng danh sách cách nhau bằng dấu p
                 response = response[len(prefix):].strip()
 
         return [name.strip() for name in response.split(",") if name.strip()]
-
-    def _graph_retrieval(self, question: str) -> str:
-        """Retrieve relevant information from knowledge graph."""
-        entity_names = self._extract_entity_names(question)
-
-        # Get graph information
-        graph_info = []
-
-        for name in entity_names:
-            entity = self.knowledge_graph.get_entity(name)
-            if entity:
-                # Get neighbors
-                neighbors = self.knowledge_graph.get_neighbors(name, depth=1)
-
-                # Get relationships
-                relationships = self.knowledge_graph.get_relationships(name)
-
-                # Format information
-                info_parts = [f"Entity: {entity.name} ({entity.entity_type})"]
-                info_parts.append(f"Description: {entity.description}")
-
-                if relationships:
-                    info_parts.append("Relationships:")
-                    for rel in relationships:
-                        other = rel.target if rel.source == name else rel.source
-                        info_parts.append(f"  - {name} -> {other}: {rel.relationship_type}")
-
-                if neighbors:
-                    info_parts.append("Connected entities:")
-                    for neighbor_name, neighbor in neighbors.items():
-                        info_parts.append(f"  - {neighbor_name}: {neighbor.description[:100]}")
-
-                graph_info.append("\n".join(info_parts))
-
-        return "\n\n".join(graph_info) if graph_info else ""
 
     def extract_subgraph_context(self, question: str, max_hops: int = 2) -> Dict[str, Any]:
         """
@@ -704,27 +489,12 @@ Trả về tên thực thể dưới dạng danh sách cách nhau bằng dấu p
         return self.knowledge_graph
 
     def save_graph(self, path: str) -> None:
-        """Save knowledge graph to file."""
+        """Export the knowledge graph to a JSON file (the index itself is stored with the chunks)."""
         self.knowledge_graph.save(path)
 
     def load_graph(self, path: str) -> None:
-        """Load knowledge graph from file."""
+        """Load an exported graph into ``knowledge_graph`` for traversal (search keeps using the index)."""
         self.knowledge_graph.load(path)
-
-    @property
-    def num_documents(self) -> int:
-        """Number of loaded documents."""
-        return len(self._documents)
-
-    @property
-    def num_chunks(self) -> int:
-        """Number of chunks."""
-        return len(self._chunks)
-
-    @property
-    def num_entities(self) -> int:
-        """Number of entities in knowledge graph."""
-        return len(self.knowledge_graph.entities)
 
     @property
     def num_relationships(self) -> int:

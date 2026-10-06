@@ -1172,6 +1172,7 @@ app = create_app(
     use_reranking=config.get_bool("ENABLE_RERANKING", default=True),
     use_parent_context=config.get_bool("ENABLE_PARENT_CONTEXT", default=True),
     use_document_cards=config.get_bool("ENABLE_DOCUMENT_CARDS", default=True),
+    use_graph=config.get_bool("ENABLE_GRAPH", default=False),
     use_cache=config.get_bool("ENABLE_CACHE", default=False),
     cache_ttl=config.get_int("CACHE_TTL", default=3600),
 )

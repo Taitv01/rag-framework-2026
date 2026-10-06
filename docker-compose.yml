@@ -35,6 +35,7 @@ services:
       ENABLE_RERANKING: ${ENABLE_RERANKING:-true}
       ENABLE_PARENT_CONTEXT: ${ENABLE_PARENT_CONTEXT:-true}
       ENABLE_DOCUMENT_CARDS: ${ENABLE_DOCUMENT_CARDS:-true}
+      ENABLE_GRAPH: ${ENABLE_GRAPH:-false}
       ENABLE_CACHE: ${ENABLE_CACHE:-true}
       CACHE_TTL: ${CACHE_TTL:-3600}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:7860,http://localhost:8000}

@@ -103,6 +103,9 @@ def parse_args(argv=None) -> argparse.Namespace:
                              "join the context (needs reranking; pipeline default: on)")
     answer.add_argument("--max-context-cards", type=int, default=3,
                         help="Most document cards added to one question's context")
+    answer.add_argument("--graph", action=argparse.BooleanOptionalAction, default=False,
+                        help="Knowledge graph at indexing (GraphRAG: LLM extraction, community "
+                             "reports); entities and reports that outrank passages join the context")
     answer.add_argument("--limit", type=int, default=None, help="Only the first N questions")
     answer.add_argument("--ids", default=None, help="Comma-separated question ids")
 
@@ -181,6 +184,7 @@ def build_rag(args, use_hybrid: bool, use_reranking: bool, llm_provider="openai"
         reranker_model=reranker_model,
         use_document_cards=getattr(args, "document_cards", False),
         max_context_cards=getattr(args, "max_context_cards", 3),
+        use_graph=getattr(args, "graph", False),
     )
     if before_index:
         before_index(rag)
@@ -214,6 +218,9 @@ def pipeline_settings(args, rag, index_seconds: float) -> dict:
         "retrieval_chunks": rag.num_chunks,
         "document_cards": rag.num_cards if rag.use_document_cards else None,
         "max_context_cards": rag.max_context_cards if rag.use_document_cards else None,
+        "graph_entities": rag.num_entities if rag.use_graph else None,
+        "graph_relationships": rag._graph.num_relationships if rag.use_graph else None,
+        "graph_communities": rag.num_communities if rag.use_graph else None,
         "index_seconds": round(index_seconds, 2),
     }
 
@@ -396,7 +403,8 @@ def cmd_answer(args) -> int:
     agent = agents[0] if agents else None
     if agent:
         if agent.pending:
-            # Document cards first: questions asked over placeholder cards would be wasted.
+            # Cards and the graph first: questions asked over placeholders would be wasted.
+            # The graph takes two runs: extraction, then the community reports built on it.
             return request_agent_answers(agent)
         judge_llm = agent
 
