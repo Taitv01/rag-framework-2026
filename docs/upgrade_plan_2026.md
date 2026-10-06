@@ -11,7 +11,7 @@ kỹ thuật mới khi số đo cho thấy cần.
 | 2 | Sửa lõi retrieval | 3–5 ngày | ✅ Hoàn thành (compose chờ CI kiểm chứng) |
 | 3 | Hợp nhất pipeline generation | 3–4 ngày | ✅ Hoàn thành (cache theo filter dời sang GĐ 4) |
 | 4 | API & vận hành | 2–3 ngày | ✅ Hoàn thành (chưa thử với server Langfuse thật) |
-| 5 | Nâng cao (tùy chọn, theo số đo) | — | ⏳ Đang làm (catalog LLM, cổng chất lượng CI, thẻ truyện bật mặc định; BGE-M3 sparse đã thử, không dùng) |
+| 5 | Nâng cao (tùy chọn, theo số đo) | — | ⏳ Đang làm (catalog LLM, cổng chất lượng CI, thẻ truyện bật mặc định; BGE-M3 sparse đã thử, không dùng; GraphRAG đã làm, tắt mặc định, còn chờ đo bản gọn) |
 
 ---
 
@@ -498,7 +498,51 @@ Qdrant, parent context, hybrid + rerank (fp32), `query_rewrite="auto"`,
       - **Chi phí nếu dùng:** lưu multi-vector ColBERT (mỗi token một vector 1024
         chiều), thêm sparse index trong Qdrant, và phải tự viết lớp embedding, vì
         `HuggingFaceEmbeddings` không trả về trạng thái từng token.
-- [ ] GraphRAG có community summaries và lưu graph xuống đĩa.
+- [x] **GraphRAG có community summaries, lưu graph xuống đĩa** (`use_graph`,
+      `ENABLE_GRAPH`, **tắt mặc định**; `src/rag/graph_index.py`; commit `490c5dc`,
+      `1633389`). Chủ dự án chọn làm ngày 06/10/2026.
+      - **Cách làm:** lúc index, LLM trích thực thể và quan hệ theo từng đơn vị tối đa
+        ~4000 ký tự (với corpus này là 13 lời gọi, không phải mỗi chunk), và chỉ trích
+        lại khi nội dung tài liệu đổi. Thực thể được gộp theo tên giữa các tài liệu;
+        Louvain (networkx, extra `graph`) chia cộng đồng; mỗi cộng đồng từ 3 thực thể
+        có một báo cáo do LLM viết (10 báo cáo), chỉ viết lại khi nội dung cộng đồng
+        đổi. Hồ sơ thực thể (theo từng tài liệu, mang metadata của tài liệu) nằm trong
+        `<collection>__graph`, báo cáo trong `<collection>__communities`, nên graph
+        còn nguyên sau khi khởi động lại (dựng lại mà không gọi LLM), filter áp dụng
+        được, xoá file thì graph cũng bỏ phần của file đó. Khi có filter, báo cáo chỉ
+        được dùng nếu mọi tài liệu nó tóm tắt đều qua filter.
+      - **Lúc query không gọi LLM:** hồ sơ thực thể và báo cáo được rerank cùng đoạn
+        văn, cái nào lọt top k thì vào ngữ cảnh. Mỗi loại xét riêng, nên thẻ truyện giữ
+        nguyên hành vi: phát lại phép đo của thẻ cho kết quả trùng khớp. `GraphRAG`
+        giờ là AdvancedRAG bật graph và vẫn giữ API cũ (`knowledge_graph`,
+        `extract_subgraph_context`, lưu/nạp, Neo4j). Bản cũ chạy pipeline riêng chỉ
+        dùng vector, tốn thêm 1 lời gọi LLM mỗi câu hỏi, và chưa từng dựng cộng đồng.
+      - **Đo lần 1** (16 ứng viên thực thể, `answer_graph.json` trong `runs/`, so với
+        `answer_cards.json`): answer_recall **0,934 → 0,947**, faithfulness 0,998 →
+        0,998, không từ chối nhầm câu nào; `motif` 0,818 → 0,858, `multi_source`
+        0,858 → 0,890, `moral` 0,931 → 0,986, `no_diacritics` 0,76 → 0,826. Cả 5 câu
+        tăng điểm (q071, q057, q079, q013, q087) đều nhờ hồ sơ thực thể; báo cáo cộng
+        đồng hầu như không đóng góp riêng. **Độ trễ p50 1,4 s → 9,9 s** (p95 18,8 s),
+        vì reranker chấm thêm 24 ứng viên dài và mỗi collection lại embed câu hỏi.
+      - **Bản gọn** (`1633389`): tối đa 8 ứng viên thực thể (thực thể được nêu tên
+        đứng trước); reranker chỉ đọc bản rút gọn của hồ sơ, LLM nhận bản đầy đủ kèm
+        quan hệ; 3 ứng viên báo cáo; mỗi câu hỏi chỉ embed một lần
+        (`QueryCachedEmbeddings`); thực thể có ở nhiều tài liệu thì ghi rõ dòng nào
+        thuộc tài liệu nào. Đo bằng profiler: retrieve 5,9 s → 2,5 s mỗi câu (chỉ có
+        thẻ: ~1,4 s). **Chưa có số đo câu trả lời**: lượt chấm faithfulness bị dừng
+        giữa chừng vì máy hết RAM. Câu trả lời cho 80 prompt mới đã nằm trong
+        `agent_answers.json`; với ít thực thể hơn, q013, q087 và một phần q071 mất
+        phần tăng, nên answer_recall có thể thấp hơn 0,947.
+      - **Hạn chế:** graph chen vào gần như mọi câu (93/94 ở lần đo 1, thêm ~3000 ký
+        tự), kể cả câu hỏi chi tiết một truyện mà nó không giúp gì, và có lúc mang
+        thực thể lạc đề (Lý Thông chen vào câu hỏi về Sơn Tinh). Gộp theo tên có gộp
+        nhầm ("nhà vua" của Tấm Cám với vua trong Thạch Sanh). Cộng đồng nối được các
+        truyện qua tên chung (Hùng Vương nối 5 truyện), nhưng không nối được các
+        truyện dùng từ khác nhau ("thủy cung" không nối được với Thạch Sanh hay Hồ
+        Gươm). Như với thẻ truyện, cùng một model đã viết golden set, trích graph,
+        trả lời và tự chấm, nên mức tăng chỉ là ước lượng lạc quan.
+      - **Còn lại:** đo xong bản gọn, rồi quyết định giữ tắt mặc định hay bật. Một
+        hướng nếu muốn bớt nhiễu: chỉ thêm graph khi câu hỏi nhắm tới nhiều tài liệu.
 
 ## Quyết định đã chốt
 1. Mục đích dùng ưu tiên: **truyện cổ tích/sáng tác** (10/2026).
@@ -506,4 +550,7 @@ Qdrant, parent context, hybrid + rerank (fp32), `query_rewrite="auto"`,
 3. Vector store chính: **Qdrant** (10/2026).
 4. Thẻ tài liệu **bật mặc định**, chấp nhận 1 lời gọi LLM mỗi tài liệu lúc ingest
    (06/10/2026).
+5. Phạm vi: **chỉ nâng cấp code**; bộ truyện cổ tích chỉ là dữ liệu đo. Ưu tiên phép đo
+   không cần LLM; phép đo câu trả lời chỉ chạy khi thật cần và giới hạn ở các câu bị
+   ảnh hưởng (06/10/2026).
 
