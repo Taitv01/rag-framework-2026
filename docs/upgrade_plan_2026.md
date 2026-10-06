@@ -11,7 +11,7 @@ kỹ thuật mới khi số đo cho thấy cần.
 | 2 | Sửa lõi retrieval | 3–5 ngày | ✅ Hoàn thành (compose chờ CI kiểm chứng) |
 | 3 | Hợp nhất pipeline generation | 3–4 ngày | ✅ Hoàn thành (cache theo filter dời sang GĐ 4) |
 | 4 | API & vận hành | 2–3 ngày | ✅ Hoàn thành (chưa thử với server Langfuse thật) |
-| 5 | Nâng cao (tùy chọn, theo số đo) | — | ⏳ Đang làm (catalog LLM, cổng chất lượng CI, thẻ truyện) |
+| 5 | Nâng cao (tùy chọn, theo số đo) | — | ⏳ Đang làm (catalog LLM, cổng chất lượng CI, thẻ truyện bật mặc định; BGE-M3 sparse đã thử, không dùng) |
 
 ---
 
@@ -466,7 +466,38 @@ Qdrant, parent context, hybrid + rerank (fp32), `query_rewrite="auto"`,
         mặc định (`--no-document-cards` để tắt); retrieval và CI không dùng LLM nên
         vẫn không có thẻ.
       - **Chưa làm:** thẻ cho HyDE và multi-query; viết thẻ song song khi corpus lớn.
-- [ ] BGE-M3 sparse/multi-vector; contextual retrieval cho corpus truyện.
+- [x] **BGE-M3 sparse/multi-vector: đã thử, không dùng.** Contextual retrieval được
+      thay bằng thẻ tài liệu (chủ dự án chọn ngày 05/10/2026). Thử thay hoặc bổ sung
+      bước lấy ứng viên (15 chunk con → parent → rerank top 5) bằng điểm sparse
+      (lexical) và ColBERT của chính bge-m3. Cả hai lấy từ một lượt forward, với trọng
+      số `sparse_linear.pt` và `colbert_linear.pt` của BAAI/bge-m3, không cần
+      FlagEmbedding. Script đo nằm ngoài repo: dựng pipeline như `eval.py retrieval`
+      (Qdrant trong RAM, bge-m3 trên CPU, reranker fp32), rồi thay `hybrid_search`.
+      Đường cơ sở khớp đúng số của Giai đoạn 2.
+
+      | Ứng viên | bằng chứng trong pool | evidence_recall (rerank) | evidence_recall (không rerank) | MRR (rerank) |
+      |----------|------:|------:|------:|------:|
+      | BM25 + dense (hiện tại) | 0,977 | 0,941 | 0,909 | 0,974 |
+      | dense | 0,954 | 0,918 | 0,907 | 0,974 |
+      | sparse + dense (thay BM25) | 0,954 | 0,906 | 0,905 | 0,974 |
+      | BM25 + sparse + dense | 0,966 | 0,918 | 0,917 | 0,974 |
+      | BM25 + dense + ColBERT | 0,977 | 0,941 | 0,901 | 0,980 |
+      | dense + sparse + ColBERT (kiểu bài báo M3, 1/0,3/1) | 0,958 | 0,918 | 0,896 | 0,980 |
+      | BM25 + dense + sparse + ColBERT | 0,981 | 0,944 | 0,898 | 0,974 |
+
+      - **Sparse của bge-m3 không thay được BM25.** Câu gõ không dấu mất điểm
+        (`no_diacritics` 0,80 → 0,40; q080, q081). BM25 có index bỏ dấu, còn token
+        của bge-m3 cho "tam bi di ghe" khác hẳn token của "Tấm bị dì ghẻ". Ngoài ra
+        q069 (đếm cảnh trong kịch bản) cũng mất.
+      - **Biến thể tốt nhất chỉ được thêm một câu**: q077 (0,33 → 0,67) khi có
+        rerank, nhưng không rerank thì giảm (0,909 → 0,898). Trọng số được chọn sau
+        khi đã xem kết quả trên chính golden set, nên mức +0,003 nằm trong sai số.
+      - **Bước lấy ứng viên gần như đã đủ:** pool hiện tại chứa 97,7% bằng chứng.
+        Phần hụt nằm ở reranker khi chọn top 5 (0,977 → 0,941), nên cải thiện bước
+        lấy ứng viên chỉ còn tối đa 0,023.
+      - **Chi phí nếu dùng:** lưu multi-vector ColBERT (mỗi token một vector 1024
+        chiều), thêm sparse index trong Qdrant, và phải tự viết lớp embedding, vì
+        `HuggingFaceEmbeddings` không trả về trạng thái từng token.
 - [ ] GraphRAG có community summaries và lưu graph xuống đĩa.
 
 ## Quyết định đã chốt
