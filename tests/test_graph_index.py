@@ -265,15 +265,32 @@ def test_filters_limit_graph_context_to_matching_documents(monkeypatch, tmp_path
     profiles = rag._graph.entity_candidates("thủy cung", {"file_name": "con_rong.md"}, k=4)
     water = next(p for p in profiles if p.metadata["graph_entity"] == "thủy cung")
     assert water.metadata["documents"] == ["con_rong.md"]
-    assert "Thủy Tề" not in water.page_content
+    assert "Thủy Tề" not in water.metadata["graph_profile"]
+
+
+def test_profiles_name_the_document_of_each_line_and_rerank_short(monkeypatch, tmp_path):
+    rag, _ = make_rag(monkeypatch, tmp_path)
+    rag.add_documents(write_corpus(tmp_path / "docs"))
+
+    water = rag._graph.view.entity_profile("thủy cung")
+    # Known from two stories: each description and relationship says which one.
+    assert "  con_rong.md: Nơi Lạc Long Quân sống." in water.page_content
+    assert "  thach_sanh.md: Cung điện dưới nước của vua Thủy Tề." in water.page_content
+    assert "thach_sanh.md: Thủy Tề trị vì thủy cung." in water.metadata["graph_profile"]
+    # The reranker reads the short part; relationships are for the LLM.
+    assert "Thủy Tề trị vì" not in water.page_content
+
+    lone = rag._graph.view.entity_profile("tấm")
+    assert "  Cô gái hiền bị hãm hại." in lone.page_content  # one story: no label
 
 
 def test_queries_without_diacritics_find_named_entities(monkeypatch, tmp_path):
     rag, _ = make_rag(monkeypatch, tmp_path)
     rag.add_documents(write_corpus(tmp_path / "docs"))
 
-    keys = [p.metadata["graph_entity"] for p in rag._graph.entity_candidates("lac long quan lay ai", None, k=8)]
-    assert "lạc long quân" in keys
+    candidates = rag._graph.entity_candidates("lac long quan lay ai", None, k=2)
+    assert len(candidates) == 2
+    assert candidates[0].metadata["graph_entity"] == "lạc long quân"  # named entities first
 
 
 def test_a_dead_provider_stops_graph_calls_and_indexing_goes_on(monkeypatch, tmp_path):

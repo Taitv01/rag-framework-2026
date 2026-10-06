@@ -23,10 +23,51 @@ Usage:
     vector = embeddings.embed_query("search query")
 """
 
+import threading
+from collections import OrderedDict
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
 
+from langchain_core.embeddings import Embeddings
+
 from src.utils.config import default_embedding_model, load_environment
+
+
+class QueryCachedEmbeddings(Embeddings):
+    """
+    LangChain embeddings that remember the vectors of recent queries.
+
+    One question searches several collections (passages, document cards,
+    the knowledge graph) and each store embeds the query itself: with the
+    cache the model runs once per question. Documents are not cached.
+    """
+
+    def __init__(self, inner: Embeddings, size: int = 256):
+        self.inner = inner
+        self.size = size
+        self._queries: "OrderedDict[str, List[float]]" = OrderedDict()
+        self._lock = threading.Lock()
+
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        return self.inner.embed_documents(texts)
+
+    def embed_query(self, text: str) -> List[float]:
+        with self._lock:
+            if text in self._queries:
+                self._queries.move_to_end(text)
+                return list(self._queries[text])
+        vector = self.inner.embed_query(text)
+        with self._lock:
+            self._queries[text] = list(vector)
+            while len(self._queries) > self.size:
+                self._queries.popitem(last=False)
+        return list(vector)
+
+    def __getattr__(self, name: str):
+        # Model details (client, model_name, ...) stay reachable.
+        if name == "inner":
+            raise AttributeError(name)
+        return getattr(self.inner, name)
 
 
 @dataclass
@@ -176,7 +217,7 @@ class EmbeddingsManager:
     def embeddings(self):
         """Get or create embeddings instance."""
         if self._embeddings is None:
-            self._embeddings = self._create_embeddings()
+            self._embeddings = QueryCachedEmbeddings(self._create_embeddings())
         return self._embeddings
 
     def _create_embeddings(self):

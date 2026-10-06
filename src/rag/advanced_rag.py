@@ -114,7 +114,7 @@ def _graph_context(entities: List[Document]) -> Document:
     """Selected graph entities as one source: what the knowledge graph knows about them."""
     documents = sorted({name for entity in entities for name in entity.metadata.get("documents", [])})
     return Document(
-        page_content="\n".join(entity.page_content for entity in entities),
+        page_content="\n".join(entity.metadata.get("graph_profile") or entity.page_content for entity in entities),
         metadata={
             "graph_context": True,
             "source": "knowledge graph",
@@ -1276,7 +1276,7 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         graph = getattr(self, "_graph", None)
         if graph is not None and self.max_context_communities > 0:
             groups.append(("community", self.max_context_communities, graph.report_candidates(
-                query, filter, k=max(4, self.max_context_communities + 1))))
+                query, filter, k=self.max_context_communities + 1)))
         if graph is not None and self.max_context_entities > 0:
             groups.append(("entity", self.max_context_entities, graph.entity_candidates(
                 query, filter, k=self.max_context_entities)))

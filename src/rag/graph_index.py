@@ -379,9 +379,13 @@ class GraphView:
 
     def entity_profile(self, key: str, allowed: Optional[Set[str]] = None) -> Optional[Document]:
         """
-        What the graph knows about one entity, for the LLM's context.
+        What the graph knows about one entity.
 
-        ``allowed`` limits it to what those documents say (metadata filters).
+        ``page_content`` is short (name, type, descriptions) for the
+        reranker to score; ``metadata["graph_profile"]`` adds the entity's
+        main relationships, for the LLM's context. An entity known from
+        several documents names the document of each line. ``allowed``
+        limits it to what those documents say (metadata filters).
         """
         entity = self.entities.get(key)
         if entity is None:
@@ -389,22 +393,34 @@ class GraphView:
         documents = [doc for doc in sorted(entity["descriptions"]) if allowed is None or doc in allowed]
         if not documents:
             return None
+
+        def labelled(doc: str, text: str) -> str:
+            return f"{self.documents[doc].name}: {text}" if len(documents) > 1 else text
+
         lines = [f"{entity['name']} ({entity['type']}; {', '.join(self._document_names(documents))})"]
-        lines += [f"  {entity['descriptions'][doc]}" for doc in documents if entity["descriptions"][doc]]
+        lines += [
+            f"  {labelled(doc, entity['descriptions'][doc])}"
+            for doc in documents if entity["descriptions"][doc]
+        ]
         related = []
         for other in self.neighbors(key):
             edge = self.edges[tuple(sorted((key, other)))]
-            texts = [text for doc, text in sorted(edge["descriptions"].items()) if allowed is None or doc in allowed]
+            texts = [
+                labelled(doc, text) for doc, text in sorted(edge["descriptions"].items())
+                if text and (allowed is None or doc in allowed)
+            ]
             if texts:
                 related.append((-edge["weight"], self.entities[other]["name"], " | ".join(texts)))
-        for _, name, text in sorted(related)[:MAX_PROFILE_RELATIONSHIPS]:
-            lines.append(f"  - {entity['name']} — {name}: {text}".rstrip(": "))
+        relationships = [
+            f"  - {entity['name']} — {name}: {text}" for _, name, text in sorted(related)[:MAX_PROFILE_RELATIONSHIPS]
+        ]
         return Document(
             page_content="\n".join(lines),
             metadata={
                 "graph_entity": key,
                 "entity_name": entity["name"],
                 "documents": self._document_names(documents),
+                "graph_profile": "\n".join(lines + relationships),
             },
         )
 
@@ -636,24 +652,21 @@ class GraphIndex:
 
     def entity_candidates(self, query: str, filter: Optional[Dict[str, Any]], k: int) -> List[Document]:
         """
-        Profiles of the entities a query may be about, merged across documents.
+        Profiles of at most ``k`` entities a query may be about, merged across documents.
 
-        Entities whose profile is close to the query come first, then those
-        the query names (typed with or without diacritics).
+        Entities the query names (typed with or without diacritics) come
+        first, then those whose profile is close to the query.
         """
         if not self.view.entities or k < 1:
             return []
-        keys: List[str] = []
+        keys: List[str] = list(self.view.entities_named_in(query))
         for hit in self.entity_store.similarity_search(query, k=2 * k, filter=filter):
             key = (hit.metadata or {}).get("graph_entity")
             if key and key not in keys:
                 keys.append(key)
-        for key in self.view.entities_named_in(query):
-            if key not in keys:
-                keys.append(key)
         allowed = self.allowed_documents(filter)
-        profiles = [self.view.entity_profile(key, allowed) for key in keys[: 2 * k]]
-        return [profile for profile in profiles if profile is not None]
+        profiles = [self.view.entity_profile(key, allowed) for key in keys]
+        return [profile for profile in profiles if profile is not None][:k]
 
     def report_candidates(self, query: str, filter: Optional[Dict[str, Any]], k: int) -> List[Document]:
         """
