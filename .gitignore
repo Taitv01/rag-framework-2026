@@ -115,3 +115,6 @@ temp/
 
 # Ad-hoc evaluation runs (baselines live in evals/*/baselines/)
 evals/*/runs/
+
+# Chat logs and exports
+Nâng cấp RAG _ Claude_*.txt
