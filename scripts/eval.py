@@ -62,6 +62,8 @@ def parse_args(argv=None) -> argparse.Namespace:
                          help="Search child chunks, return their parent chunks (pipeline default)")
         sub.add_argument("--parent-fanout", type=int, default=3,
                          help="Child chunks searched per parent returned")
+        sub.add_argument("--reranker-model", default=None,
+                         help="Cross-encoder to rerank with (default: the pipeline's default)")
         sub.add_argument("--reranker-fp16", action="store_true",
                          help="Run the reranker in half precision on the GPU (small GPUs)")
         sub.add_argument("--cache-dir", type=Path, default=None, help="HuggingFace cache (HF_HOME)")
@@ -157,7 +159,7 @@ def build_rag(args, use_hybrid: bool, use_reranking: bool, llm_provider="openai"
         from sentence_transformers import CrossEncoder
         from src.core.retriever import RetrieverConfig
 
-        reranker_model = RetrieverConfig().reranker_model
+        reranker_model = args.reranker_model or RetrieverConfig().reranker_model
         if args.reranker_fp16:
             # Half precision halves VRAM (2.3 -> 1.1 GB); convert on the CPU first.
             reranker = CrossEncoder(reranker_model, device="cpu")
