@@ -52,5 +52,6 @@ python-multipart>=0.0.9
 duckduckgo-search>=7.0.0
 tavily-python>=0.5.0
 
-# [graph] persistent graph storage
+# [graph] GraphRAG communities (ENABLE_GRAPH) and persistent graph storage
+networkx>=3.0
 neo4j>=5.20.0
