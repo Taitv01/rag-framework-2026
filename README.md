@@ -22,7 +22,7 @@ Hệ thống được tối ưu hóa đặc biệt cho **Tiếng Việt**, hỗ 
 ### 2. ⚡ Real-Time SSE Streaming & Production API
 - **Server-Sent Events (SSE)**: API `/query/stream` phản hồi câu trả lời theo thời gian thực (chunk-by-chunk) cho trải nghiệm người dùng tương tác tức thì.
 - **Ox AI API chuyên biệt**: `/ox/chat`, `/ox/analyze`, `/ox/analyze/url` luôn dùng `stealth/ox-alpha`; có thể kết hợp context và citation từ kho RAG.
-- **RESTful Endpoints**: `/query`, `/query/stream`, `/query/multimodal`, `/ox/*`, `/documents`, `/ingest`, `/search`, `/health`, `/ready`.
+- **RESTful Endpoints**: `/query`, `/query/stream`, `/query/multimodal`, `/ox/*`, `/documents` (thêm, liệt kê, xoá), `/ingest`, `/search`, `/health`, `/ready`.
 - **Rate Limiting & Authentication**: Giới hạn tần suất truy cập sliding-window và xác thực API-Key.
 
 ### 3. 📂 Thư Mục Markdown Refresh Tự Động (SHA-256 Incremental Ingestion)
@@ -32,9 +32,9 @@ Hệ thống được tối ưu hóa đặc biệt cho **Tiếng Việt**, hỗ 
 
 ### 4. 🧩 Đa Dạng RAG Pipelines (Multi-Pipeline Architecture)
 - **Naive RAG**: Pipeline RAG cơ bản, siêu nhanh.
-- **Advanced RAG**: Hybrid Search (Dense Vector + BM25) + Reranking + Parent-Child Chunking + Semantic Cache + HyDE.
+- **Advanced RAG**: Hybrid Search (Dense Vector + BM25) + Reranking + Parent-Child Chunking + Thẻ tài liệu (mỗi tài liệu một bản tóm tắt do LLM viết lúc index, cho câu hỏi trải trên nhiều tài liệu) + Semantic Cache + HyDE.
 - **Agentic RAG**: AI Agents tự động đánh giá độ liên quan của tài liệu, chấm điểm ảo giác (hallucination) và viết lại câu hỏi (query rewrite).
-- **Graph RAG**: Kết hợp Đồ thị tri thức (Knowledge Graph) để truy xuất quan hệ nhân vật, địa điểm, sự kiện.
+- **Graph RAG**: Đồ thị tri thức do LLM trích lúc index (thực thể, quan hệ, cộng đồng Louvain kèm báo cáo); lúc query không gọi thêm LLM. Tắt mặc định, bật bằng `ENABLE_GRAPH=true` (extra `graph`).
 - **Adaptive RAG**: Tự động phân loại độ phức tạp câu hỏi (Simple/Medium/Complex) để định tuyến pipeline tối ưu nhất.
 - **Cross-Story RAG**: Tìm kiếm motif, so sánh nhân vật và phân tích bài học đạo đức trong kho truyện cổ tích/tiểu thuyết.
 
@@ -102,7 +102,7 @@ Phần lõi (`pip install -e .`) gồm LangChain, Qdrant client, FAISS, BM25, lo
 | `api` / `ui` | FastAPI server / Gradio UI |
 | `ocr` | OCR ảnh và PDF scan (pytesseract, Pillow, pdf2image) |
 | `monitoring` | Langfuse tracing |
-| `web` / `graph` | Web search fallback / Neo4j |
+| `web` / `graph` | Web search fallback / GraphRAG (networkx; Neo4j để lưu graph) |
 | `eval` | RAGAS, DeepEval (bộ đánh giá có sẵn trong `src.evaluation` không cần) |
 | `dev` | pytest, ruff, mypy... |
 | `all` | Tất cả các extra ở trên |
@@ -274,6 +274,17 @@ tên (`upload/<tên file>`), upload lại cùng tên thì thay bản cũ:
 curl -X POST "http://localhost:8000/ingest" -F "files=@tam_cam.pdf"   # {"job_id": "...", "status": "queued", ...}
 curl "http://localhost:8000/ingest/<job_id>"                           # queued | running | succeeded | failed
 curl -X POST "http://localhost:8000/ingest?wait=true" -F "files=@tam_cam.pdf"  # chờ index xong
+```
+
+**Liệt kê và xoá tài liệu**: `GET /documents` trả về từng tài liệu đã index (nguồn, tên
+file, số chunk, đã có thẻ hay chưa). `DELETE /documents` xoá các tài liệu khớp filter
+metadata, cùng thẻ tài liệu và phần knowledge graph của chúng (404 nếu không tài liệu
+nào khớp):
+
+```bash
+curl "http://localhost:8000/documents"
+curl -X DELETE "http://localhost:8000/documents" -H "Content-Type: application/json" \
+     -d '{"filter": {"file_name": "tam_cam.pdf"}}'
 ```
 
 ### 3. Chạy Bằng Docker Compose (Production)

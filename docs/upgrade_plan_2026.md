@@ -11,7 +11,7 @@ kỹ thuật mới khi số đo cho thấy cần.
 | 2 | Sửa lõi retrieval | 3–5 ngày | ✅ Hoàn thành (compose chờ CI kiểm chứng) |
 | 3 | Hợp nhất pipeline generation | 3–4 ngày | ✅ Hoàn thành (cache theo filter dời sang GĐ 4) |
 | 4 | API & vận hành | 2–3 ngày | ✅ Hoàn thành (chưa thử với server Langfuse thật) |
-| 5 | Nâng cao (tùy chọn, theo số đo) | — | ⏳ Đang làm (catalog LLM, cổng chất lượng CI, thẻ truyện bật mặc định; BGE-M3 sparse đã thử, không dùng; GraphRAG đã làm, tắt mặc định, còn chờ đo bản gọn) |
+| 5 | Nâng cao (tùy chọn, theo số đo) | — | ✅ Hoàn thành các mục đã chọn (catalog LLM, cổng chất lượng CI, thẻ truyện bật mặc định; BGE-M3 sparse đã thử, không dùng; GraphRAG đã đo xong, giữ tắt mặc định; xoá/liệt kê tài liệu, ingest không chặn query) |
 
 ---
 
@@ -465,7 +465,8 @@ Qdrant, parent context, hybrid + rerank (fp32), `query_rewrite="auto"`,
         đặt `ENABLE_DOCUMENT_CARDS=false`. `scripts/eval.py answer` cũng bật thẻ theo
         mặc định (`--no-document-cards` để tắt); retrieval và CI không dùng LLM nên
         vẫn không có thẻ.
-      - **Chưa làm:** thẻ cho HyDE và multi-query; viết thẻ song song khi corpus lớn.
+      - **Chưa làm:** viết thẻ song song khi corpus lớn. (Thẻ cho HyDE và multi-query
+        đã có từ 10/10/2026, xem mục quản lý tài liệu bên dưới.)
 - [x] **BGE-M3 sparse/multi-vector: đã thử, không dùng.** Contextual retrieval được
       thay bằng thẻ tài liệu (chủ dự án chọn ngày 05/10/2026). Thử thay hoặc bổ sung
       bước lấy ứng viên (15 chunk con → parent → rerank top 5) bằng điểm sparse
@@ -529,10 +530,28 @@ Qdrant, parent context, hybrid + rerank (fp32), `query_rewrite="auto"`,
         quan hệ; 3 ứng viên báo cáo; mỗi câu hỏi chỉ embed một lần
         (`QueryCachedEmbeddings`); thực thể có ở nhiều tài liệu thì ghi rõ dòng nào
         thuộc tài liệu nào. Đo bằng profiler: retrieve 5,9 s → 2,5 s mỗi câu (chỉ có
-        thẻ: ~1,4 s). **Chưa có số đo câu trả lời**: lượt chấm faithfulness bị dừng
-        giữa chừng vì máy hết RAM. Câu trả lời cho 80 prompt mới đã nằm trong
-        `agent_answers.json`; với ít thực thể hơn, q013, q087 và một phần q071 mất
-        phần tăng, nên answer_recall có thể thấp hơn 0,947.
+        thẻ: ~1,4 s).
+      - **Đo bản gọn** (10/10/2026, `baselines/answer_graph.json`, so với
+        `answer_cards.json`; 147 thực thể, 220 quan hệ, 10 cộng đồng):
+
+        | Cấu hình | answer_recall | faithfulness | motif | multi_source | moral | no_diacritics | p50 | p95 |
+        |----------|------:|------:|------:|------:|------:|------:|------:|------:|
+        | k=5 + thẻ (mặc định) | 0,934 | 0,998 | 0,818 | 0,858 | 0,931 | 0,760 | 1406 ms | 1603 ms |
+        | + graph, lần 1 (16 ứng viên) | 0,947 | 0,998 | 0,858 | 0,890 | 0,986 | 0,826 | 9881 ms | 18782 ms |
+        | + graph, bản gọn (8 ứng viên) | **0,944** | 0,999 | 0,831 | 0,868 | 0,986 | 0,826 | **2647 ms** | 3385 ms |
+
+        Bản gọn giữ được phần tăng ở 4 câu (q057 0,58 → 0,92; q079 0,67 → 1,0;
+        q013 0,73 → 0,87; q075 0,91 → 1,0) và không làm câu nào tệ hơn cấu hình chỉ
+        có thẻ. So với lần 1, nó mất phần tăng ở q071 (1,0 → 0,71) và q087
+        (0,87 → 0,80) vì ít ứng viên thực thể hơn. Không có câu nào bị từ chối nhầm;
+        số lời gọi LLM mỗi câu giữ nguyên 1,05. Faithfulness: 67 điểm lấy lại từ
+        lần đo thẻ (câu trả lời không đổi, ngữ cảnh chỉ thêm), 7 câu viết lại được
+        chấm mới (sáu câu 1,0; q075 0,9 vì chi tiết "làng Gióng" không có trong ngữ cảnh).
+      - **Kết luận: giữ tắt mặc định** (`ENABLE_GRAPH=false`). Graph thêm 0,010
+        answer_recall (4/87 câu, cùng cỡ với sai số của việc tự chấm) nhưng độ trễ
+        retrieval gần gấp đôi (+1,2 s mỗi câu trên GTX 1650) và tốn thêm khoảng 23 lời
+        gọi LLM lúc index cho 10 tài liệu. Nên bật khi câu hỏi thường nối nhiều tài
+        liệu qua nhân vật, vật, địa danh chung và chấp nhận được độ trễ đó.
       - **Hạn chế:** graph chen vào gần như mọi câu (93/94 ở lần đo 1, thêm ~3000 ký
         tự), kể cả câu hỏi chi tiết một truyện mà nó không giúp gì, và có lúc mang
         thực thể lạc đề (Lý Thông chen vào câu hỏi về Sơn Tinh). Gộp theo tên có gộp
@@ -541,8 +560,46 @@ Qdrant, parent context, hybrid + rerank (fp32), `query_rewrite="auto"`,
         truyện dùng từ khác nhau ("thủy cung" không nối được với Thạch Sanh hay Hồ
         Gươm). Như với thẻ truyện, cùng một model đã viết golden set, trích graph,
         trả lời và tự chấm, nên mức tăng chỉ là ước lượng lạc quan.
-      - **Còn lại:** đo xong bản gọn, rồi quyết định giữ tắt mặc định hay bật. Một
-        hướng nếu muốn bớt nhiễu: chỉ thêm graph khi câu hỏi nhắm tới nhiều tài liệu.
+      - **Không làm: chỉ thêm graph khi câu hỏi nhắm tới nhiều tài liệu.** Số đo bản
+        gọn không ủng hộ hướng này: 3 trong 4 câu tăng điểm là câu hỏi trong một
+        truyện (q013, q057, q079), chỉ q075 trải trên hai truyện. Lọc như vậy sẽ bỏ
+        gần hết phần lợi của graph.
+- [x] **Quản lý tài liệu, ingest không chặn query** (10/10/2026).
+      - **Liệt kê và xoá tài liệu.** `AdvancedRAG.list_documents()` và
+        `delete_documents(filter)`; API có `GET /documents` (từng tài liệu: nguồn, tên
+        file, số chunk, có thẻ chưa) và `DELETE /documents` (xoá theo filter metadata,
+        gồm cả thẻ và phần graph; 404 nếu không tài liệu nào khớp). Trước đây file đã
+        upload không gỡ được qua API. Xoá hết tài liệu rồi nạp lại không nạp lại
+        reranker; cache câu trả lời được xoá cả khi index trở nên rỗng (trước đây bị bỏ sót).
+      - **Lời gọi LLM lúc ingest nằm ngoài khoá ghi ở mọi đường.**
+        `refresh_markdown_directory` và `add_texts` từng viết thẻ và trích graph ngay
+        trong khoá ghi, nên mọi query phải chờ suốt thời gian LLM chạy (thẻ bật mặc
+        định nên đường nào cũng gọi LLM). Nay mọi đường ghi đi qua một lối: nạp file →
+        LLM (thẻ, graph) → mới lấy khoá ghi để cập nhật index. Một khoá ingest riêng
+        giữ cho các thao tác ghi (ingest, refresh, xoá) chạy lần lượt. Khi có tài liệu
+        bị gỡ, báo cáo cộng đồng được viết cho graph sau khi gỡ, trước khi lấy khoá.
+      - **`refresh_markdown_directory(force=True)`** viết lại thẻ và graph kể cả khi
+        nội dung không đổi (dùng khi đổi model viết thẻ); không `force` thì nội dung
+        không đổi vẫn dùng lại thẻ cũ, không gọi LLM.
+      - **`DEFAULT_RERANKER_MODEL` có tác dụng.** Biến này có trong `.env.example`
+        nhưng không được đọc ở đâu; nay API truyền cho pipeline. `scripts/eval.py` có
+        thêm `--reranker-model` để so reranker (chưa chạy so sánh: model khác nặng
+        khoảng 2,3 GB, và retrieval đã gần trần trên bộ này).
+      - **HyDE và multi-query** rerank đoạn cha như tìm kiếm thường (trước đây rerank
+        chunk con rồi mới đổi sang đoạn cha, nên có thể trả ít hơn k đoạn), nhận thẻ
+        tài liệu và graph, và theo `use_reranking` của từng query. Chưa đo trên golden
+        set: mỗi cách tốn thêm 1 lời gọi LLM mỗi câu hỏi.
+      - Ví dụ `examples/09_vietnamese_optimized.py` dùng cấu hình đã đo (trước đó dùng
+        model Claude đã ngừng, chunk 1000, k=10 và các bước tốn LLM mà phép đo cho thấy
+        không cần).
+      - **Kiểm chứng:** 316 test pass, ruff sạch. Phát lại hai phép đo bằng model thật
+        sau khi sửa cho số trùng khớp baseline: retrieval (`retrieval_stage2.json`:
+        evidence_recall 0,941 với hybrid + rerank, 0,909 với hybrid) và câu trả lời
+        mặc định (`answer_cards.json`: 0,934 / 0,998, không có prompt mới).
+      - **Chưa kiểm chứng:** workflow `quality.yml` vẫn chưa chạy lần nào trên GitHub.
+        Nó chỉ chạy khi có pull request hoặc bấm tay, và tài khoản `gh` trên máy dev
+        không có quyền bấm (HTTP 403, cần quyền admin). CI thường (`ci.yml`) đã chạy
+        xanh trên `master`.
 
 ## Quyết định đã chốt
 1. Mục đích dùng ưu tiên: **truyện cổ tích/sáng tác** (10/2026).

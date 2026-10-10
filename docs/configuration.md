@@ -60,6 +60,9 @@ subject to the selected provider's retention and privacy policy.
 # Default embedding settings
 DEFAULT_EMBEDDING_PROVIDER=huggingface
 DEFAULT_EMBEDDING_MODEL=BAAI/bge-m3
+
+# Cross-encoder the API reranks with (ENABLE_RERANKING=true)
+DEFAULT_RERANKER_MODEL=AITeamVN/Vietnamese_Reranker
 ```
 
 ### Vector Store Configuration
