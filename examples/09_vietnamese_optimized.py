@@ -2,15 +2,12 @@
 Vietnamese-Optimized RAG
 ========================
 
-Cấu hình tối ưu nhất cho tiếng Việt:
-- Claude 200K context window
-- Vietnamese embeddings (keepitreal/vietnamese-sbert)
-- Vietnamese reranker (AITeamVN/Vietnamese_Reranker)
-- Hybrid search (vector + BM25 Vietnamese)
-- Contextual Retrieval (Anthropic pattern)
-- Multi-query RRF
-- Metadata Enhancement
-- Hallucination Grader
+Cấu hình đã đo trên bộ truyện cổ tích (docs/upgrade_plan_2026.md):
+- Embedding đa ngữ BAAI/bge-m3, reranker tiếng Việt AITeamVN/Vietnamese_Reranker
+- Hybrid search (vector + BM25 có tách từ tiếng Việt và chỉ mục không dấu)
+- Tìm trên chunk con, đưa cho LLM đoạn cha (parent context)
+- Thẻ tài liệu: mỗi tài liệu một bản tóm tắt do LLM viết lúc index
+- Khoảng 1 lời gọi LLM mỗi câu hỏi; chỉ viết lại câu hỏi gõ không dấu
 - Context Window Validation
 
 Usage:
@@ -40,46 +37,46 @@ def create_vietnamese_rag():
         AdvancedRAG instance configured for Vietnamese
     """
     rag = AdvancedRAG(
-        # ===== LLM: Claude 200K context =====
+        # ===== LLM: model mặc định của provider (Anthropic: claude-opus-5-5) =====
         llm_provider="anthropic",
-        llm_model="claude-sonnet-4-20250514",  # 200K tokens context
         # Hoặc dùng OpenAI nếu không có Anthropic key:
         # llm_provider="openai",
-        # llm_model="gpt-4o",  # 128K tokens context
 
-        # ===== Embeddings: Vietnamese SBERT =====
+        # ===== Embeddings: mặc định BAAI/bge-m3 (1024d, đa ngữ) =====
         embedding_provider="huggingface",
-        embedding_model="keepitreal/vietnamese-sbert",  # 768d, tốt nhất cho tiếng Việt
-        # Các lựa chọn khác:
-        # "AITeamVN/Vietnamese_Embedding"       — 1024d, benchmarks tốt nhất
-        # "bkai-foundation-models/vietnamese-bi-encoder" — 768d, PhoBERT-based
-        # "BAAI/bge-m3"                         — 1024d, multilingual
+        # Các lựa chọn khác (chưa đo trên bộ truyện cổ tích):
+        # embedding_model="AITeamVN/Vietnamese_Embedding"   — 1024d
+        # embedding_model="keepitreal/vietnamese-sbert"     — 768d, nhẹ hơn
 
         # ===== Vector Store =====
-        vector_store_provider="faiss",  # hoặc "chroma" cho persistent
+        vector_store_provider="faiss",  # "qdrant" + persist_directory để lưu xuống đĩa
 
-        # ===== Chunking: Contextual Retrieval =====
-        chunk_size=1000,           # Chunk lớn hơn cho tiếng Việt (compound words)
-        chunk_overlap=100,         # Overlap nhiều hơn để không mất ngữ cảnh
-        use_contextual_chunking=True,  # Anthropic pattern — thêm context cho mỗi chunk
+        # ===== Chunking: chunk cha 500, tìm trên chunk con 250 =====
+        chunk_size=500,
+        chunk_overlap=50,
+        use_parent_context=True,   # LLM đọc đoạn cha: evidence_recall 0.83 -> 0.94
 
-        # ===== Retrieval: Tối ưu =====
-        retrieval_k=10,            # Retrieve nhiều chunk hơn
-        use_hybrid=True,           # Vector + BM25 (Vietnamese tokenization)
-        use_reranking=True,        # Vietnamese cross-encoder reranker
-        use_multi_query_rrf=True,  # Multi-query + Reciprocal Rank Fusion
-        num_query_variations=3,    # Số query variations
+        # ===== Retrieval =====
+        retrieval_k=5,
+        use_hybrid=True,           # Vector + BM25 (tách từ tiếng Việt, chỉ mục không dấu)
+        use_reranking=True,        # AITeamVN/Vietnamese_Reranker
+        use_document_cards=True,   # 1 lời gọi LLM mỗi tài liệu lúc index
+        query_rewrite="auto",      # chỉ viết lại câu hỏi gõ không dấu
+        grading="none",            # LLM sinh câu trả lời tự bỏ qua đoạn lạc đề
 
         # ===== Cache =====
         use_cache=True,            # Semantic cache
         cache_threshold=0.95,      # Similarity threshold
         cache_ttl=3600,            # 1 hour TTL
 
-        # ===== Phase 3: Nâng cao =====
-        use_metadata_enhancement=True,  # Tự gán metadata nhân vật/địa điểm/thời gian
-        use_hallucination_check=True,   # Kiểm tra ảo giác
-        # use_web_search=True,          # Bật nếu muốn web search fallback
-        # web_search_provider="duckduckgo",
+        # ===== Tuỳ chọn tốn thêm lời gọi LLM, tắt mặc định =====
+        # use_graph=True,                  # GraphRAG: thực thể + báo cáo cộng đồng lúc index
+        # use_multi_query_rrf=True,        # +1 lời gọi mỗi câu hỏi
+        # use_hyde=True,                   # +1 lời gọi mỗi câu hỏi
+        # use_hallucination_check=True,    # +1 lời gọi mỗi câu trả lời
+        # use_contextual_chunking=True,    # +1 lời gọi mỗi chunk lúc index
+        # use_metadata_enhancement=True,   # +1 lời gọi mỗi chunk lúc index
+        # use_web_search=True,             # web fallback khi không có ngữ cảnh
     )
 
     return rag
@@ -203,7 +200,7 @@ def demo_without_api():
 
     # Kiểm tra Context Validator
     print("\n📏 Context Window Validation:")
-    for model in ["gpt-4o", "gpt-4o-mini", "claude-sonnet-4-20250514"]:
+    for model in ["gpt-4o", "gpt-4o-mini", "claude-opus-5-5"]:
         if "gpt" in model:
             provider = "openai"
         else:
@@ -219,7 +216,7 @@ def demo_without_api():
     print("\n📐 Ước tính Context Size:")
     configs = [
         ("Default (500 chars × 5)", 500, 5),
-        ("Optimized (1000 chars × 10)", 1000, 10),
+        ("Larger (1000 chars × 10)", 1000, 10),
         ("Large (2000 chars × 20)", 2000, 20),
     ]
     for name, chunk_size, k in configs:
