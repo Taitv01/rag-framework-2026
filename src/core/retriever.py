@@ -670,6 +670,7 @@ Mỗi dòng một truy vấn, không thêm gì khác."""
         llm=None,
         rrf_k: int = 60,
         filter: Optional[Dict[str, Any]] = None,
+        use_reranking: Optional[bool] = None,
     ) -> List[Document]:
         """
         Multi-query search with Reciprocal Rank Fusion (RRF).
@@ -688,12 +689,15 @@ Mỗi dòng một truy vấn, không thêm gì khác."""
             llm: LLMManager for generating variations (optional)
             rrf_k: RRF constant (default 60, standard value)
             filter: Metadata filter
+            use_reranking: Override config.use_reranking for this call (False:
+                the caller reranks the fused list itself)
 
         Returns:
             List of Document objects ranked by RRF score (or reranker)
         """
         k = k or self.config.k
-        pool = k * 4 if self.config.use_reranking else k
+        reranking = self.config.use_reranking if use_reranking is None else use_reranking
+        pool = k * 4 if reranking else k
 
         # Generate query variations
         if llm:
@@ -707,7 +711,7 @@ Mỗi dòng một truy vấn, không thêm gì khác."""
             for q in queries
         ]
         fused = self._rrf_fusion(result_lists, k=pool, rrf_k=rrf_k)
-        if self.config.use_reranking:
+        if reranking:
             return self._rerank_documents(query, fused, k=k, filter=filter)
         return fused[:k]
 
@@ -758,6 +762,7 @@ Mỗi dòng một truy vấn, không thêm gì khác."""
         k: Optional[int] = None,
         llm=None,
         filter: Optional[Dict[str, Any]] = None,
+        use_reranking: Optional[bool] = None,
     ) -> List[Document]:
         """
         HyDE (Hypothetical Document Embeddings) search.
@@ -772,15 +777,18 @@ Mỗi dòng một truy vấn, không thêm gì khác."""
             k: Number of results
             llm: LLMManager for generating hypothetical answer
             filter: Metadata filter
+            use_reranking: Override config.use_reranking for this call (False:
+                the caller reranks the candidates itself)
 
         Returns:
             List of relevant Document objects
         """
         k = k or self.config.k
+        reranking = self.config.use_reranking if use_reranking is None else use_reranking
 
         if llm is None:
             logger.warning("HyDE requires an LLM. Falling back to standard search.")
-            return self.search(query, k=k, filter=filter)
+            return self.search(query, k=k, filter=filter, use_reranking=reranking)
 
         try:
             # Generate hypothetical answer
@@ -793,13 +801,13 @@ Passage / Đoạn văn:"""
             hypothetical = llm.generate(prompt).strip()
         except Exception as e:
             logger.warning(f"HyDE generation failed, falling back to standard search: {e}")
-            return self.search(query, k=k, filter=filter)
+            return self.search(query, k=k, filter=filter, use_reranking=reranking)
 
         # Search using the hypothetical answer as the query
-        if self.config.use_reranking:
+        if reranking:
             candidates = self.search(hypothetical, k=k * 4, filter=filter, use_reranking=False)
             return self._rerank_documents(query, candidates, k=k, filter=filter)
-        return self.search(hypothetical, k=k, filter=filter)
+        return self.search(hypothetical, k=k, filter=filter, use_reranking=False)
 
     def parent_child_search(
         self,
