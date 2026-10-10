@@ -3,6 +3,7 @@ Tests for RAG Pipeline
 =====================
 """
 
+import threading
 from unittest.mock import Mock
 
 from langchain_core.documents import Document
@@ -229,6 +230,7 @@ class TestAdvancedRAG:
         rag._chunks = []
         rag._retriever = None
         rag._index_lock = ReadWriteLock()
+        rag._ingest_lock = threading.RLock()
         rag._metadata_enhancer = None
         rag._contextual_chunker = None
         rag.text_splitter.chunk_size = 500
@@ -269,6 +271,7 @@ class TestAdvancedRAG:
         rag._chunks = []
         rag._retriever = None
         rag._index_lock = ReadWriteLock()
+        rag._ingest_lock = threading.RLock()
         rag._metadata_enhancer = None
         rag._contextual_chunker = None
         rag.text_splitter.chunk_size = 500
@@ -321,6 +324,7 @@ class TestAdvancedRAG:
         rag._chunks = []
         rag._retriever = None
         rag._index_lock = ReadWriteLock()
+        rag._ingest_lock = threading.RLock()
         rag._metadata_enhancer = None
         rag._contextual_chunker = None
         rag.text_splitter.chunk_size = 500
@@ -379,6 +383,7 @@ class TestAdvancedRAG:
         rag._chunks = []
         rag._retriever = None
         rag._index_lock = ReadWriteLock()
+        rag._ingest_lock = threading.RLock()
         rag._metadata_enhancer = None
         rag._contextual_chunker = None
         rag.text_splitter.chunk_size = 500
@@ -434,6 +439,7 @@ class TestAdvancedRAG:
         rag._chunks = []
         rag._retriever = None
         rag._index_lock = ReadWriteLock()
+        rag._ingest_lock = threading.RLock()
         rag._metadata_enhancer = None
         rag._contextual_chunker = None
         rag.text_splitter.chunk_size = 500
@@ -489,6 +495,7 @@ class TestAdvancedRAG:
         rag._chunks = []
         rag._retriever = None
         rag._index_lock = ReadWriteLock()
+        rag._ingest_lock = threading.RLock()
         rag._metadata_enhancer = None
         rag._contextual_chunker = None
         rag.text_splitter.chunk_size = 500

@@ -149,3 +149,21 @@ def test_read_write_lock_shares_reads_and_serializes_writes():
     writing.join(timeout=2)
     assert late_reader_done.wait(timeout=2)
     assert events == ["write", "late read"]
+
+
+def test_documents_are_listed_and_deleted(api):
+    client, rag = api
+    client.post("/ingest", params={"wait": True}, files=[upload("son_tinh.md", "# Sơn Tinh\n\nSơn Tinh dời núi.")])
+
+    listing = client.get("/documents").json()
+    uploaded = [doc for doc in listing["documents"] if doc["file_name"] == "son_tinh.md"]
+    assert listing["num_chunks"] == rag.num_chunks and len(listing["documents"]) == 3
+    assert uploaded and uploaded[0]["source"] == "upload/son_tinh.md" and uploaded[0]["chunks"] >= 1
+
+    assert client.request("DELETE", "/documents", json={"filter": {}}).status_code == 422
+    response = client.request("DELETE", "/documents", json={"filter": {"file_name": "son_tinh.md"}})
+
+    assert response.status_code == 200 and response.json()["count"] == uploaded[0]["chunks"]
+    assert all(doc["file_name"] != "son_tinh.md" for doc in client.get("/documents").json()["documents"])
+    assert not rag.retrieve("Sơn Tinh dời núi", filter={"file_name": "son_tinh.md"})
+    assert client.request("DELETE", "/documents", json={"filter": {"file_name": "son_tinh.md"}}).status_code == 404

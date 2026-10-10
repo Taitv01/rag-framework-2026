@@ -298,6 +298,14 @@ class DocumentResponse(BaseModel):
     count: Optional[int] = Field(default=None, description="Number of documents processed")
 
 
+class DeleteDocumentsRequest(BaseModel):
+    """Which documents to remove from the knowledge base."""
+    filter: Dict[str, Any] = Field(
+        ..., min_length=1,
+        description='Metadata filter, e.g. {"file_name": "tam_cam.md"}; a list value matches any of its items',
+    )
+
+
 class IngestJob(BaseModel):
     """A background ingestion job."""
     job_id: str
@@ -1040,12 +1048,38 @@ def create_app(
             raise HTTPException(status_code=500, detail=str(e))
 
     @app.get("/documents", tags=["Documents"])
-    async def list_documents():
-        """List basic information about indexed documents."""
-        return {
-            "num_documents": app.state.rag.num_documents,
-            "num_chunks": app.state.rag.num_chunks,
-        }
+    def list_documents():
+        """
+        The indexed documents: counts, and one entry per document (source,
+        file name, chunks, whether it has a card) with the advanced pipeline.
+        """
+        rag = app.state.rag
+        listing = {"num_documents": rag.num_documents, "num_chunks": rag.num_chunks}
+        if hasattr(rag, "list_documents"):
+            listing["documents"] = rag.list_documents()
+        return listing
+
+    @app.delete("/documents", response_model=DocumentResponse, tags=["Documents"])
+    def delete_documents(request: DeleteDocumentsRequest):
+        """
+        Remove the documents a metadata filter matches, with their cards and
+        graph entries. An uploaded file is ``{"file_name": "<name>"}``.
+        """
+        rag = app.state.rag
+        if not hasattr(rag, "delete_documents"):
+            raise HTTPException(status_code=501, detail="This pipeline cannot delete documents")
+        try:
+            removed = rag.delete_documents(request.filter)
+        except Exception as e:
+            logger.error(f"Delete documents failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+        if not removed:
+            raise HTTPException(status_code=404, detail="No indexed document matches the filter")
+        return DocumentResponse(
+            status="success",
+            message=f"Removed {removed} chunks",
+            count=removed,
+        )
 
     @app.post("/ingest", response_model=IngestJob, status_code=202, tags=["Documents"])
     async def ingest_files(
@@ -1170,6 +1204,7 @@ app = create_app(
     retrieval_k=config.get_int("RETRIEVAL_K", default=5),
     use_hybrid=config.get_bool("ENABLE_HYBRID_SEARCH", default=True),
     use_reranking=config.get_bool("ENABLE_RERANKING", default=True),
+    reranker_model=config.get("DEFAULT_RERANKER_MODEL") or None,
     use_parent_context=config.get_bool("ENABLE_PARENT_CONTEXT", default=True),
     use_document_cards=config.get_bool("ENABLE_DOCUMENT_CARDS", default=True),
     use_graph=config.get_bool("ENABLE_GRAPH", default=False),

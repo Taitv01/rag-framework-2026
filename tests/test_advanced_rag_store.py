@@ -136,3 +136,35 @@ def test_unchanged_folder_is_indexed_when_the_store_is_empty(monkeypatch, tmp_pa
 
     assert result["unchanged"] == ["tam_cam.md", "thach_sanh.md"]
     assert fresh.num_documents == 2 and fresh.num_chunks == first.num_chunks
+
+
+def test_reranker_model_is_configurable_and_loaded_once(monkeypatch, tmp_path):
+    import sys
+    from types import SimpleNamespace
+
+    loaded = []
+
+    class FakeCrossEncoder:
+        def __init__(self, name, device=None):
+            loaded.append(name)
+
+        def predict(self, pairs, **_kwargs):
+            return [float(len(set(query.split()) & set(text.split()))) for query, text in pairs]
+
+    monkeypatch.setitem(sys.modules, "sentence_transformers", SimpleNamespace(CrossEncoder=FakeCrossEncoder))
+    monkeypatch.setattr("src.rag.advanced_rag.EmbeddingsManager", lambda **_: fake_embeddings_manager())
+    from src.rag.advanced_rag import AdvancedRAG
+
+    corpus = write_corpus(tmp_path / "docs")
+    rag = AdvancedRAG(
+        vector_store_provider="faiss", chunk_size=160, chunk_overlap=20, retrieval_k=2,
+        use_reranking=True, reranker_model="BAAI/bge-reranker-v2-m3", use_document_cards=False,
+    )
+    rag.add_documents(corpus)
+    rag.delete_documents({"file_name": list(STORIES)})  # an emptied index keeps the loaded model
+    rag.add_documents(corpus)
+
+    assert loaded == ["BAAI/bge-reranker-v2-m3"]
+    assert rag._retriever.active_reranker_model == "BAAI/bge-reranker-v2-m3"
+    top = rag.retrieve("chằn tinh trăn khổng lồ cung tên vàng", k=1)[0]
+    assert top.metadata["source"].endswith("thach_sanh.md") and "relevance_score" in top.metadata

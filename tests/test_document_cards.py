@@ -257,3 +257,98 @@ def test_the_llm_is_told_which_sources_are_cards(monkeypatch, tmp_path):
     prompt = chat.prompts[-1]
     assert "[S2] Source:" in prompt and "document card" in prompt
     assert result["relevant_docs"][1]["metadata"]["document_card"] is True
+
+
+@pytest.mark.parametrize("provider", PROVIDERS)
+def test_deleting_a_document_removes_its_chunks_and_card(monkeypatch, tmp_path, provider):
+    rag, _ = make_rag(monkeypatch, tmp_path, provider)
+    rag.add_documents(write_corpus(tmp_path / "docs"))
+    listed = {doc["file_name"]: doc for doc in rag.list_documents()}
+    assert set(listed) == set(STORIES) and all(doc["has_card"] and doc["chunks"] for doc in listed.values())
+
+    removed = rag.delete_documents({"file_name": "cay_khe.md"})
+
+    assert removed == listed["cay_khe.md"]["chunks"]
+    assert [doc["file_name"] for doc in rag.list_documents()] == ["thach_sanh.md"]
+    assert rag.num_cards == 1 and rag.num_documents == 1
+    assert all(doc.metadata["file_name"] == "thach_sanh.md" for doc in rag.vector_store.get_all_documents())
+    assert [card.metadata["file_name"] for card in rag._card_store.get_all_documents()] == ["thach_sanh.md"]
+    assert all("cay_khe" not in doc.metadata["source"] for doc in rag.retrieve("cây khế chim lạ túi mười hai gang"))
+    assert rag.delete_documents({"file_name": "cay_khe.md"}) == 0
+    rag.vector_store.close()
+
+    # A restart does not bring the document back.
+    restarted, _ = make_rag(monkeypatch, tmp_path, provider)
+    assert [doc["file_name"] for doc in restarted.list_documents()] == ["thach_sanh.md"]
+    assert restarted.num_cards == 1
+    restarted.vector_store.close()
+
+
+def test_delete_needs_a_filter_and_an_emptied_index_still_answers(monkeypatch, tmp_path):
+    rag, _ = make_rag(monkeypatch, tmp_path)
+    rag.add_documents(write_corpus(tmp_path / "docs"))
+
+    with pytest.raises(ValueError):
+        rag.delete_documents({})
+    chunks = rag.num_chunks
+    assert rag.delete_documents({"file_name": list(STORIES)}) == chunks
+
+    assert rag.num_chunks == 0 and rag.num_cards == 0 and rag.list_documents() == []
+    assert rag.query_detailed("Thạch Sanh là ai?")["abstained"]
+    rag.add_documents(tmp_path / "docs")  # and it can be filled again
+    assert rag.num_cards == 2 and rag.retrieve("Thạch Sanh lưỡi búa")
+
+
+def test_forced_refresh_writes_cards_again(monkeypatch, tmp_path):
+    corpus = write_corpus(tmp_path / "docs")
+    manifest = tmp_path / "manifest.json"
+    rag, chat = make_rag(monkeypatch, tmp_path)
+    rag.refresh_markdown_directory(corpus, manifest_path=manifest)
+    rag.refresh_markdown_directory(corpus, manifest_path=manifest)
+    assert len(card_calls(chat)) == 2
+
+    rag.refresh_markdown_directory(corpus, manifest_path=manifest, force=True)
+    assert len(card_calls(chat)) == 4 and rag.num_cards == 2
+
+
+def test_cards_are_written_outside_the_index_lock(monkeypatch, tmp_path):
+    corpus = write_corpus(tmp_path / "docs")
+    manifest = tmp_path / "manifest.json"
+    writing = []
+
+    def reply(prompt):
+        writing.append(rag._index_lock._writing)  # queries wait while this is True
+        return card_reply(prompt)
+
+    rag, chat = make_rag(monkeypatch, tmp_path, reply=reply)
+    rag.refresh_markdown_directory(corpus, manifest_path=manifest)
+    (corpus / "cay_khe.md").write_text(STORIES["cay_khe.md"] + " Người em sống giản dị.", encoding="utf-8")
+    rag.refresh_markdown_directory(corpus, manifest_path=manifest)
+    rag.add_texts(["Sơn Tinh dời núi chặn dòng nước lũ."], metadatas=[{"source": "notes/son_tinh"}])
+
+    assert len(card_calls(chat)) == 4 and rag.num_cards == 3
+    assert writing and not any(writing)
+
+
+@pytest.mark.parametrize("strategy", ["use_hyde", "use_multi_query_rrf"])
+def test_hyde_and_multi_query_return_reranked_parents_and_cards(monkeypatch, tmp_path, strategy):
+    def reply(prompt):
+        if "Write a short, factual passage" in prompt:  # HyDE's hypothetical answer
+            return "Người anh may túi mười hai gang rồi rơi xuống biển."
+        if "alternative search queries" in prompt:
+            return "người anh may túi mười hai gang\nchim lạ ăn khế chở ra đảo lấy vàng"
+        return card_reply(prompt)
+
+    rag, chat = make_rag(monkeypatch, tmp_path, reply=reply, **{strategy: True})
+    rag.add_documents(write_corpus(tmp_path / "docs"))
+    asked = len(chat.prompts)
+
+    docs = rag._retrieve("kẻ tham lam bị trừng phạt", k=1)
+
+    assert len(chat.prompts) == asked + 1  # the strategy's own LLM call
+    assert len(docs) == 2  # the k passages, then the card, as in the standard search
+    assert "relevance_score" in docs[0].metadata and "parent_text" not in docs[0].metadata
+    assert docs[1].metadata["document_card"] and docs[1].metadata["file_name"] == "cay_khe.md"
+    # A per-query override applies to these strategies too: no reranking, no cards.
+    plain = rag._retrieve("kẻ tham lam bị trừng phạt", k=1, use_reranking=False)
+    assert len(plain) == 1 and "relevance_score" not in plain[0].metadata

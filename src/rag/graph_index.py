@@ -449,7 +449,8 @@ class GraphIndex:
     Builds, stores and searches the knowledge graph of a document collection.
 
     Ingestion: ``prepare(docs)`` makes the LLM calls (outside the index lock),
-    ``apply(update)`` stores the result. ``drop`` removes documents.
+    ``apply(update)`` stores the result. ``drop`` removes documents; the
+    ``apply`` after it recomputes communities.
     """
 
     def __init__(
@@ -506,17 +507,35 @@ class GraphIndex:
 
     # -- ingestion ----------------------------------------------------------
 
-    def prepare(self, all_docs: List[Document]) -> GraphUpdate:
-        """LLM work for loaded documents: extraction, then reports of the resulting communities."""
+    def prepare(
+        self,
+        all_docs: List[Document],
+        reuse: bool = True,
+        dropped: Optional[Callable[[Dict[str, Any]], bool]] = None,
+    ) -> GraphUpdate:
+        """
+        LLM work for loaded documents: extraction, then reports of the resulting communities.
+
+        ``dropped(metadata)`` tells which indexed documents ``drop`` removes
+        before the update is applied: reports are written for the graph
+        without them. ``reuse`` as in ``extract``.
+        """
         ask = _Asker(self.llm)
-        graphs = self.extract(all_docs, ask)
-        view = GraphView({**self.documents, **graphs}.values())
+        graphs = self.extract(all_docs, ask, reuse)
+        staying = {
+            key: graph for key, graph in self.documents.items()
+            if dropped is None or not dropped(graph.metadata)
+        }
+        view = GraphView({**staying, **graphs}.values())
         reports = self._reports_for(view.communities(self.min_community_size), view, ask)
         return GraphUpdate(graphs, reports)
 
-    def extract(self, all_docs: List[Document], ask: Optional["_Asker"] = None) -> Dict[str, DocumentGraph]:
+    def extract(
+        self, all_docs: List[Document], ask: Optional["_Asker"] = None, reuse: bool = True
+    ) -> Dict[str, DocumentGraph]:
         """
-        Graph of each loaded document; one whose text did not change reuses its graph.
+        Graph of each loaded document; one whose text did not change reuses
+        its graph (unless ``reuse`` is False).
 
         A document whose extraction failed or was not valid JSON gets no new
         graph (it keeps the previous one, if any) and is extracted again the
@@ -530,7 +549,7 @@ class GraphIndex:
                 if name not in _NOT_DOCUMENT_LEVEL
             }
             sha = content_hash(pages)
-            existing = self.documents.get(key)
+            existing = self.documents.get(key) if reuse else None
             if existing is not None and existing.content_sha256 == sha:
                 graphs[key] = DocumentGraph(
                     key=key, name=display_name(metadata), metadata=metadata, content_sha256=sha,
@@ -589,8 +608,9 @@ class GraphIndex:
             },
         )
 
-    def apply(self, update: GraphUpdate) -> None:
-        """Store new document graphs, then recompute communities and their reports."""
+    def apply(self, update: Optional[GraphUpdate] = None) -> None:
+        """Store new document graphs (if any), then recompute communities and their reports."""
+        update = update or GraphUpdate({}, {})
         for key, graph in update.graphs.items():
             self.entity_store.delete(filter={"document_key": key})
             profiles = graph.profiles()
@@ -601,7 +621,12 @@ class GraphIndex:
         self._rebuild(update.reports)
 
     def drop(self, keep: Callable[[Document], bool], filter: Dict[str, Any]) -> None:
-        """Remove the documents ``keep`` rejects (``filter`` matches their profiles)."""
+        """
+        Remove the documents ``keep`` rejects (``filter`` matches their profiles).
+
+        Communities and reports are recomputed by the ``apply`` that must
+        follow: with the documents indexed in their place, or with nothing.
+        """
         removed = [
             key for key, graph in self.documents.items()
             if not keep(Document(page_content="", metadata=graph.metadata))
@@ -612,7 +637,6 @@ class GraphIndex:
             del self.documents[key]
         self.entity_store.delete(filter=filter)
         self.entity_store.persist()
-        self._rebuild()
 
     def _rebuild(self, prepared: Optional[Dict[str, Document]] = None) -> None:
         """

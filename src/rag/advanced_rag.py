@@ -37,6 +37,7 @@ import hashlib
 import json
 import logging
 import re
+import threading
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any, Union, Generator
 from pathlib import Path
@@ -46,7 +47,7 @@ from langchain_core.documents import Document
 from src.core.document_loader import DocumentLoader
 from src.core.text_splitter import TextSplitter
 from src.core.embeddings import EmbeddingsManager
-from src.core.vector_store import VectorStoreManager
+from src.core.vector_store import VectorStoreManager, metadata_matches
 from src.core.retriever import RetrieverManager, has_diacritics
 from src.core.llm import LLMManager
 from src.core.markdown_index import MarkdownFolderIndexer
@@ -160,6 +161,8 @@ class AdvancedRAG:
     query_rewrite = "auto"
     grading = "none"
     min_relevance_score = None
+    _shared_reranker = None
+    _shared_reranker_model = None
     _cache = None
     _web_searcher = None
     _hallucination_grader = None
@@ -273,8 +276,8 @@ class AdvancedRAG:
                 with passages and those that would rank in the top k are given
                 to the LLM besides the k passages: questions across documents
                 ("which stories have...") need what a whole document is about.
-                Standard search only (not HyDE or multi-query). On by default:
-                one LLM call per new or changed document at indexing.
+                On by default: one LLM call per new or changed document at
+                indexing.
             max_context_cards: Most cards added to one query's context
             use_graph: Build a knowledge graph when documents are indexed
                 (GraphRAG, see ``src/rag/graph_index.py``): the LLM extracts
@@ -421,6 +424,10 @@ class AdvancedRAG:
         # Queries search while ingestion writes (API background jobs): searches
         # share the index, writes to the store, chunk list and BM25 are exclusive.
         self._index_lock = ReadWriteLock()
+        # One ingestion or deletion at a time. Its loading and LLM calls (cards,
+        # graph) run before it takes the write lock, so queries wait only for
+        # the index update itself.
+        self._ingest_lock = threading.RLock()
 
         # Persistent stores keep their chunks across restarts: reload them so
         # BM25, counts and parent lookups work without re-indexing.
@@ -546,11 +553,24 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
                 docs = self.document_loader.load(source, metadata=metadata)
             all_docs.extend(docs)
 
-        # LLM calls stay outside the write lock: queries keep running meanwhile.
-        cards = self._write_cards(all_docs)
-        graph = self._graph.prepare(all_docs) if self._graph is not None else None
-        with self._index_lock.write():
-            return self._index_loaded_documents(all_docs, cards, graph)
+        return self._index_prepared(all_docs)
+
+    def _index_prepared(self, docs: List[Document], replaced: Optional[List[Dict[str, Any]]] = None) -> int:
+        """
+        Index loaded documents: LLM calls first, then the index update.
+
+        Cards and graph are written before the write lock is taken, so queries
+        keep running meanwhile. ``replaced`` are metadata filters of documents
+        indexed again: their old chunks leave the index in the same update
+        (cards and graph of unchanged text are kept).
+        """
+        with self._ingest_lock:
+            cards = self._write_cards(docs)
+            graph = self._graph.prepare(docs) if self._graph is not None else None
+            with self._index_lock.write():
+                for filter in replaced or []:
+                    self._drop_matching(filter, keep_card=True)
+                return self._index_loaded_documents(docs, cards, graph)
 
     def add_files(
         self,
@@ -588,14 +608,10 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
                 doc.metadata.pop("absolute_source", None)  # a temporary path
             loaded[name] = docs
 
-        all_docs = [doc for docs in loaded.values() for doc in docs]
-        cards = self._write_cards(all_docs)
-        graph = self._graph.prepare(all_docs) if self._graph is not None else None
-        with self._index_lock.write():
-            for name in loaded:
-                # A card (or graph) of unchanged text is kept; a new one replaces it.
-                self._drop_source_file(source_root, name, keep_card=True)
-            return self._index_loaded_documents(all_docs, cards, graph)
+        return self._index_prepared(
+            [doc for docs in loaded.values() for doc in docs],
+            replaced=[{"source_root": source_root, "relative_source": name} for name in loaded],
+        )
 
     def refresh_markdown_directory(
         self,
@@ -614,7 +630,7 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         hold, e.g. after a restart on an in-memory store) are embedded again.
         ``force`` rebuilds the whole folder.
         """
-        with self._index_lock.write():
+        with self._ingest_lock:
             directory = Path(directory).resolve()
             root = str(directory)
             indexer = MarkdownFolderIndexer()
@@ -623,31 +639,51 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
                 Path(manifest_path) if manifest_path else None,
             )
 
-            indexed = {
-                (chunk.metadata or {}).get("relative_source")
-                for chunk in self._chunks
-                if (chunk.metadata or {}).get("source_root") == root
-            }
+            with self._index_lock.read():
+                indexed = {
+                    (chunk.metadata or {}).get("relative_source")
+                    for chunk in self._chunks
+                    if (chunk.metadata or {}).get("source_root") == root
+                }
             missing = [name for name in result.unchanged if name not in indexed]
             if not force and not result.changed and not missing:
                 return result.to_dict()
 
-            if force or not indexed:
+            rebuild = force or not indexed
+            if rebuild:
                 docs = self.document_loader.load_markdown_directory(
                     directory,
                     metadata=metadata,
                     strict=strict,
                 )
-                self._drop_source_root(root)
             else:
-                for name in result.updated:
-                    self._drop_source_file(root, name, keep_card=True)
-                for name in result.removed:
-                    self._drop_source_file(root, name)
                 docs = self._load_folder_files(
                     directory, result.added + result.updated + missing, metadata, strict
                 )
-            chunks_indexed = self._index_loaded_documents(docs)
+
+            # What leaves the index before the loaded files go in: (filter, keep_card).
+            if rebuild:
+                drops = [({"source_root": root}, False)]
+            else:
+                drops = [
+                    ({"source_root": root, "relative_source": name}, name in result.updated)
+                    for name in result.updated + result.removed
+                ]
+            leaving = [filter for filter, keep_card in drops if not keep_card]
+
+            # Loading and LLM calls stay outside the write lock: queries keep running
+            # meanwhile. force writes cards and graph again even for unchanged text.
+            cards = self._write_cards(docs, reuse=not force)
+            graph = None
+            if self._graph is not None:
+                graph = self._graph.prepare(
+                    docs, reuse=not force,
+                    dropped=lambda metadata: any(metadata_matches(metadata, filter) for filter in leaving),
+                )
+            with self._index_lock.write():
+                for filter, keep_card in drops:
+                    self._drop_matching(filter, keep_card=keep_card)
+                chunks_indexed = self._index_loaded_documents(docs, cards, graph)
             indexer.save_manifest(Path(result.manifest_path), current_manifest)
 
             result.documents_loaded = len(docs)
@@ -678,54 +714,114 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
             docs.extend(loaded)
         return docs
 
-    def _drop_source_file(self, source_root: str, relative_source: str, keep_card: bool = False) -> None:
-        """Remove one file of a source folder from memory and the vector store.
+    def _drop_matching(self, filter: Dict[str, Any], keep_card: bool = False) -> int:
+        """Remove the documents a metadata filter matches from memory and the stores.
 
-        ``keep_card`` keeps its document card (and knowledge graph), for a
-        file indexed again: an unchanged text reuses them, a changed one gets
-        new ones.
+        ``keep_card`` keeps their document cards (and knowledge graph), for
+        files indexed again: an unchanged text reuses them, a changed one gets
+        new ones. Communities of the graph are recomputed by the
+        ``_index_loaded_documents`` or ``_apply_graph`` that follows.
+
+        Returns the number of chunks removed.
         """
         def keep(doc: Document) -> bool:
-            metadata = doc.metadata or {}
-            return not (
-                metadata.get("source_root") == source_root
-                and metadata.get("relative_source") == relative_source
-            )
+            return not metadata_matches(doc.metadata or {}, filter)
 
-        self._documents = [doc for doc in self._documents if keep(doc)]
-        self._chunks = [chunk for chunk in self._chunks if keep(chunk)]
-        file_filter = {"source_root": source_root, "relative_source": relative_source}
-        self.vector_store.delete(filter=file_filter)
+        kept = [chunk for chunk in self._chunks if keep(chunk)]
+        removed = len(self._chunks) - len(kept)
+        # Documents restored after a restart only carry their identity: a filter
+        # on anything else is matched through their chunks.
+        gone = (
+            {(chunk.metadata or {}).get("source") for chunk in self._chunks if not keep(chunk)}
+            - {(chunk.metadata or {}).get("source") for chunk in kept}
+        )
+        self._documents = [
+            doc for doc in self._documents
+            if keep(doc) and (doc.metadata or {}).get("source") not in gone
+        ]
+        self._chunks = kept
+        self.vector_store.delete(filter=filter)
         self.vector_store.persist()
         if not keep_card:
-            self._drop_cards(keep, file_filter)
-            self._drop_graph(keep, file_filter)
+            if self._card_store is not None:
+                self._cards = {key: card for key, card in self._cards.items() if keep(card)}
+                self._card_store.delete(filter=filter)
+                self._card_store.persist()
+            if self._graph is not None:
+                self._graph.drop(keep, filter)
+        return removed
 
-    def _drop_cards(self, keep, filter: Dict[str, Any]) -> None:
-        """Delete the document cards ``keep`` rejects (and ``filter`` matches in the store)."""
-        if self._card_store is None:
-            return
-        self._cards = {key: card for key, card in self._cards.items() if keep(card)}
-        self._card_store.delete(filter=filter)
-        self._card_store.persist()
-
-    def _drop_graph(self, keep, filter: Dict[str, Any]) -> None:
-        """Remove the documents ``keep`` rejects from the knowledge graph."""
+    def _apply_graph(self, update: Optional[GraphUpdate] = None) -> None:
+        """Bring the knowledge graph up to date after documents were added or dropped."""
         if self._graph is None:
             return
-        self._graph.drop(keep, filter)
+        self._graph.apply(update)
         self._graph_changed()
 
     def _graph_changed(self) -> None:
         """Called after the knowledge graph changed (GraphRAG keeps its KnowledgeGraph view)."""
 
-    def _write_cards(self, all_docs: List[Document]) -> List[Document]:
+    def delete_documents(self, filter: Dict[str, Any]) -> int:
+        """
+        Remove every document a metadata filter matches: chunks, cards and graph.
+
+        Args:
+            filter: Metadata equality filter, e.g. ``{"file_name": "tam_cam.md"}``
+                or ``{"source": "upload/tam_cam.md"}``; a list value matches
+                any of its items. An empty filter is refused: it would match
+                the whole index.
+
+        Returns:
+            Number of chunks removed (0 when nothing matched)
+        """
+        if not filter:
+            raise ValueError("delete_documents needs a metadata filter")
+        with self._ingest_lock:
+            # Reports of the communities that remain are written before the lock.
+            graph = None
+            if self._graph is not None:
+                graph = self._graph.prepare([], dropped=lambda metadata: metadata_matches(metadata, filter))
+            with self._index_lock.write():
+                removed = self._drop_matching(filter)
+                self._apply_graph(graph)
+                self._refresh_retriever()
+        return removed
+
+    def list_documents(self) -> List[Dict[str, Any]]:
+        """
+        The indexed documents, one entry each, in source order (texts added
+        without a source share one entry).
+
+        Returns:
+            Dicts with ``source``, ``file_name``, ``source_root``,
+            ``relative_source`` (None when the document has none), ``chunks``
+            (retrieval chunks) and ``has_card``
+        """
+        with self._index_lock.read():
+            documents: Dict[str, Dict[str, Any]] = {}
+            for chunk in self._chunks:
+                metadata = chunk.metadata or {}
+                key = str(metadata.get("source") or metadata.get("document_id") or "")
+                entry = documents.setdefault(key, {
+                    **{name: metadata.get(name)
+                       for name in ("source", "file_name", "source_root", "relative_source")},
+                    "chunks": 0,
+                })
+                entry["chunks"] += 1
+            cards = getattr(self, "_cards", None) or {}
+            with_card = {card.metadata.get("document_key") for card in cards.values()}
+        return [
+            {**entry, "has_card": key in with_card}
+            for key, entry in sorted(documents.items())
+        ]
+
+    def _write_cards(self, all_docs: List[Document], reuse: bool = True) -> List[Document]:
         """
         One card per loaded document, written by the LLM (empty when cards are off).
 
         A document whose text has not changed keeps its card text without an
-        LLM call (its metadata is refreshed). A failed call leaves that
-        document without a card; indexing goes on. After
+        LLM call (its metadata is refreshed), unless ``reuse`` is False. A
+        failed call leaves that document without a card; indexing goes on. After
         ``MAX_CONSECUTIVE_CARD_FAILURES`` failed calls in a row (no API key,
         provider down) the rest of the batch is indexed without new cards.
         """
@@ -734,7 +830,7 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         cards = []
         failures = skipped = 0
         for key, pages in group_by_document(all_docs).items():
-            existing = self._cards.get(card_id(key))
+            existing = self._cards.get(card_id(key)) if reuse else None
             if existing is not None and existing.metadata.get("content_sha256") == content_hash(pages):
                 cards.append(card_document(pages, existing.page_content, existing.metadata.get("card_model")))
                 continue
@@ -778,6 +874,7 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         written here.
         """
         if not all_docs:
+            self._apply_graph(graph)  # documents dropped just before change the graph too
             self._refresh_retriever()
             return 0
 
@@ -831,34 +928,12 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         self.vector_store.persist()
         self._store_cards(self._write_cards(all_docs) if cards is None else cards)
         if self._graph is not None:
-            self._graph.apply(self._graph.prepare(all_docs) if graph is None else graph)
-            self._graph_changed()
+            self._apply_graph(self._graph.prepare(all_docs) if graph is None else graph)
 
         # Initialize retriever
         self._refresh_retriever()
 
         return len(retrieval_chunks)
-
-    def _drop_source_root(self, source_root: str) -> None:
-        """Remove one source folder from memory and the vector store."""
-        self._documents = [
-            doc for doc in self._documents
-            if (doc.metadata or {}).get("source_root") != source_root
-        ]
-        self._chunks = [
-            chunk for chunk in self._chunks
-            if (chunk.metadata or {}).get("source_root") != source_root
-        ]
-        self.vector_store.delete(filter={"source_root": source_root})
-        self.vector_store.persist()
-        self._drop_cards(
-            lambda card: (card.metadata or {}).get("source_root") != source_root,
-            {"source_root": source_root},
-        )
-        self._drop_graph(
-            lambda doc: (doc.metadata or {}).get("source_root") != source_root,
-            {"source_root": source_root},
-        )
 
     @staticmethod
     def _parent_id(parent: Document) -> str:
@@ -900,15 +975,20 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
 
     def _refresh_retriever(self) -> None:
         """Refresh hybrid/reranking retriever state from current chunks."""
-        if not self._chunks:
-            self._retriever = None
-            return
-
         # Cached answers describe the old corpus.
         if self._cache:
             self._cache.clear()
 
-        previous = self._retriever
+        # Load the cross-encoder once, not after every ingest; an index emptied
+        # by delete_documents keeps it for the next documents.
+        loaded = getattr(self._retriever, "_reranker", None)
+        if loaded is not None:
+            self._shared_reranker = loaded
+            self._shared_reranker_model = self._retriever.active_reranker_model
+        if not self._chunks:
+            self._retriever = None
+            return
+
         self._retriever = RetrieverManager(
             vector_store=self.vector_store,
             embeddings=self.embeddings,
@@ -916,12 +996,8 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
             k=self.retrieval_k,
             use_hybrid=self.use_hybrid,
             use_reranking=self.use_reranking,
-            # Load the cross-encoder once, not after every ingest.
-            reranker=getattr(previous, "_reranker", None) or getattr(self, "_shared_reranker", None),
-            reranker_model=(
-                getattr(previous, "active_reranker_model", None)
-                or getattr(self, "_shared_reranker_model", None)
-            ),
+            reranker=self._shared_reranker,
+            reranker_model=self._shared_reranker_model,
         )
 
     def add_texts(
@@ -944,9 +1020,9 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
             metadata = metadatas[i] if metadatas else {}
             docs.append(Document(page_content=text, metadata=dict(metadata or {})))
 
-        # Same indexing as files: child chunks with parents, stable ids.
-        with self._index_lock.write():
-            return self._index_loaded_documents(docs)
+        # Same indexing as files: child chunks with parents, stable ids, a card
+        # for texts that name a source.
+        return self._index_prepared(docs)
 
     def query(
         self,
@@ -1180,21 +1256,23 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         if self._retriever is None:
             return self.vector_store.similarity_search(query, k=k, filter=filter)
 
-        # HyDE: generate hypothetical answer, search with that
+        # HyDE (search with a hypothetical answer) or multi-query RRF (fuse
+        # query variations) pick the candidates; an empty result falls back
+        # to the standard search.
         if self.use_hyde:
-            docs = self._retriever.hyde_search(query, k=k, llm=self.llm, filter=filter)
+            docs = self._passages(query, k, use_reranking, filter, lambda **options: (
+                self._retriever.hyde_search(query, llm=self.llm, filter=filter, **options)
+            ))
             if docs:
-                return self._expand_to_parents(docs)[:k] if self.use_parent_context else docs
-
-        # Multi-query RRF: generate variations, fuse with RRF
+                return docs
         if self.use_multi_query_rrf:
-            docs = self._retriever.multi_query_rrf_search(
-                query, k=k, llm=self.llm,
-                num_queries=self.num_query_variations,
-                filter=filter,
-            )
+            docs = self._passages(query, k, use_reranking, filter, lambda **options: (
+                self._retriever.multi_query_rrf_search(
+                    query, llm=self.llm, num_queries=self.num_query_variations, filter=filter, **options
+                )
+            ))
             if docs:
-                return self._expand_to_parents(docs)[:k] if self.use_parent_context else docs
+                return docs
 
         # Standard search (hybrid + reranking)
         return self._search(query, k=k, use_reranking=use_reranking, filter=filter)
@@ -1208,20 +1286,32 @@ Trả lời bằng ID các tài liệu hữu ích, cách nhau bởi dấu phẩy
         filter: Optional[Dict[str, Any]] = None,
     ) -> List[Document]:
         """Hybrid/rerank search; with parent context, children are searched and parents returned."""
+        return self._passages(query, k, use_reranking, filter, lambda **options: (
+            self._retriever.search(query, use_hybrid=use_hybrid, filter=filter, **options)
+        ))
+
+    def _passages(
+        self,
+        query: str,
+        k: int,
+        use_reranking: Optional[bool],
+        filter: Optional[Dict[str, Any]],
+        find,
+    ) -> List[Document]:
+        """
+        The k passages for the LLM from ``find(k=..., use_reranking=...)``, plus extras.
+
+        With parent context, ``find`` returns child chunks without reranking
+        and their parents are reranked: the passages the LLM will actually
+        read. Cards and graph context join reranked passages (``_extras_for``).
+        """
+        reranking = self._retriever.config.use_reranking if use_reranking is None else use_reranking
         if not self.use_parent_context:
-            docs = self._retriever.search(
-                query, k=k, use_hybrid=use_hybrid, use_reranking=use_reranking, filter=filter
-            )
+            docs = find(k=k, use_reranking=reranking)
             return docs + self._extras_for(query, docs, k, filter)
 
-        reranking = self._retriever.config.use_reranking if use_reranking is None else use_reranking
-        children = self._retriever.search(
-            query, k=k * self.parent_fanout, use_hybrid=use_hybrid, use_reranking=False,
-            filter=filter,
-        )
-        parents = self._expand_to_parents(children)
+        parents = self._expand_to_parents(find(k=k * self.parent_fanout, use_reranking=False))
         if reranking:
-            # Rerank the passages the LLM will actually read.
             docs = self._retriever.rerank(query, parents, k=k)
             return docs + self._extras_for(query, docs, k, filter)
         return parents[:k]

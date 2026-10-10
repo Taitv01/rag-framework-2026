@@ -342,3 +342,42 @@ def test_graphrag_keeps_a_knowledge_graph_view(monkeypatch, tmp_path):
     communities = rag.get_communities()
     assert communities and communities[0].summary.startswith("Tiêu đề: nhóm")
     assert not rag.has_neo4j
+
+
+def test_deleting_a_document_removes_it_from_the_graph(monkeypatch, tmp_path):
+    rag, _ = make_rag(monkeypatch, tmp_path)
+    rag.add_documents(write_corpus(tmp_path / "docs"))
+    assert "tấm" in rag._graph.view.entities
+
+    assert rag.delete_documents({"file_name": "tam_cam.md"}) > 0
+
+    assert "tấm" not in rag._graph.view.entities
+    assert all("tấm" not in community.entities for community in rag._graph.communities)
+    stored = rag._graph.entity_store.get_all_documents()
+    assert {profile.metadata["file_name"] for profile in stored} == {"thach_sanh.md", "con_rong.md"}
+    assert set(rag._graph.reports) == {community.id for community in rag._graph.communities}
+    assert {r.metadata["chunk_id"] for r in rag._graph.report_store.get_all_documents()} == set(rag._graph.reports)
+
+
+def test_refresh_calls_the_llm_outside_the_index_lock(monkeypatch, tmp_path):
+    corpus = write_corpus(tmp_path / "docs")
+    manifest = tmp_path / "manifest.json"
+    writing = []
+
+    def reply(prompt):
+        writing.append(rag._index_lock._writing)  # queries wait while this is True
+        return graph_reply(prompt)
+
+    rag, chat = make_rag(monkeypatch, tmp_path, reply=reply)
+    rag.refresh_markdown_directory(corpus, manifest_path=manifest)
+    reports = len(calls(chat, is_report))
+
+    # Without con_rong.md the "thủy cung" community changes: its report is written
+    # for the graph as it will be, before the lock, not while the file is dropped.
+    (corpus / "con_rong.md").unlink()
+    rag.refresh_markdown_directory(corpus, manifest_path=manifest)
+
+    assert len(calls(chat, is_report)) > reports
+    assert "lạc long quân" not in rag._graph.view.entities
+    assert set(rag._graph.reports) == {community.id for community in rag._graph.communities}
+    assert writing and not any(writing)
