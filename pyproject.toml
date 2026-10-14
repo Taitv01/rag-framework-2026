@@ -116,10 +116,10 @@ all = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/ultimate-rag"
-Documentation = "https://github.com/yourusername/ultimate-rag#readme"
-Repository = "https://github.com/yourusername/ultimate-rag"
-Issues = "https://github.com/yourusername/ultimate-rag/issues"
+Homepage = "https://github.com/Taitv01/rag-framework-2026"
+Documentation = "https://github.com/Taitv01/rag-framework-2026#readme"
+Repository = "https://github.com/Taitv01/rag-framework-2026"
+Issues = "https://github.com/Taitv01/rag-framework-2026/issues"
 
 [tool.hatch.build.targets.wheel]
 # The code is imported as the top-level `src` package (e.g. `from src.rag import ...`).

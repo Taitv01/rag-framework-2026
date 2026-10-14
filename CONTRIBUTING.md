@@ -8,8 +8,8 @@ Thank you for your interest in contributing! This document provides guidelines a
 
 ```bash
 # Fork on GitHub, then clone
-git clone https://github.com/yourusername/ultimate-rag.git
-cd ultimate-rag
+git clone https://github.com/Taitv01/rag-framework-2026.git
+cd rag-framework-2026
 ```
 
 ### 2. Create a Branch

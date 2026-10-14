@@ -19,8 +19,8 @@ This guide covers deploying the Ultimate RAG Framework in various environments:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/ultimate-rag.git
-cd ultimate-rag
+git clone https://github.com/Taitv01/rag-framework-2026.git
+cd rag-framework-2026
 
 # Create virtual environment
 python -m venv venv
