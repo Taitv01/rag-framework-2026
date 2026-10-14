@@ -52,8 +52,10 @@ basic RAG to advanced and agentic RAG workflows.
 - Phase 5 multimodal retrieval, richer LangGraph workflows, bilingual output,
   fine-tuning, and the interactive storytelling application remain planned.
 
-## Next Upgrade Plan
+## October 2026 Upgrade Plan
 
-The October 2026 code audit and the staged upgrade plan (stabilize, measure,
-fix retrieval core, unify generation, production API) live in
-[`upgrade_plan_2026.md`](upgrade_plan_2026.md). Stage 0 (stabilization) is done.
+The October 2026 code audit and the staged upgrade plan (Stage 0: stabilize,
+Stage 1: measure, Stage 2: fix retrieval core, Stage 3: unify generation,
+Stage 4: production API, Stage 5: measured enhancements including document cards,
+lean GraphRAG, and document management) live in
+[`upgrade_plan_2026.md`](upgrade_plan_2026.md). All stages (0–5) are complete.
